@@ -174,7 +174,7 @@ def _to_race_info(record):
     if record is None:
         return None
     from furrifier.models import RaceInfo
-    from furrifier.setup import is_child_race
+    from furrifier.furry_load import is_child_race
     return RaceInfo(record=record, editor_id=record.editor_id,
                     is_child=is_child_race(record))
 
@@ -182,7 +182,7 @@ def _to_race_info(record):
 @pytest.fixture(scope="session")
 def all_headparts(all_plugins, ctx):
     """All headpart records indexed by EditorID."""
-    from furrifier.setup import get_headpart_type
+    from furrifier.furry_load import get_headpart_type
     from furrifier.models import HeadpartInfo
     headparts = {}
     for plugin in all_plugins:
@@ -221,7 +221,14 @@ def patch(request, all_plugins, data_dir):
 
 
 @pytest.fixture(scope="session")
-def furry_ctx(patch, ctx, races_by_edid, all_headparts):
+def race_headparts(all_plugins, all_headparts):
+    """Index of headparts per (type, sex, race)."""
+    from furrifier.furry_load import build_race_headparts
+    return build_race_headparts(all_plugins, all_headparts)
+
+
+@pytest.fixture(scope="session")
+def furry_ctx(patch, ctx, races_by_edid, all_headparts, race_headparts):
     """FurryContext wired up for testing."""
     from furrifier.context import FurryContext
     return FurryContext(
@@ -229,7 +236,7 @@ def furry_ctx(patch, ctx, races_by_edid, all_headparts):
         ctx=ctx,
         races=races_by_edid,
         all_headparts=all_headparts,
-        race_headparts={},
+        race_headparts=race_headparts,
         race_tints={},
     )
 

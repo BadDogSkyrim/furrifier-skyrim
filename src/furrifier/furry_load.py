@@ -45,13 +45,10 @@ def get_headpart_type(hdpt: Record) -> HeadpartType:
     if pnam is None:
         return HeadpartType.UNKNOWN
     val = pnam.get_uint32()
-    # xEdit enum: 0=Misc, 1=Face, 2=Eyes, 3=Hair, 4=Facial Hair, 5=Scar, 6=Eyebrows
-    # Our enum: 0=Hair, 1=Scar, 2=Eyes, 3=Eyebrows, 4=Facial Hair, 5=Unknown
-    mapping = {0: HeadpartType.UNKNOWN, 1: HeadpartType.UNKNOWN,
-               2: HeadpartType.EYES, 3: HeadpartType.HAIR,
-               4: HeadpartType.FACIAL_HAIR, 5: HeadpartType.SCAR,
-               6: HeadpartType.EYEBROWS}
-    return mapping.get(val, HeadpartType.UNKNOWN)
+    try:
+        return HeadpartType(val)
+    except ValueError:
+        return HeadpartType.UNKNOWN
 
 
 def load_races(plugin_set: PluginSet, ctx: RaceDefContext) -> dict[str, RaceInfo]:
@@ -122,3 +119,89 @@ def load_headparts(plugin_set: PluginSet,
 
     log.info(f"Loaded {len(headparts)} headpart records")
     return headparts
+
+
+def build_race_headparts(plugins: list[Plugin],
+                         all_headparts: dict[str, HeadpartInfo],
+                         ) -> dict[tuple, set[str]]:
+    """Build an index of headparts available per (type, sex, race).
+
+    Returns a dict mapping (HeadpartType, sex_int, race_edid) to a set
+    of headpart EditorIDs.
+
+    Each HDPT record has:
+    - PNAM: headpart type
+    - DATA: flags byte (bit 0 = male, bit 2 = female)
+    - RNAM: FormID → FormList (FLST) of valid races
+    """
+    # Build a FormID→EditorID lookup for all RACE records across plugins
+    race_fid_to_edid: dict[int, str] = {}
+    for plugin in plugins:
+        if plugin is None:
+            continue
+        local_idx = len(plugin.header.masters)
+        for record in plugin.get_records_by_signature('RACE'):
+            edid = record.editor_id
+            if edid:
+                # Store with the object ID only (master-independent)
+                obj_id = record.form_id.value & 0x00FFFFFF
+                race_fid_to_edid[obj_id] = edid
+
+    # Build a FormID→FLST record lookup for FormList resolution
+    flst_by_fid: dict[int, Record] = {}
+    for plugin in plugins:
+        if plugin is None:
+            continue
+        for record in plugin.get_records_by_signature('FLST'):
+            obj_id = record.form_id.value & 0x00FFFFFF
+            flst_by_fid[obj_id] = record
+
+    race_headparts: dict[tuple, set[str]] = {}
+
+    for hp in all_headparts.values():
+        if hp.record is None:
+            continue
+
+        # Get DATA flags for sex filtering
+        data_sr = hp.record.get_subrecord('DATA')
+        if data_sr is None or data_sr.size < 1:
+            continue
+        flags = data_sr.data[0]
+        is_male = bool(flags & 0x02)    # bit 1
+        is_female = bool(flags & 0x04)  # bit 2
+
+        # Get RNAM → FormList
+        rnam = hp.record.get_subrecord('RNAM')
+        if rnam is None:
+            continue
+        rnam_fid = rnam.get_uint32()
+        rnam_obj = rnam_fid & 0x00FFFFFF
+
+        flst = flst_by_fid.get(rnam_obj)
+        if flst is None:
+            continue
+
+        # Get races from the FormList's LNAM entries
+        race_edids = set()
+        for lnam in flst.get_subrecords('LNAM'):
+            lnam_obj = lnam.get_uint32() & 0x00FFFFFF
+            edid = race_fid_to_edid.get(lnam_obj)
+            if edid:
+                race_edids.add(edid)
+
+        # Insert into index for each applicable sex and race
+        sexes = []
+        if is_male:
+            sexes.extend([Sex.MALE_ADULT, Sex.MALE_CHILD])
+        if is_female:
+            sexes.extend([Sex.FEMALE_ADULT, Sex.FEMALE_CHILD])
+
+        for sex in sexes:
+            for race_edid in race_edids:
+                key = (hp.hp_type, sex, race_edid)
+                if key not in race_headparts:
+                    race_headparts[key] = set()
+                race_headparts[key].add(hp.editor_id)
+
+    log.info(f"Built race_headparts index: {len(race_headparts)} entries")
+    return race_headparts

@@ -17,7 +17,7 @@ from esplib import Plugin, Record, FormID
 from .models import Sex, HeadpartType, HeadpartInfo, RaceAssignment
 from .race_defs import RaceDefContext
 from .vanilla_setup import unalias
-from .setup import is_npc_female, is_child_race, get_headpart_type
+from .furry_load import is_npc_female, is_child_race, get_headpart_type
 from .headparts import (
     load_npc_labels, find_similar_headpart,
 )

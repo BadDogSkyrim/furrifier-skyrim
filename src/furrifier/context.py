@@ -16,7 +16,7 @@ from esplib import Plugin, Record
 from .models import Sex, HeadpartType, HeadpartInfo, Bodypart
 from .race_defs import RaceDefContext
 from .vanilla_setup import unalias
-from .setup import is_npc_female, is_child_race, get_headpart_type
+from .furry_load import is_npc_female, is_child_race
 from .headparts import load_npc_labels, find_similar_headpart
 from .tints import RaceTintData, TintChoice, choose_furry_tints
 
@@ -55,6 +55,15 @@ class FurryContext:
         female = is_npc_female(npc)
         child = is_child_race(race) if race is not None else False
         return Sex.from_flags(female=female, child=child)
+
+    def _add_headpart_pnam(self, record: Record, hp: HeadpartInfo) -> None:
+        """Add a PNAM subrecord for a headpart, remapping the FormID."""
+        hp_fid = hp.record.form_id.value
+        hp_plugin = getattr(hp.record, '_plugin', None)
+        if hp_plugin:
+            hp_fid = self.patch.remap_formid(hp_fid, hp_plugin)
+        record.add_subrecord('PNAM', struct.pack('<I', hp_fid))
+
 
     def determine_npc_race(self, npc: Record,
                            ) -> Optional[tuple[str, str, str]]:
@@ -138,6 +147,13 @@ class FurryContext:
         patched.remove_subrecords('TIAS')
         patched.remove_subrecords('TINV')
 
+        # Zero out face part indices — vanilla indices may not be valid
+        # for the furry race's face part arrays. TODO: map to furry presets.
+        nama = patched.get_subrecord('NAMA')
+        if nama:
+            nama.data = bytearray(len(nama.data))
+            nama.modified = True
+
         # Load NPC labels for headpart matching
         labels = load_npc_labels(npc, self.ctx)
 
@@ -147,13 +163,26 @@ class FurryContext:
 
         for old_sr in old_headpart_srs:
             old_fid = old_sr.get_uint32()
+            old_obj_id = old_fid & 0x00FFFFFF
             old_hp = None
             for hp in self.all_headparts.values():
-                if hp.record and hp.record.form_id.value == old_fid:
+                if hp.record and (hp.record.form_id.value & 0x00FFFFFF) == old_obj_id:
                     old_hp = hp
                     break
             if old_hp is None:
                 continue
+
+            # Skip beards — furry races don't use them
+            if old_hp.hp_type == HeadpartType.FACIAL_HAIR:
+                continue
+
+            # Eyebrows slot is used for earrings on furry races.
+            # Give NPCs a 30% chance of earrings. TODO: more
+            # controllable mechanism for earring assignment.
+            if old_hp.hp_type == HeadpartType.EYEBROWS:
+                from .util import hash_string
+                if hash_string(npc_alias, 9999, 100) >= 30:
+                    continue
 
             new_hp = find_similar_headpart(
                 old_hp, npc_alias, npc_sex, labels,
@@ -161,8 +190,9 @@ class FurryContext:
                 self.ctx,
             )
             if new_hp and new_hp.record:
-                patched.add_subrecord(
-                    'PNAM', struct.pack('<I', new_hp.record.form_id.value))
+                self._add_headpart_pnam(patched, new_hp)
+
+        # TODO: beard matching — for now beards are skipped entirely
 
         # Apply furry tint layers
         npc_tint_classes: set[str] = set()

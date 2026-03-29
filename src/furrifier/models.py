@@ -36,12 +36,15 @@ class Sex(IntEnum):
 
 
 class HeadpartType(IntEnum):
-    HAIR = 0
-    SCAR = 1
+    """Headpart types matching xEdit's enumeration."""
+    MISC = 0
+    FACE = 1
     EYES = 2
-    EYEBROWS = 3
+    HAIR = 3
     FACIAL_HAIR = 4
-    UNKNOWN = 5
+    SCAR = 5
+    EYEBROWS = 6
+    UNKNOWN = 99
 
 
 class TintLayer(IntEnum):

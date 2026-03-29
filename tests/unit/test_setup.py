@@ -9,7 +9,7 @@ import pytest
 
 from esplib import Plugin, Record, SubRecord, FormID
 
-from furrifier.setup import is_npc_female, is_child_race, get_headpart_type
+from furrifier.furry_load import is_npc_female, is_child_race, get_headpart_type
 from furrifier.models import HeadpartType
 from furrifier.vanilla_setup import unalias, NPC_ALIASES, NPC_RACE_OVERRIDES
 

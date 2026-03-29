@@ -25,9 +25,13 @@ class TestSex:
 
 class TestHeadpartType:
     def test_values(self):
-        assert HeadpartType.HAIR == 0
+        assert HeadpartType.MISC == 0
+        assert HeadpartType.FACE == 1
         assert HeadpartType.EYES == 2
+        assert HeadpartType.HAIR == 3
         assert HeadpartType.FACIAL_HAIR == 4
+        assert HeadpartType.SCAR == 5
+        assert HeadpartType.EYEBROWS == 6
 
 
 class TestTintLayer:

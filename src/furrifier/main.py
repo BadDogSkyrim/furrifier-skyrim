@@ -16,7 +16,7 @@ from .config import FurrifierConfig, build_parser, setup_logging
 from .context import FurryContext
 from .race_defs import load_scheme
 from .vanilla_setup import setup_vanilla
-from .setup import load_races, load_headparts
+from .furry_load import load_races, load_headparts
 
 log = logging.getLogger(__name__)
 

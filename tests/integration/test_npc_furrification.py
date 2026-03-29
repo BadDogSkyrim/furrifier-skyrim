@@ -24,10 +24,6 @@ from conftest import (
 
 pytestmark = requires_gamefiles
 
-needs_race_headparts = pytest.mark.xfail(
-    reason="race_headparts index not yet built (TODO in main.py)",
-    strict=False,
-)
 needs_faction_races = pytest.mark.xfail(
     reason="faction-based race assignment not yet implemented (TODO in npc.py)",
     strict=False,
@@ -115,9 +111,9 @@ def _get_headpart_edids(record, all_headparts):
     """Get EditorIDs of all head parts on a patched NPC."""
     edids = []
     for sr in record.get_subrecords('PNAM'):
-        fid = sr.get_uint32()
+        obj_id = sr.get_uint32() & 0x00FFFFFF
         for hp in all_headparts.values():
-            if hp.record and hp.record.form_id.value == fid:
+            if hp.record and (hp.record.form_id.value & 0x00FFFFFF) == obj_id:
                 edids.append(hp.editor_id)
                 break
     return edids
@@ -150,7 +146,8 @@ def _tint_layer_count(record):
 class TestNPCFurrification:
     """Furrify NPCs and verify results survive save/reload."""
 
-    def test_balgruuf(self, furrify_and_check, all_plugins, races_by_edid):
+    def test_balgruuf(self, furrify_and_check, all_plugins, races_by_edid,
+                      all_headparts):
         """Balgruuf: race stays NordRace, base data preserved."""
         npc, _ = find_record(all_plugins, 'NPC_', 'BalgruuftheGreater')
         assert npc is not None
@@ -219,6 +216,32 @@ class TestNPCFurrification:
             assert patched.get_subrecord('NAM9') is None, "NAM9 should be removed"
             assert patched.get_subrecord('FTST') is None, "FTST should be removed"
 
+            # All PNAM headpart FormIDs must resolve and be male
+            pnams = patched.get_subrecords('PNAM')
+            assert len(pnams) > 0, "Should have at least one headpart"
+            for pnam in pnams:
+                fid = pnam.get_form_id()
+                assert fid.value != 0, "PNAM FormID is null"
+                master_idx = fid.file_index
+                masters = reloaded.header.masters
+                assert master_idx < len(masters), \
+                    f"PNAM master index {master_idx} out of range " \
+                    f"({len(masters)} masters)"
+
+                # Headpart must not be female-only
+                obj_id = fid.object_index
+                for hp in all_headparts.values():
+                    if hp.record and (hp.record.form_id.value & 0x00FFFFFF) == obj_id:
+                        data_sr = hp.record.get_subrecord('DATA')
+                        if data_sr and data_sr.size >= 1:
+                            flags = data_sr.data[0]
+                            is_male = bool(flags & 0x02)
+                            is_female = bool(flags & 0x04)
+                            assert not (is_female and not is_male), \
+                                f"Headpart {hp.editor_id} is female-only " \
+                                f"on male NPC Balgruuf"
+                        break
+
         furrify_and_check(write, verify)
 
 
@@ -263,7 +286,7 @@ class TestNPCFurrification:
         furrify_and_check(write, verify)
 
 
-    @needs_race_headparts
+
     def test_delphine_has_hair(self, furrify_and_check, all_plugins,
                                all_headparts):
         """Delphine: should have hair after furrification."""
@@ -286,7 +309,7 @@ class TestNPCFurrification:
         furrify_and_check(write, verify)
 
 
-    @needs_race_headparts
+
     def test_ingun_has_hair(self, furrify_and_check, all_plugins,
                             all_headparts):
         """Ingun: female NPC gets hair assigned."""
