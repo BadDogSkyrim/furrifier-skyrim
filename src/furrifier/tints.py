@@ -98,7 +98,7 @@ def choose_furry_tints(npc_alias: str, npc_sex: Sex,
 
     Returns list of TintChoice to apply to the NPC.
     """
-    key = furry_race_id
+    key = (furry_race_id, npc_sex)
     if key not in race_tints:
         log.warning(f"No tint data for race {furry_race_id}")
         return []
@@ -117,8 +117,8 @@ def choose_furry_tints(npc_alias: str, npc_sex: Sex,
                 choices.append(TintChoice(
                     tini=asset.index,
                     tinc=preset[0],  # color FormID
-                    tinv=preset[1],  # default value
-                    tias=idx,
+                    tinv=preset[1],  # intensity
+                    tias=preset[2],  # TIRS preset index
                 ))
 
     # 2. Fur layers and decoration layers in pseudo-random order
@@ -134,8 +134,11 @@ def choose_furry_tints(npc_alias: str, npc_sex: Sex,
         layer_id = class_name_to_layer(class_name)
         is_required = class_name in data.required
 
-        if layer_id == TintLayer.SKIN_TONE and not is_required:
+        if layer_id == TintLayer.SKIN_TONE:
             continue  # Already handled skin tone above
+
+        if layer_id < 0:
+            continue  # Unknown class (e.g. 'Old') — skip for now
 
         # Determine if we should apply this layer
         should_apply = False
@@ -165,7 +168,7 @@ def choose_furry_tints(npc_alias: str, npc_sex: Sex,
                     tini=asset.index,
                     tinc=preset[0],
                     tinv=preset[1],
-                    tias=preset_idx,
+                    tias=preset[2],  # TIRS preset index
                 ))
 
         if layer_id < TintLayer.DECORATION_LO:

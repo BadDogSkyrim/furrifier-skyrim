@@ -228,7 +228,15 @@ def race_headparts(all_plugins, all_headparts):
 
 
 @pytest.fixture(scope="session")
-def furry_ctx(patch, ctx, races_by_edid, all_headparts, race_headparts):
+def race_tints(all_plugins):
+    """Tint data per (race, sex)."""
+    from furrifier.furry_load import build_race_tints
+    return build_race_tints(all_plugins)
+
+
+@pytest.fixture(scope="session")
+def furry_ctx(patch, ctx, races_by_edid, all_headparts, race_headparts,
+              race_tints, all_plugins):
     """FurryContext wired up for testing."""
     from furrifier.context import FurryContext
     return FurryContext(
@@ -237,7 +245,8 @@ def furry_ctx(patch, ctx, races_by_edid, all_headparts, race_headparts):
         races=races_by_edid,
         all_headparts=all_headparts,
         race_headparts=race_headparts,
-        race_tints={},
+        race_tints=race_tints,
+        all_plugins=all_plugins,
     )
 
 

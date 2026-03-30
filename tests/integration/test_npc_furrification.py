@@ -147,7 +147,7 @@ class TestNPCFurrification:
     """Furrify NPCs and verify results survive save/reload."""
 
     def test_balgruuf(self, furrify_and_check, all_plugins, races_by_edid,
-                      all_headparts):
+                      all_headparts, race_tints):
         """Balgruuf: race stays NordRace, base data preserved."""
         npc, _ = find_record(all_plugins, 'NPC_', 'BalgruuftheGreater')
         assert npc is not None
@@ -212,9 +212,41 @@ class TestNPCFurrification:
             assert patched.get_subrecord('DATA').data == orig_data, \
                 "DATA (weight) changed"
 
-            assert patched.get_subrecord('QNAM') is None, "QNAM should be removed"
             assert patched.get_subrecord('NAM9') is None, "NAM9 should be removed"
             assert patched.get_subrecord('FTST') is None, "FTST should be removed"
+
+            # Should have tint layers and QNAM from skin tone
+            tinis = patched.get_subrecords('TINI')
+            assert len(tinis) > 0, "Should have tint layers"
+            qnam = patched.get_subrecord('QNAM')
+            assert qnam is not None, "Should have QNAM from skin tone"
+
+            # All TIAS values must be valid TIRS from the race's presets
+            import struct as st
+            tint_srs = patched.subrecords
+            for sr in tint_srs:
+                if sr.signature == 'TIAS':
+                    tias = st.unpack('<H', sr.data[:2])[0]
+                    assert tias > 200, \
+                        f"TIAS={tias} looks like an array index, " \
+                        f"not a TIRS preset value"
+
+            # Balgruuf should not have dirt — vanilla Balgruuf has no dirt
+            from furrifier.models import Sex as SexEnum
+            dirt_tinis = set()
+            lykaios_key = ('YASLykaiosRace', SexEnum.MALE_ADULT)
+            if lykaios_key in race_tints:
+                for cname, assets in race_tints[lykaios_key].classes.items():
+                    if cname == 'Dirt':
+                        for asset in assets:
+                            dirt_tinis.add(asset.index)
+
+            for sr in patched.subrecords:
+                if sr.signature == 'TINI':
+                    tini = st.unpack('<H', sr.data[:2])[0]
+                    assert tini not in dirt_tinis, \
+                        f"Balgruuf has dirt tint TINI={tini} " \
+                        f"but vanilla Balgruuf has no dirt"
 
             # All PNAM headpart FormIDs must resolve and be male
             pnams = patched.get_subrecords('PNAM')

@@ -106,7 +106,7 @@ class TintAsset:
     filename: str           # TINT file path
     layer_type: int         # Resolved tint layer type
     layer_class: str        # Class name (e.g. 'SKIN_TONE', 'MUZZLE')
-    presets: list = field(default_factory=list)  # List of (color_fid, default_value)
+    presets: list = field(default_factory=list)  # List of (color_fid, intensity, tirs)
 
 
 @dataclass

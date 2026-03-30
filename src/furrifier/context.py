@@ -18,7 +18,7 @@ from .race_defs import RaceDefContext
 from .vanilla_setup import unalias
 from .furry_load import is_npc_female, is_child_race
 from .headparts import load_npc_labels, find_similar_headpart
-from .tints import RaceTintData, TintChoice, choose_furry_tints
+from .tints import choose_furry_tints
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +38,8 @@ class FurryContext:
                  races: dict[str, Record],
                  all_headparts: dict[str, HeadpartInfo],
                  race_headparts: dict,
-                 race_tints: dict[str, RaceTintData],
+                 race_tints: dict,
+                 all_plugins: list[Plugin] = None,
                  max_tint_layers: int = 200):
         self.patch = patch
         self.ctx = ctx
@@ -46,6 +47,7 @@ class FurryContext:
         self.all_headparts = all_headparts
         self.race_headparts = race_headparts
         self.race_tints = race_tints
+        self._all_plugins = all_plugins or []
         self.max_tint_layers = max_tint_layers
 
     # -- NPC furrification --
@@ -194,22 +196,113 @@ class FurryContext:
 
         # TODO: beard matching — for now beards are skipped entirely
 
-        # Apply furry tint layers
-        npc_tint_classes: set[str] = set()
-        # TODO: extract vanilla NPC tint classes for decoration layer matching
+        # Extract vanilla NPC tint classes for decoration layer preservation
+        npc_tint_classes = self._extract_npc_tint_classes(
+            npc, original_race_id, npc_sex)
 
+        # Apply furry tint layers
         tint_choices = choose_furry_tints(
             npc_alias, npc_sex, furry_race_id,
             npc_tint_classes, self.race_tints, self.max_tint_layers,
         )
 
+        skin_tone_color = None
+        skin_tone_intensity = 0.0
         for choice in tint_choices:
+            # Resolve TINC FormID to inline RGBA color
+            color_rgba = self._resolve_color(choice.tinc)
+
             patched.add_subrecord('TINI', struct.pack('<H', choice.tini))
-            patched.add_subrecord('TINC', struct.pack('<I', choice.tinc))
+            patched.add_subrecord('TINC', struct.pack('<BBBB',
+                                 color_rgba[0], color_rgba[1],
+                                 color_rgba[2], color_rgba[3]))
+            patched.add_subrecord('TINV', struct.pack('<I', round(choice.tinv * 100)))
             patched.add_subrecord('TIAS', struct.pack('<H', choice.tias))
-            patched.add_subrecord('TINV', struct.pack('<f', choice.tinv))
+
+            # Track skin tone for QNAM calculation
+            if skin_tone_color is None:
+                skin_tone_color = color_rgba
+                skin_tone_intensity = choice.tinv
+
+        # Calculate QNAM from skin tone tint
+        if skin_tone_color:
+            self._apply_qnam_from_color(patched, skin_tone_color,
+                                        skin_tone_intensity)
 
         return patched
+
+
+    def _extract_npc_tint_classes(self, npc: Record,
+                                  vanilla_race_id: str,
+                                  npc_sex: Sex) -> set[str]:
+        """Get the tint class names the vanilla NPC already has."""
+        classes = set()
+        race_key = (vanilla_race_id, npc_sex)
+        race_data = self.race_tints.get(race_key)
+        if race_data is None:
+            return classes
+
+        # Build TINI → class name lookup from the race tint data
+        tini_to_class = {}
+        for class_name, assets in race_data.classes.items():
+            for asset in assets:
+                tini_to_class[asset.index] = class_name
+
+        # Look up each of the NPC's TINI values, but only count layers
+        # that have non-zero TINV (intensity). TINV=0 means unused.
+        subs = npc.subrecords
+        for i, sr in enumerate(subs):
+            if sr.signature != 'TINI':
+                continue
+            tini = struct.unpack('<H', sr.data[:2])[0]
+            # Find the TINV that follows this TINI
+            tinv = 0
+            for j in range(i + 1, min(i + 4, len(subs))):
+                if subs[j].signature == 'TINV':
+                    tinv = struct.unpack('<I', subs[j].data[:4])[0]
+                    break
+                if subs[j].signature == 'TINI':
+                    break
+            if tinv > 0:
+                class_name = tini_to_class.get(tini)
+                if class_name:
+                    classes.add(class_name)
+
+        return classes
+
+
+    def _resolve_color(self, tinc_fid: int) -> tuple[int, int, int, int]:
+        """Resolve a TINC FormID (pointing to a CLFM record) to RGBA.
+
+        Returns (R, G, B, A) as 0-255 values.
+        """
+        obj_id = tinc_fid & 0x00FFFFFF
+        for plugin in self._all_plugins:
+            for rec in plugin.get_records_by_signature('CLFM'):
+                if (rec.form_id.value & 0x00FFFFFF) == obj_id:
+                    cnam = rec.get_subrecord('CNAM')
+                    if cnam and cnam.size >= 4:
+                        return (cnam.data[0], cnam.data[1],
+                                cnam.data[2], cnam.data[3])
+                    elif cnam and cnam.size >= 3:
+                        return (cnam.data[0], cnam.data[1],
+                                cnam.data[2], 0)
+        return (255, 255, 255, 0)
+
+
+    def _apply_qnam_from_color(self, record: Record,
+                                color: tuple[int, int, int, int],
+                                intensity: float) -> None:
+        """Calculate and apply QNAM from resolved color and intensity.
+
+        QNAM = intensity * component / 255 for each RGB channel.
+        """
+        qr = round(intensity * color[0])
+        qg = round(intensity * color[1])
+        qb = round(intensity * color[2])
+
+        record.add_subrecord('QNAM', struct.pack('<fff',
+                             qr / 255.0, qg / 255.0, qb / 255.0))
 
     def furrify_all_npcs(self, plugins: list[Plugin],
                          furrify_male: bool = True,

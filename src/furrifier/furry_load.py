@@ -205,3 +205,211 @@ def build_race_headparts(plugins: list[Plugin],
 
     log.info(f"Built race_headparts index: {len(race_headparts)} entries")
     return race_headparts
+
+
+# -- Tint class name resolution from file paths --
+
+_TINT_PATH_KEYWORDS = [
+    ('SkinTone', 'Skin Tone'),
+    ('CheekLower', 'Cheek Color Lower'),
+    ('CheekUpper', 'Cheek Color'),
+    ('Cheek', 'Cheek Color'),
+    ('Chin', 'Chin'),
+    ('EyeLower', 'EyeSocket Lower'),
+    ('EyeUpper', 'EyeSocket Upper'),
+    ('EyeSocket', 'EyeSocket Lower'),
+    ('Eyeliner', 'Eyeliner'),
+    ('EyeLiner', 'Eyeliner'),
+    ('Forehead', 'Forehead'),
+    ('ForeHead', 'Forehead'),
+    ('LaughLines', 'Laugh Lines'),
+    ('FrownLines', 'Laugh Lines'),
+    ('LipColor', 'Lip Color'),
+    ('Lips', 'Lip Color'),
+    ('Neck', 'Neck'),
+    ('Nose', 'Nose'),
+    ('Muzzle', 'Muzzle'),
+    ('Mustache', 'Muzzle'),
+    ('Moustache', 'Muzzle'),
+    ('Stripes', 'Stripes'),
+    ('SkinTint', 'Skin Tone'),
+    ('Spots', 'Spots'),
+    ('Stripe', 'Stripes'),
+    ('Mask', 'Mask'),
+    ('EyebrowSpot', 'Brow'),
+    ('EyeSpot', 'Brow'),
+    ('Brow', 'Brow'),
+    ('Ears', 'Ear'),
+    ('Ear', 'Ear'),
+    ('BlackBlood', 'BlackBlood'),
+    ('Bothiah', 'Bothiah'),
+    ('Forsworn', 'Forsworn'),
+    ('Frekles', 'Frekles'),
+    ('Freckle', 'Frekles'),
+    ('NordWarPaint', 'NordWarPaint'),
+    ('DarkElfWarPaint', 'DarkElfWarPaint'),
+    ('ImperialWarPaint', 'ImperialWarPaint'),
+    ('OrcWarPaint', 'OrcWarPaint'),
+    ('RedguardWarPaint', 'RedguardWarPaint'),
+    ('WoodElfWarPaint', 'WoodElfWarPaint'),
+    ('wolfpawprint', 'Wolfpawprint'),
+    ('pawprint', 'Wolfpawprint'),
+    ('Skull', 'Skull'),
+    ('WarPaint', 'Paint'),
+    ('warpaint', 'Paint'),
+    ('paint', 'Paint'),
+    ('Dirt', 'Dirt'),
+    ('dirt', 'Dirt'),
+]
+
+
+def _classify_tint_path(path: str) -> str:
+    """Determine tint class name from a texture filename."""
+    # Use filename only — directory names like "TintMasks" would
+    # false-match keywords like "Mask"
+    from pathlib import PurePosixPath
+    p = PurePosixPath(path.replace('\\', '/'))
+    filename = p.name.lower()
+    stem = p.stem.lower()
+
+    # "Old" aging tints: filename stem ends with "Old" as a separate word
+    # (e.g. KygarraFemOld.dds) but not "Bold", "Gold", etc.
+    if p.stem.endswith('Old') or p.stem.endswith('_old'):
+        return 'Old'
+
+    for keyword, class_name in _TINT_PATH_KEYWORDS:
+        if keyword.lower() in filename:
+            return class_name
+
+    return 'Paint'  # fallback for unrecognized paths
+
+
+def build_race_tints(plugins: list[Plugin],
+                     ) -> dict[tuple, 'RaceTintData']:
+    """Build tint data for all races, keyed by (race_edid, sex).
+
+    Walks each RACE record's Head Data tint masks and extracts
+    TintAsset entries organized by class name.
+    """
+    import struct
+    from .tints import RaceTintData
+    from .models import TintAsset
+
+    result: dict[tuple, RaceTintData] = {}
+
+    for plugin in plugins:
+        if plugin is None:
+            continue
+        for record in plugin.get_records_by_signature('RACE'):
+            edid = record.editor_id
+            if not edid:
+                continue
+
+            for sex, sex_enum in [(Sex.MALE_ADULT, Sex.MALE_ADULT),
+                                  (Sex.FEMALE_ADULT, Sex.FEMALE_ADULT)]:
+                tint_data = _extract_tint_section(record, sex)
+                if tint_data.classes:
+                    result[(edid, sex)] = tint_data
+                    # Child races share parent tint data
+                    child_sex = Sex.MALE_CHILD if sex == Sex.MALE_ADULT else Sex.FEMALE_CHILD
+                    result[(edid, child_sex)] = tint_data
+
+    log.info(f"Built race_tints: {len(result)} entries")
+    return result
+
+
+def _extract_tint_section(record: Record, sex: Sex) -> 'RaceTintData':
+    """Extract tint data for one sex from a RACE record's Head Data."""
+    import struct
+    from .tints import RaceTintData
+    from .models import TintAsset
+
+    data = RaceTintData()
+
+    # Find the correct Head Data section:
+    # Male: first NAM0 → MNAM → ... → second NAM0
+    # Female: second NAM0 → FNAM → ... → end
+    is_male = sex in (Sex.MALE_ADULT, Sex.MALE_CHILD)
+    target_marker = 'MNAM' if is_male else 'FNAM'
+
+    # Find the start of our section
+    in_section = False
+    nam0_count = 0
+    tint_start = -1
+
+    for i, sr in enumerate(record.subrecords):
+        if sr.signature == 'NAM0':
+            nam0_count += 1
+            if is_male and nam0_count == 1:
+                in_section = True
+            elif not is_male and nam0_count == 2:
+                in_section = True
+            elif in_section:
+                break  # hit the next NAM0, we're done
+        if in_section and sr.signature == 'TINI' and tint_start < 0:
+            tint_start = i
+
+    if tint_start < 0:
+        return data
+
+    # Parse tint entries: TINI, TINT, TINP, TIND, [TINC, TINV, TIRS]*
+    i = tint_start
+    subs = record.subrecords
+
+    while i < len(subs):
+        sr = subs[i]
+        if sr.signature == 'NAM0':
+            break  # hit next section
+
+        if sr.signature != 'TINI':
+            i += 1
+            continue
+
+        tini = struct.unpack('<H', sr.data[:2])[0]
+        tint_path = ''
+        tinp_val = -1
+        presets = []
+
+        j = i + 1
+        while j < len(subs) and subs[j].signature != 'TINI' and subs[j].signature != 'NAM0':
+            s = subs[j]
+            if s.signature == 'TINT':
+                tint_path = s.data.decode('cp1252', errors='replace').rstrip('\x00')
+            elif s.signature == 'TINP':
+                tinp_val = struct.unpack('<H', s.data[:2])[0]
+            elif s.signature == 'TINC':
+                color_fid = struct.unpack('<I', s.data[:4])[0]
+                # Look ahead for TINV and TIRS
+                intensity = 0.0
+                tirs = 0
+                if j + 1 < len(subs) and subs[j + 1].signature == 'TINV':
+                    intensity = struct.unpack('<f', subs[j + 1].data[:4])[0]
+                if j + 2 < len(subs) and subs[j + 2].signature == 'TIRS':
+                    tirs = struct.unpack('<H', subs[j + 2].data[:2])[0]
+                presets.append((color_fid, intensity, tirs))
+            j += 1
+
+        class_name = _classify_tint_path(tint_path)
+
+        asset = TintAsset(
+            index=tini,
+            filename=tint_path,
+            layer_type=0,
+            layer_class=class_name,
+            presets=presets,
+        )
+
+        if class_name not in data.classes:
+            data.classes[class_name] = []
+        data.classes[class_name].append(asset)
+
+        # Determine if required: Skin Tone always, or first preset
+        # intensity > 0.01
+        if class_name == 'Skin Tone':
+            data.required.add(class_name)
+        elif presets and presets[0][1] > 0.01:
+            data.required.add(class_name)
+
+        i = j
+
+    return data
