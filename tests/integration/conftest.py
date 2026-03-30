@@ -20,45 +20,14 @@ import pytest
 from pathlib import Path
 
 import esplib.defs.tes5  # noqa: F401 -- registers tes5 game schemas
-from esplib import Plugin
+from esplib import Plugin, find_game_data, find_strings_dir
 
 from furrifier.race_defs import load_scheme
 from furrifier.vanilla_setup import setup_vanilla
 
 
-SKYRIM_DATA_PATHS = [
-    Path(r"C:\Steam\steamapps\common\Skyrim Special Edition\Data"),
-    Path(r"C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\Data"),
-    Path(r"C:\Program Files\Steam\steamapps\common\Skyrim Special Edition\Data"),
-    Path(r"D:\Steam\steamapps\common\Skyrim Special Edition\Data"),
-    Path(r"D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data"),
-]
-
-STRING_TABLE_PATHS = [
-    Path(r"C:\Modding\SkyrimSEAssets\00 Vanilla Assets\strings"),
-]
-
-
 def find_skyrim_data() -> Path | None:
-    for p in SKYRIM_DATA_PATHS:
-        if p.exists():
-            return p
-    return None
-
-
-def _find_strings_dir() -> Path | None:
-    """Find directory containing Skyrim_english.STRINGS."""
-    data = find_skyrim_data()
-    if data:
-        d = data / "Strings"
-        if (d / "Skyrim_english.STRINGS").exists():
-            return d
-    for p in STRING_TABLE_PATHS:
-        if p.exists():
-            for f in p.iterdir():
-                if f.name.lower() == "skyrim_english.strings":
-                    return p
-    return None
+    return find_game_data('tes5')
 
 
 PATCH_FILENAME = "FurrifierTEST.esp"
@@ -111,7 +80,7 @@ def skyrim_plugin(data_dir):
     path = data_dir / "Skyrim.esm"
     if not path.exists():
         pytest.skip("Skyrim.esm not found")
-    strings_dir = _find_strings_dir()
+    strings_dir = find_strings_dir()
     p = Plugin()
     if strings_dir:
         p.string_search_dirs = [str(strings_dir)]
@@ -130,7 +99,7 @@ def all_plugins(skyrim_plugin, data_dir):
         "BDCatRaces.esp",
         "YASCanineRaces.esp",
     ]
-    strings_dir = _find_strings_dir()
+    strings_dir = find_strings_dir()
     search_dirs = [str(strings_dir)] if strings_dir else []
     plugins = [skyrim_plugin]
     for name in extra_names:
