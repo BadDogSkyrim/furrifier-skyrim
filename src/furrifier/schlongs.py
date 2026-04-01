@@ -19,7 +19,7 @@ from esplib import flst_add, flst_contains, glob_value, glob_set_value, glob_cop
 log = logging.getLogger(__name__)
 
 
-def furrify_all_schlongs(plugins: list[Plugin],
+def furrify_all_schlongs(plugins,
                          patch: Plugin,
                          race_fids: list[int],
                          ) -> int:

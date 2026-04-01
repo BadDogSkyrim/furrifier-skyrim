@@ -111,11 +111,9 @@ def furrify_npc(npc: Record,
     and tint layers. Returns the patched record, or None if skipped.
     """
     # Skip chargen presets
-    acbs = npc.get_subrecord('ACBS')
-    if acbs and acbs.size >= 4:
-        flags = acbs.get_uint32(0)
-        if flags & 4:  # Is CharGen Face Preset
-            return None
+    acbs = npc['ACBS']
+    if acbs and acbs['flags'].Is_CharGen_Face_Preset:
+        return None
 
     # Determine races
     race_result = determine_npc_race(npc, ctx, races)
@@ -193,7 +191,7 @@ def furrify_npc(npc: Record,
     return patched
 
 
-def furrify_all_npcs(plugins: list[Plugin],
+def furrify_all_npcs(plugins,
                      patch: Plugin,
                      ctx: RaceDefContext,
                      races: dict[str, Record],
@@ -210,8 +208,6 @@ def furrify_all_npcs(plugins: list[Plugin],
     """
     count = 0
     for plugin in plugins:
-        if plugin is None:
-            continue
         npcs = plugin.get_records_by_signature('NPC_')
         for i, npc in enumerate(npcs):
             if (i % 500) == 0 and i > 0:

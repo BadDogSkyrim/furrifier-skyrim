@@ -4,10 +4,13 @@ import struct
 import pytest
 
 from esplib import Record, FormID
+from esplib.defs.game import GameRegistry
 
 from furrifier.npc import determine_npc_sex, determine_npc_race
 from furrifier.models import Sex
 from furrifier.race_defs import RaceDefContext
+
+import esplib.defs.tes5  # noqa: F401 -- registers tes5 game schemas
 
 
 def _make_npc(form_id=0x100, female=False, race_fid=0x200, edid='TestNPC'):
@@ -16,6 +19,8 @@ def _make_npc(form_id=0x100, female=False, race_fid=0x200, edid='TestNPC'):
     flags = 1 if female else 0
     npc.add_subrecord('ACBS', struct.pack('<I', flags) + b'\x00' * 20)
     npc.add_subrecord('RNAM', struct.pack('<I', race_fid))
+    schema = GameRegistry.get_game('tes5').get('NPC_')
+    npc.bind_schema(schema)
     return npc
 
 

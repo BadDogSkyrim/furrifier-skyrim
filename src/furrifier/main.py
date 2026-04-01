@@ -54,10 +54,7 @@ def main() -> int:
     )
     plugin_set = PluginSet(load_order)
     plugin_set.load_all()
-
-    plugins = [plugin_set.get_plugin(name) for name in load_order]
-    plugins = [p for p in plugins if p is not None]
-    log.info(f"Loaded {len(plugins)} plugins")
+    log.info(f"Loaded {len(plugin_set)} plugins")
 
     # Load race and headpart data
     races_by_edid = load_races(plugin_set, ctx)
@@ -74,7 +71,7 @@ def main() -> int:
 
     # Create patch
     patch_path = data_dir / config.patch_filename
-    masters = [p.file_path.name for p in plugins if p.file_path]
+    masters = [p.file_path.name for p in plugin_set if p.file_path]
     patch = Plugin.new_plugin(patch_path, masters=masters[:254])
 
     # Build context
@@ -92,7 +89,7 @@ def main() -> int:
     if config.furrify_npcs_male or config.furrify_npcs_female:
         log.info("Furrifying NPCs...")
         npc_count = furry.furrify_all_npcs(
-            plugins,
+            plugin_set,
             furrify_male=config.furrify_npcs_male,
             furrify_female=config.furrify_npcs_female,
         )
@@ -101,14 +98,14 @@ def main() -> int:
     # Furrify armor
     if config.furrify_armor:
         log.info("Furrifying armor...")
-        armor_count = furry.furrify_all_armor(plugins)
+        armor_count = furry.furrify_all_armor(plugin_set)
         log.info(f"Modified {armor_count} armor records")
 
     # Furrify schlongs
     if config.furrify_schlongs:
         from .schlongs import furrify_all_schlongs
         log.info("Furrifying schlongs...")
-        furrify_all_schlongs(plugins, patch, [])
+        furrify_all_schlongs(plugin_set, patch, [])
 
     # Save
     patch.save()

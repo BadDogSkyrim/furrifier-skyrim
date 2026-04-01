@@ -138,6 +138,19 @@ def _tint_layer_count(record):
     return len(record.get_subrecords('TINI'))
 
 
+def _get_template_chain(npc, plugin_set):
+    """Walk the TPLT chain and return the list of template NPCs."""
+    chain = []
+    current = npc
+    while True:
+        found = plugin_set.resolve_reference(current, 'TPLT')
+        if found is None:
+            break
+        chain.append(found)
+        current = found
+    return chain
+
+
 # ===================================================================
 # Write+Verify tests (use furrify_and_check)
 # ===================================================================
@@ -296,14 +309,22 @@ class TestNPCFurrification:
         furrify_and_check(write, verify)
 
 
-    def test_corpse_prisoner(self, furrify_and_check, all_plugins):
-        """CorpsePrisoner: no negative tint indices after save."""
+    def test_corpse_prisoner(self, furrify_and_check, all_plugins, plugin_set):
+        """CorpsePrisoner: no negative tint indices after save.
+
+        CorpsePrisonerNordMale inherits Traits (appearance) via a TPLT
+        template chain. Furrify the whole chain for a visually
+        consistent result in xEdit.
+        """
         npc, _ = find_record(all_plugins, 'NPC_', 'CorpsePrisonerNordMale')
         assert npc is not None
+        templates = _get_template_chain(npc, plugin_set)
         form_id = npc.form_id
 
 
         def write(furry_ctx):
+            for t in reversed(templates):
+                furry_ctx.furrify_npc(t)
             furry_ctx.furrify_npc(npc)
 
 
@@ -363,6 +384,314 @@ class TestNPCFurrification:
 
         furrify_and_check(write, verify)
 
+
+    # -- Imperial --
+
+    def test_rune_imperial_male(self, furrify_and_check, all_plugins,
+                                 races_by_edid):
+        """Rune: Imperial male furrifies to Kettu."""
+        npc, _ = find_record(all_plugins, 'NPC_', 'Rune')
+        assert npc is not None
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None, "Rune should be furrifiable"
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None, "Rune not in saved plugin"
+            race_edid = _get_race_edid(patched, races_by_edid)
+            assert race_edid == 'ImperialRace', \
+                f"Rune race should stay ImperialRace, got {race_edid}"
+            assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
+            assert _tint_layer_count(patched) > 0, "Should have tint layers"
+
+        furrify_and_check(write, verify)
+
+
+    def test_arcadia_imperial_female(self, furrify_and_check, all_plugins,
+                                      races_by_edid):
+        """Arcadia: Imperial female furrifies to Kettu."""
+        npc, _ = find_record(all_plugins, 'NPC_', 'Arcadia')
+        assert npc is not None
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None, "Arcadia should be furrifiable"
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None, "Arcadia not in saved plugin"
+            race_edid = _get_race_edid(patched, races_by_edid)
+            assert race_edid == 'ImperialRace', \
+                f"Arcadia race should stay ImperialRace, got {race_edid}"
+            assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
+            assert _tint_layer_count(patched) > 0, "Should have tint layers"
+
+        furrify_and_check(write, verify)
+
+    # -- Breton --
+
+    def test_belethor_breton_male(self, furrify_and_check, all_plugins,
+                                   races_by_edid):
+        """Belethor: Breton male furrifies to Kygarra."""
+        npc, _ = find_record(all_plugins, 'NPC_', 'Belethor')
+        assert npc is not None
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None, "Belethor should be furrifiable"
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None, "Belethor not in saved plugin"
+            race_edid = _get_race_edid(patched, races_by_edid)
+            assert race_edid == 'BretonRace', \
+                f"Belethor race should stay BretonRace, got {race_edid}"
+            assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
+            assert _tint_layer_count(patched) > 0, "Should have tint layers"
+
+        furrify_and_check(write, verify)
+
+
+    def test_muiri_breton_female(self, furrify_and_check, all_plugins,
+                                  races_by_edid):
+        """Muiri: Breton female furrifies to Kygarra."""
+        npc, _ = find_record(all_plugins, 'NPC_', 'Muiri')
+        assert npc is not None
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None, "Muiri should be furrifiable"
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None, "Muiri not in saved plugin"
+            race_edid = _get_race_edid(patched, races_by_edid)
+            assert race_edid == 'BretonRace', \
+                f"Muiri race should stay BretonRace, got {race_edid}"
+            assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
+            assert _tint_layer_count(patched) > 0, "Should have tint layers"
+
+        furrify_and_check(write, verify)
+
+    # -- Redguard --
+
+    def test_amren_redguard_male(self, furrify_and_check, all_plugins,
+                                  races_by_edid):
+        """Amren: Redguard male furrifies to Xeba."""
+        npc, _ = find_record(all_plugins, 'NPC_', 'Amren')
+        assert npc is not None
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None, "Amren should be furrifiable"
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None, "Amren not in saved plugin"
+            race_edid = _get_race_edid(patched, races_by_edid)
+            assert race_edid == 'RedguardRace', \
+                f"Amren race should stay RedguardRace, got {race_edid}"
+            assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
+            assert _tint_layer_count(patched) > 0, "Should have tint layers"
+
+        furrify_and_check(write, verify)
+
+
+    def test_saadia_redguard_female(self, furrify_and_check, all_plugins,
+                                     races_by_edid):
+        """Saadia: Redguard female furrifies to Xeba."""
+        npc, _ = find_record(all_plugins, 'NPC_', 'Saadia')
+        assert npc is not None
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None, "Saadia should be furrifiable"
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None, "Saadia not in saved plugin"
+            race_edid = _get_race_edid(patched, races_by_edid)
+            assert race_edid == 'RedguardRace', \
+                f"Saadia race should stay RedguardRace, got {race_edid}"
+            assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
+            assert _tint_layer_count(patched) > 0, "Should have tint layers"
+
+        furrify_and_check(write, verify)
+
+    # -- High Elf --
+
+    def test_ancano_highelf_male(self, furrify_and_check, all_plugins,
+                                  races_by_edid):
+        """Ancano: High Elf male furrifies to Maha."""
+        npc, _ = find_record(all_plugins, 'NPC_', 'Ancano')
+        assert npc is not None
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None, "Ancano should be furrifiable"
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None, "Ancano not in saved plugin"
+            race_edid = _get_race_edid(patched, races_by_edid)
+            assert race_edid == 'HighElfRace', \
+                f"Ancano race should stay HighElfRace, got {race_edid}"
+            assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
+            assert _tint_layer_count(patched) > 0, "Should have tint layers"
+
+        furrify_and_check(write, verify)
+
+
+    def test_elenwen_highelf_female(self, furrify_and_check, all_plugins,
+                                     races_by_edid):
+        """Elenwen: High Elf female furrifies to Maha."""
+        npc, _ = find_record(all_plugins, 'NPC_', 'Elenwen')
+        assert npc is not None
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None, "Elenwen should be furrifiable"
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None, "Elenwen not in saved plugin"
+            race_edid = _get_race_edid(patched, races_by_edid)
+            assert race_edid == 'HighElfRace', \
+                f"Elenwen race should stay HighElfRace, got {race_edid}"
+            assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
+            assert _tint_layer_count(patched) > 0, "Should have tint layers"
+
+        furrify_and_check(write, verify)
+
+    # -- Wood Elf --
+
+    def test_faendal_woodelf_male(self, furrify_and_check, all_plugins,
+                                   races_by_edid):
+        """Faendal: Wood Elf male furrifies to Duma."""
+        npc, _ = find_record(all_plugins, 'NPC_', 'Faendal')
+        assert npc is not None
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None, "Faendal should be furrifiable"
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None, "Faendal not in saved plugin"
+            race_edid = _get_race_edid(patched, races_by_edid)
+            assert race_edid == 'WoodElfRace', \
+                f"Faendal race should stay WoodElfRace, got {race_edid}"
+            assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
+            assert _tint_layer_count(patched) > 0, "Should have tint layers"
+
+        furrify_and_check(write, verify)
+
+
+    def test_nivenor_woodelf_female(self, furrify_and_check, all_plugins,
+                                     races_by_edid):
+        """Nivenor: Wood Elf female furrifies to Duma."""
+        npc, _ = find_record(all_plugins, 'NPC_', 'Nivenor')
+        assert npc is not None
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None, "Nivenor should be furrifiable"
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None, "Nivenor not in saved plugin"
+            race_edid = _get_race_edid(patched, races_by_edid)
+            assert race_edid == 'WoodElfRace', \
+                f"Nivenor race should stay WoodElfRace, got {race_edid}"
+            assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
+            assert _tint_layer_count(patched) > 0, "Should have tint layers"
+
+        furrify_and_check(write, verify)
+
+    # -- Dark Elf --
+
+    def test_athis_darkelf_male(self, furrify_and_check, all_plugins,
+                                 races_by_edid):
+        """Athis: Dark Elf male furrifies to Kalo."""
+        npc, _ = find_record(all_plugins, 'NPC_', 'Athis')
+        assert npc is not None
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None, "Athis should be furrifiable"
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None, "Athis not in saved plugin"
+            race_edid = _get_race_edid(patched, races_by_edid)
+            assert race_edid == 'DarkElfRace', \
+                f"Athis race should stay DarkElfRace, got {race_edid}"
+            assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
+            assert _tint_layer_count(patched) > 0, "Should have tint layers"
+
+        furrify_and_check(write, verify)
+
+
+    def test_irileth_darkelf_female(self, furrify_and_check, all_plugins,
+                                     races_by_edid):
+        """Irileth: Dark Elf female furrifies to Kalo."""
+        npc, _ = find_record(all_plugins, 'NPC_', 'Irileth')
+        assert npc is not None
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None, "Irileth should be furrifiable"
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None, "Irileth not in saved plugin"
+            race_edid = _get_race_edid(patched, races_by_edid)
+            assert race_edid == 'DarkElfRace', \
+                f"Irileth race should stay DarkElfRace, got {race_edid}"
+            assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
+            assert _tint_layer_count(patched) > 0, "Should have tint layers"
+
+        furrify_and_check(write, verify)
+
+    # -- Faction-based subraces --
 
     @needs_faction_races
     def test_forsworn_becomes_reachman(self, furrify_and_check, all_plugins,

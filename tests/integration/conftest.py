@@ -6,9 +6,6 @@ and are skipped if the files aren't found.
 All tests share a single patch plugin (FurrifierTEST.esp) saved to the
 game Data directory so results can be inspected in xEdit.
 
-The skyrim_plugin fixture comes from the root conftest (session-scoped,
-loaded once for both esplib and furrifier tests).
-
 Two-phase testing:
   Tests that modify records use the furrify_and_check fixture. Each test
   provides a write callback (runs immediately) and a verify callback
@@ -20,7 +17,7 @@ import pytest
 from pathlib import Path
 
 import esplib.defs.tes5  # noqa: F401 -- registers tes5 game schemas
-from esplib import Plugin, find_game_data, find_strings_dir
+from esplib import Plugin, LoadOrder, PluginSet, find_game_data, find_strings_dir
 
 from furrifier.race_defs import load_scheme
 from furrifier.vanilla_setup import setup_vanilla
@@ -31,6 +28,16 @@ def find_skyrim_data() -> Path | None:
 
 
 PATCH_FILENAME = "FurrifierTEST.esp"
+
+PLUGIN_NAMES = [
+    "Skyrim.esm",
+    "Update.esm",
+    "Dawnguard.esm",
+    "HearthFires.esm",
+    "Dragonborn.esm",
+    "BDCatRaces.esp",
+    "YASCanineRaces.esp",
+]
 
 requires_gamefiles = pytest.mark.skipif(
     find_skyrim_data() is None,
@@ -71,49 +78,25 @@ def ctx():
 
 
 @pytest.fixture(scope="session")
-def skyrim_plugin(data_dir):
-    """Skyrim.esm loaded once per session.
-
-    When running from the workspace root, the root conftest provides this
-    fixture instead (shared across esplib and furrifier tests).
-    """
-    path = data_dir / "Skyrim.esm"
-    if not path.exists():
-        pytest.skip("Skyrim.esm not found")
+def plugin_set(data_dir):
+    """All relevant plugins loaded via PluginSet."""
+    lo = LoadOrder.from_list(PLUGIN_NAMES, data_dir=data_dir, game_id='tes5')
+    ps = PluginSet(lo)
     strings_dir = find_strings_dir()
-    p = Plugin()
     if strings_dir:
-        p.string_search_dirs = [str(strings_dir)]
-    p.load(path)
-    return p
+        ps.string_search_dirs = [str(strings_dir)]
+    ps.load_all()
+    return ps
 
 
 @pytest.fixture(scope="session")
-def all_plugins(skyrim_plugin, data_dir):
-    """All relevant plugins loaded. Reuses the session skyrim_plugin."""
-    extra_names = [
-        "Update.esm",
-        "Dawnguard.esm",
-        "HearthFires.esm",
-        "Dragonborn.esm",
-        "BDCatRaces.esp",
-        "YASCanineRaces.esp",
-    ]
-    strings_dir = find_strings_dir()
-    search_dirs = [str(strings_dir)] if strings_dir else []
-    plugins = [skyrim_plugin]
-    for name in extra_names:
-        path = data_dir / name
-        if path.exists():
-            p = Plugin()
-            p.string_search_dirs = search_dirs
-            p.load(path)
-            plugins.append(p)
-    return plugins
+def all_plugins(plugin_set):
+    """All loaded plugins as a list (for backward compatibility)."""
+    return list(plugin_set)
 
 
 @pytest.fixture(scope="session")
-def races_by_edid(all_plugins, ctx):
+def races_by_edid(plugin_set, ctx):
     """Race records indexed by EditorID, with assignments linked."""
     races = {}
     needed = set()
@@ -124,7 +107,7 @@ def races_by_edid(all_plugins, ctx):
         needed.add(s.vanilla_basis)
         needed.add(s.furry_id)
 
-    for plugin in all_plugins:
+    for plugin in plugin_set:
         for record in plugin.get_records_by_signature('RACE'):
             edid = record.editor_id
             if edid and edid in needed:
@@ -149,12 +132,12 @@ def _to_race_info(record):
 
 
 @pytest.fixture(scope="session")
-def all_headparts(all_plugins, ctx):
+def all_headparts(plugin_set, ctx):
     """All headpart records indexed by EditorID."""
     from furrifier.furry_load import get_headpart_type
     from furrifier.models import HeadpartInfo
     headparts = {}
-    for plugin in all_plugins:
+    for plugin in plugin_set:
         for record in plugin.get_records_by_signature('HDPT'):
             edid = record.editor_id
             if edid is None:
@@ -170,14 +153,14 @@ def all_headparts(all_plugins, ctx):
 
 
 @pytest.fixture(scope="session")
-def patch(request, all_plugins, data_dir):
+def patch(request, plugin_set, data_dir):
     """Shared patch plugin written to the game Data directory.
 
     All tests accumulate records into this single plugin. It is also
     saved to FurrifierTEST.esp at session end for xEdit inspection.
     """
     patch_path = data_dir / PATCH_FILENAME
-    masters = [p.file_path.name for p in all_plugins if p.file_path]
+    masters = [p.file_path.name for p in plugin_set if p.file_path]
     p = Plugin.new_plugin(patch_path, masters=masters[:254])
 
 
@@ -190,22 +173,22 @@ def patch(request, all_plugins, data_dir):
 
 
 @pytest.fixture(scope="session")
-def race_headparts(all_plugins, all_headparts):
+def race_headparts(plugin_set, all_headparts):
     """Index of headparts per (type, sex, race)."""
     from furrifier.furry_load import build_race_headparts
-    return build_race_headparts(all_plugins, all_headparts)
+    return build_race_headparts(list(plugin_set), all_headparts)
 
 
 @pytest.fixture(scope="session")
-def race_tints(all_plugins):
+def race_tints(plugin_set):
     """Tint data per (race, sex)."""
     from furrifier.furry_load import build_race_tints
-    return build_race_tints(all_plugins)
+    return build_race_tints(list(plugin_set))
 
 
 @pytest.fixture(scope="session")
 def furry_ctx(patch, ctx, races_by_edid, all_headparts, race_headparts,
-              race_tints, all_plugins):
+              race_tints, plugin_set):
     """FurryContext wired up for testing."""
     from furrifier.context import FurryContext
     return FurryContext(
@@ -215,7 +198,7 @@ def furry_ctx(patch, ctx, races_by_edid, all_headparts, race_headparts,
         all_headparts=all_headparts,
         race_headparts=race_headparts,
         race_tints=race_tints,
-        all_plugins=all_plugins,
+        all_plugins=list(plugin_set),
     )
 
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from esplib import Plugin, Record, PluginSet, LoadOrder
+from esplib import Record
 
 from .models import (
     Sex, HeadpartType, TintLayer, RaceInfo, HeadpartInfo, TintAsset,
@@ -22,11 +22,13 @@ log = logging.getLogger(__name__)
 
 def is_npc_female(npc: Record) -> bool:
     """Check if an NPC is female from the ACBS flags."""
-    acbs = npc.get_subrecord('ACBS')
+    try:
+        acbs = npc['ACBS']
+    except KeyError:
+        return False
     if acbs is None:
         return False
-    flags = acbs.get_uint32(0)
-    return bool(flags & 1)  # Bit 0 = Female
+    return bool(acbs['flags'].Female)
 
 
 def is_child_race(race: Record) -> bool:
@@ -51,7 +53,7 @@ def get_headpart_type(hdpt: Record) -> HeadpartType:
         return HeadpartType.UNKNOWN
 
 
-def load_races(plugin_set: PluginSet, ctx: RaceDefContext) -> dict[str, RaceInfo]:
+def load_races(plugins, ctx: RaceDefContext) -> dict[str, RaceInfo]:
     """Load all races referenced in the context from the plugin set.
 
     Returns a dict of EditorID -> RaceInfo for all vanilla and furry races.
@@ -67,10 +69,8 @@ def load_races(plugin_set: PluginSet, ctx: RaceDefContext) -> dict[str, RaceInfo
         needed.add(subrace.vanilla_basis)
         needed.add(subrace.furry_id)
 
-    # Find records in the plugin set
-    for plugin in plugin_set:
-        if plugin is None:
-            continue
+    # Find records in the plugins
+    for plugin in plugins:
         for record in plugin.get_records_by_signature('RACE'):
             edid = record.editor_id
             if edid and edid in needed:
@@ -94,14 +94,12 @@ def load_races(plugin_set: PluginSet, ctx: RaceDefContext) -> dict[str, RaceInfo
     return races
 
 
-def load_headparts(plugin_set: PluginSet,
+def load_headparts(plugins,
                    ctx: RaceDefContext) -> dict[str, HeadpartInfo]:
     """Load all HDPT records and attach labels from the context."""
     headparts: dict[str, HeadpartInfo] = {}
 
-    for plugin in plugin_set:
-        if plugin is None:
-            continue
+    for plugin in plugins:
         for record in plugin.get_records_by_signature('HDPT'):
             edid = record.editor_id
             if edid is None:
@@ -121,7 +119,7 @@ def load_headparts(plugin_set: PluginSet,
     return headparts
 
 
-def build_race_headparts(plugins: list[Plugin],
+def build_race_headparts(plugins,
                          all_headparts: dict[str, HeadpartInfo],
                          ) -> dict[tuple, set[str]]:
     """Build an index of headparts available per (type, sex, race).
@@ -137,9 +135,6 @@ def build_race_headparts(plugins: list[Plugin],
     # Build a FormID→EditorID lookup for all RACE records across plugins
     race_fid_to_edid: dict[int, str] = {}
     for plugin in plugins:
-        if plugin is None:
-            continue
-        local_idx = len(plugin.header.masters)
         for record in plugin.get_records_by_signature('RACE'):
             edid = record.editor_id
             if edid:
@@ -150,8 +145,6 @@ def build_race_headparts(plugins: list[Plugin],
     # Build a FormID→FLST record lookup for FormList resolution
     flst_by_fid: dict[int, Record] = {}
     for plugin in plugins:
-        if plugin is None:
-            continue
         for record in plugin.get_records_by_signature('FLST'):
             obj_id = record.form_id.value & 0x00FFFFFF
             flst_by_fid[obj_id] = record
@@ -284,8 +277,7 @@ def _classify_tint_path(path: str) -> str:
     return 'Paint'  # fallback for unrecognized paths
 
 
-def build_race_tints(plugins: list[Plugin],
-                     ) -> dict[tuple, 'RaceTintData']:
+def build_race_tints(plugins) -> dict[tuple, 'RaceTintData']:
     """Build tint data for all races, keyed by (race_edid, sex).
 
     Walks each RACE record's Head Data tint masks and extracts
@@ -298,8 +290,6 @@ def build_race_tints(plugins: list[Plugin],
     result: dict[tuple, RaceTintData] = {}
 
     for plugin in plugins:
-        if plugin is None:
-            continue
         for record in plugin.get_records_by_signature('RACE'):
             edid = record.editor_id
             if not edid:

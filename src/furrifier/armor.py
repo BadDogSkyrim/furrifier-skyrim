@@ -70,7 +70,7 @@ def add_race_to_arma(arma: Record, patch: Plugin, source_plugin: Plugin,
     return patched
 
 
-def furrify_all_armor(plugins: list[Plugin],
+def furrify_all_armor(plugins,
                       patch: Plugin,
                       race_mappings: dict[int, int],
                       ) -> int:
@@ -83,8 +83,6 @@ def furrify_all_armor(plugins: list[Plugin],
     count = 0
 
     for plugin in plugins:
-        if plugin is None:
-            continue
         for arma in plugin.get_records_by_signature('ARMA'):
             bp_flags = get_bodypart_flags(arma)
             if not (bp_flags & FURRIFIABLE_BODYPARTS):

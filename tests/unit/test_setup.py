@@ -8,22 +8,36 @@ import struct
 import pytest
 
 from esplib import Plugin, Record, SubRecord, FormID
+from esplib.defs.game import GameRegistry
 
 from furrifier.furry_load import is_npc_female, is_child_race, get_headpart_type
 from furrifier.models import HeadpartType
 from furrifier.vanilla_setup import unalias, NPC_ALIASES, NPC_RACE_OVERRIDES
 
+import esplib.defs.tes5  # noqa: F401 -- registers tes5 game schemas
+
+
+def _make_npc(acbs_flags: int = 0) -> Record:
+    """Create a synthetic NPC_ record with ACBS and bound schema."""
+    npc = Record('NPC_', FormID(0x100), 0)
+    npc.add_subrecord('ACBS', struct.pack('<I', acbs_flags) + b'\x00' * 20)
+    schema = GameRegistry.get_game('tes5').get('NPC_')
+    npc.bind_schema(schema)
+    return npc
+
 
 class TestNPCHelpers:
+
+
     def test_is_female(self):
-        npc = Record('NPC_', FormID(0x100), 0)
-        npc.add_subrecord('ACBS', struct.pack('<I', 1) + b'\x00' * 20)  # bit 0 = Female
+        npc = _make_npc(acbs_flags=1)  # bit 0 = Female
         assert is_npc_female(npc) is True
 
+
     def test_is_male(self):
-        npc = Record('NPC_', FormID(0x100), 0)
-        npc.add_subrecord('ACBS', struct.pack('<I', 0) + b'\x00' * 20)
+        npc = _make_npc(acbs_flags=0)
         assert is_npc_female(npc) is False
+
 
     def test_no_acbs(self):
         npc = Record('NPC_', FormID(0x100), 0)

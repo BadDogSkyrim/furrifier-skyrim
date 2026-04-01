@@ -112,11 +112,9 @@ class FurryContext:
         and tint layers. Returns the patched record, or None if skipped.
         """
         # Skip chargen presets
-        acbs = npc.get_subrecord('ACBS')
-        if acbs and acbs.size >= 4:
-            flags = acbs.get_uint32(0)
-            if flags & 4:  # Is CharGen Face Preset
-                return None
+        acbs = npc['ACBS']
+        if acbs and acbs['flags'].Is_CharGen_Face_Preset:
+            return None
 
         race_result = self.determine_npc_race(npc)
         if race_result is None:
@@ -304,14 +302,12 @@ class FurryContext:
         record.add_subrecord('QNAM', struct.pack('<fff',
                              qr / 255.0, qg / 255.0, qb / 255.0))
 
-    def furrify_all_npcs(self, plugins: list[Plugin],
+    def furrify_all_npcs(self, plugins,
                          furrify_male: bool = True,
                          furrify_female: bool = True) -> int:
         """Furrify all NPCs across the load order. Returns count."""
         count = 0
         for plugin in plugins:
-            if plugin is None:
-                continue
             npcs = plugin.get_records_by_signature('NPC_')
             for i, npc in enumerate(npcs):
                 if (i % 500) == 0 and i > 0:
@@ -458,7 +454,7 @@ class FurryContext:
 
     # -- Armor furrification --
 
-    def furrify_all_armor(self, plugins: list[Plugin]) -> int:
+    def furrify_all_armor(self, plugins) -> int:
         """Add furry races to all armor addons that support vanilla equivalents.
 
         Returns count of ARMA records modified.
@@ -473,8 +469,6 @@ class FurryContext:
 
         count = 0
         for plugin in plugins:
-            if plugin is None:
-                continue
             for arma in plugin.get_records_by_signature('ARMA'):
                 from .armor import get_bodypart_flags, arma_has_race
                 bp_flags = get_bodypart_flags(arma)
