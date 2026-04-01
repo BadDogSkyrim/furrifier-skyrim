@@ -191,15 +191,17 @@ def furry_ctx(patch, ctx, races_by_edid, all_headparts, race_headparts,
               race_tints, plugin_set):
     """FurryContext wired up for testing."""
     from furrifier.context import FurryContext
-    return FurryContext(
+    fc = FurryContext(
         patch=patch,
         ctx=ctx,
         races=races_by_edid,
         all_headparts=all_headparts,
         race_headparts=race_headparts,
         race_tints=race_tints,
-        all_plugins=list(plugin_set),
+        plugin_set=plugin_set,
     )
+    fc.furrify_all_races()
+    return fc
 
 
 @pytest.fixture

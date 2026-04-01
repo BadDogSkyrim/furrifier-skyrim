@@ -11,7 +11,7 @@ import logging
 import struct
 from typing import Optional
 
-from esplib import Plugin, Record
+from esplib import Plugin, PluginSet, Record
 
 from .models import Sex, HeadpartType, HeadpartInfo, Bodypart
 from .race_defs import RaceDefContext
@@ -39,7 +39,7 @@ class FurryContext:
                  all_headparts: dict[str, HeadpartInfo],
                  race_headparts: dict,
                  race_tints: dict,
-                 all_plugins: list[Plugin] = None,
+                 plugin_set: PluginSet = None,
                  max_tint_layers: int = 200):
         self.patch = patch
         self.ctx = ctx
@@ -47,7 +47,7 @@ class FurryContext:
         self.all_headparts = all_headparts
         self.race_headparts = race_headparts
         self.race_tints = race_tints
-        self._all_plugins = all_plugins or []
+        self.plugin_set = plugin_set
         self.max_tint_layers = max_tint_layers
 
     # -- NPC furrification --
@@ -61,7 +61,7 @@ class FurryContext:
     def _add_headpart_pnam(self, record: Record, hp: HeadpartInfo) -> None:
         """Add a PNAM subrecord for a headpart, remapping the FormID."""
         hp_fid = hp.record.form_id.value
-        hp_plugin = getattr(hp.record, '_plugin', None)
+        hp_plugin = hp.record.plugin
         if hp_plugin:
             hp_fid = self.patch.remap_formid(hp_fid, hp_plugin)
         record.add_subrecord('PNAM', struct.pack('<I', hp_fid))
@@ -94,7 +94,24 @@ class FurryContext:
         if npc_edid in self.ctx.npc_races:
             assigned_race_id = self.ctx.npc_races[npc_edid]
 
-        # TODO: resolve faction FormIDs and check ctx.faction_races
+        # Check faction-based race assignment (only if no NPC override)
+        elif npc.plugin is not None and self.plugin_set is not None:
+            for sr in npc.get_subrecords('SNAM'):
+                fact = self.plugin_set.resolve_form_id(
+                    sr.get_form_id(), npc.plugin)
+                if fact is None:
+                    continue
+                race_id = self.ctx.faction_races.get(fact.editor_id)
+                if race_id is None:
+                    continue
+                # Only apply if the NPC's vanilla race matches the
+                # subrace's basis (e.g. don't assign NordRaceChild
+                # to a subrace based on NordRace)
+                subrace = self.ctx.subraces.get(race_id)
+                if subrace and subrace.vanilla_basis != original_race_id:
+                    continue
+                assigned_race_id = race_id
+                break
 
         if assigned_race_id in self.ctx.assignments:
             furry_race_id = self.ctx.assignments[assigned_race_id].furry_id
@@ -132,11 +149,12 @@ class FurryContext:
         # Only change RNAM for subraces (e.g. Breton -> Reachman).
         # Normal races (e.g. Nord) are furrified at the race record level,
         # so the NPC keeps its original RNAM.
+        # For subraces, point RNAM at the created subrace record.
         if assigned_race_id != original_race_id:
-            if assigned_race_id in self.races:
-                race_rec = self.races[assigned_race_id]
+            subrace_rec = self.races.get(assigned_race_id)
+            if subrace_rec is not None:
                 patched.get_subrecord('RNAM').set_uint32(
-                    0, race_rec.form_id.value)
+                    0, subrace_rec.form_id.value)
 
         # Remove vanilla character customization
         patched.remove_subrecords('FTST')
@@ -275,7 +293,7 @@ class FurryContext:
         Returns (R, G, B, A) as 0-255 values.
         """
         obj_id = tinc_fid & 0x00FFFFFF
-        for plugin in self._all_plugins:
+        for plugin in self.plugin_set:
             for rec in plugin.get_records_by_signature('CLFM'):
                 if (rec.form_id.value & 0x00FFFFFF) == obj_id:
                     cnam = rec.get_subrecord('CNAM')
@@ -348,17 +366,22 @@ class FurryContext:
 
 
     def furrify_race(self, vanilla_race: Record,
-                     furry_race: Record) -> Record:
+                     furry_race: Record,
+                     target: Record = None) -> Record:
         """Furrify a vanilla race by copying key subrecords from the furry race.
 
         Copies WNAM (skin), RNAM (armor race), and the entire Head Data
         section (head parts, tint masks, presets) from the furry race.
         FormIDs are remapped to the patch's master list.
 
+        If target is provided, applies changes to it directly (for
+        subrace records already in the patch). Otherwise creates an
+        override via copy_record.
+
         Returns the patched race record.
         """
-        patched = self.patch.copy_record(vanilla_race)
-        furry_plugin = getattr(furry_race, '_plugin', None)
+        patched = target or self.patch.copy_record(vanilla_race)
+        furry_plugin = furry_race.plugin
 
         # Copy simple FormID subrecords (WNAM, RNAM)
         for sig in self._RACE_COPY_SIGS:
@@ -438,15 +461,55 @@ class FurryContext:
     def furrify_all_races(self) -> int:
         """Furrify all vanilla races that have furry assignments.
 
+        Also creates subrace records: copies the vanilla basis race,
+        then furrifies the copy with the subrace's furry appearance.
+
         Returns count of races furrified.
         """
         count = 0
+
+        # Furrify normal race assignments (e.g. NordRace -> YASLykaiosRace)
         for assignment in self.ctx.assignments.values():
             vanilla_rec = self.races.get(assignment.vanilla_id)
             furry_rec = self.races.get(assignment.furry_id)
             if vanilla_rec is None or furry_rec is None:
                 continue
             self.furrify_race(vanilla_rec, furry_rec)
+            count += 1
+
+        # Create and furrify subrace records
+        # (e.g. copy BretonRace -> YASReachmanRace, furrify with YASKonoiRace)
+        for subrace in self.ctx.subraces.values():
+            basis_rec = self.races.get(subrace.vanilla_basis)
+            furry_rec = self.races.get(subrace.furry_id)
+            if basis_rec is None or furry_rec is None:
+                continue
+
+            # Create a new race record as a copy of the vanilla basis.
+            # copy_record handles delocalization (FULL, DESC) and masters.
+            new_race = self.patch.copy_record(basis_rec)
+
+            # Assign a fresh FormID (copy_record gave it the basis's FormID)
+            new_race.form_id = self.patch.get_next_form_id()
+            self.patch._new_records.append(new_race)
+
+            # Set EDID and FULL to the subrace identity
+            edid_sr = new_race.get_subrecord('EDID')
+            if edid_sr is not None:
+                edid_sr.data = (subrace.name + '\x00').encode('cp1252')
+                edid_sr.modified = True
+
+            full_sr = new_race.get_subrecord('FULL')
+            if full_sr is not None:
+                full_sr.data = bytearray(
+                    subrace.display_name.encode('cp1252') + b'\x00')
+                full_sr.modified = True
+
+            # Furrify with the furry race's appearance
+            self.furrify_race(new_race, furry_rec, target=new_race)
+
+            # Store so RNAM assignment can find it
+            self.races[subrace.name] = new_race
             count += 1
 
         log.info(f"Furrified {count} races")

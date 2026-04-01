@@ -24,18 +24,22 @@ from conftest import (
 
 pytestmark = requires_gamefiles
 
-needs_faction_races = pytest.mark.xfail(
-    reason="faction-based race assignment not yet implemented (TODO in npc.py)",
-    strict=False,
-)
 
+def _get_race_edid(record, races_by_edid, plugin=None):
+    """Get the EditorID of the race assigned to a patched NPC record.
 
-def _get_race_edid(record, races_by_edid):
-    """Get the EditorID of the race assigned to a patched NPC record."""
+    Checks the plugin's own records first (for patch-created subraces),
+    then falls back to races_by_edid (source plugins).
+    """
     rnam = record.get_subrecord('RNAM')
     if rnam is None:
         return None
     race_fid = rnam.get_uint32()
+    # Check patch-created records first (subraces with new FormIDs)
+    if plugin is not None:
+        for rec in plugin.records:
+            if rec.signature == 'RACE' and rec.form_id.value == race_fid:
+                return rec.editor_id
     for edid, rec in races_by_edid.items():
         if rec.form_id.value == race_fid:
             return edid
@@ -693,7 +697,6 @@ class TestNPCFurrification:
 
     # -- Faction-based subraces --
 
-    @needs_faction_races
     def test_forsworn_becomes_reachman(self, furrify_and_check, all_plugins,
                                        races_by_edid):
         """Forsworn Breton male becomes Reachman race."""
@@ -711,14 +714,13 @@ class TestNPCFurrification:
         def verify(reloaded):
             patched = find_by_formid(reloaded, form_id)
             assert patched is not None
-            race_edid = _get_race_edid(patched, races_by_edid)
+            race_edid = _get_race_edid(patched, races_by_edid, reloaded)
             assert race_edid == 'YASReachmanRace', \
                 f"Forsworn should be Reachman, got {race_edid}"
 
         furrify_and_check(write, verify)
 
 
-    @needs_faction_races
     def test_ainethach_becomes_reachman(self, furrify_and_check, all_plugins,
                                         races_by_edid):
         """Ainethach becomes Reachman."""
@@ -735,7 +737,7 @@ class TestNPCFurrification:
         def verify(reloaded):
             patched = find_by_formid(reloaded, form_id)
             assert patched is not None
-            race_edid = _get_race_edid(patched, races_by_edid)
+            race_edid = _get_race_edid(patched, races_by_edid, reloaded)
             assert race_edid == 'YASReachmanRace', \
                 f"Ainethach should be Reachman, got {race_edid}"
 

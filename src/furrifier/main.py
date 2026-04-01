@@ -82,6 +82,7 @@ def main() -> int:
         all_headparts=headparts,
         race_headparts=race_headparts,
         race_tints=race_tints,
+        plugin_set=plugin_set,
         max_tint_layers=config.max_tint_layers,
     )
 
