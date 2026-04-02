@@ -282,7 +282,19 @@ def run_verify_phase(patch):
 def find_by_formid(plugin, form_id):
     """Find a record by FormID in a plugin."""
     fid = form_id.value if hasattr(form_id, 'value') else form_id
-    for record in plugin.records:
-        if record.form_id.value == fid:
-            return record
+    # Search by obj_id (master-independent) across all record types
+    obj_id = fid & 0x00FFFFFF
+    for sig in ('NPC_', 'RACE', 'ARMA', 'ARMO', 'FLST', 'GLOB', 'HDPT'):
+        for record in plugin.get_records_by_signature(sig):
+            if (record.form_id.value & 0x00FFFFFF) == obj_id:
+                return record
+    return None
+
+
+def find_by_edid(plugin, editor_id):
+    """Find a record by EditorID in a plugin."""
+    for sig in ('NPC_', 'RACE', 'ARMA', 'ARMO', 'FLST', 'GLOB', 'HDPT'):
+        for record in plugin.get_records_by_signature(sig):
+            if record.editor_id == editor_id:
+                return record
     return None

@@ -4,8 +4,13 @@ Edit this file to create your own race assignments.
 See all_races.py for a complete example.
 """
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from furrifier.race_defs import RaceDefContext
 
-def configure(ctx):
+
+def configure(ctx: RaceDefContext):
     """Configure custom race assignments.
 
     Edit the calls below to change how vanilla races map to furry races.

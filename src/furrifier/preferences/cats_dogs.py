@@ -4,8 +4,13 @@ Same as All Races but without Sailors subrace.
 Ported from BDFurrySkyrim_Preferences_CatsDogs.pas.
 """
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from furrifier.race_defs import RaceDefContext
 
-def configure(ctx):
+
+def configure(ctx: RaceDefContext):
     """Configure race assignments for the Cats and Dogs scheme."""
 
     # Dogs (same as All Races)

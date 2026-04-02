@@ -50,6 +50,11 @@ class FurryContext:
         self.plugin_set = plugin_set
         self.max_tint_layers = max_tint_layers
 
+        # Statistics (populated during furrification)
+        self.stats_race_counts: dict[str, int] = {}   # furry_race_id -> count
+        self.stats_hair_male: dict[str, int] = {}     # headpart_edid -> count
+        self.stats_hair_female: dict[str, int] = {}   # headpart_edid -> count
+
     # -- NPC furrification --
 
     def determine_npc_sex(self, npc: Record, race: Optional[Record]) -> Sex:
@@ -245,6 +250,21 @@ class FurryContext:
             self._apply_qnam_from_color(patched, skin_tone_color,
                                         skin_tone_intensity)
 
+        # Track statistics
+        self.stats_race_counts[furry_race_id] = \
+            self.stats_race_counts.get(furry_race_id, 0) + 1
+        for sr in patched.get_subrecords('PNAM'):
+            hp_obj = sr.get_uint32() & 0x00FFFFFF
+            for hp in self.all_headparts.values():
+                if hp.record and (hp.record.form_id.value & 0x00FFFFFF) == hp_obj:
+                    if hp.hp_type == HeadpartType.HAIR:
+                        is_female = npc_sex in (Sex.FEMALE_ADULT, Sex.FEMALE_CHILD)
+                        hair_dict = self.stats_hair_female if is_female \
+                            else self.stats_hair_male
+                        hair_dict[hp.editor_id] = \
+                            hair_dict.get(hp.editor_id, 0) + 1
+                    break
+
         return patched
 
 
@@ -323,24 +343,36 @@ class FurryContext:
     def furrify_all_npcs(self, plugins,
                          furrify_male: bool = True,
                          furrify_female: bool = True) -> int:
-        """Furrify all NPCs across the load order. Returns count."""
-        count = 0
+        """Furrify all NPCs across the load order. Returns count.
+
+        Only processes the winning override of each NPC (last in load
+        order). Skips NPCs that have already been overridden by plugins
+        loaded after the ones we're processing.
+        """
+        # Build a map of FormID -> winning record across all plugins.
+        # Last occurrence wins (plugins are in load order).
+        winning: dict[int, Record] = {}
         for plugin in plugins:
-            npcs = plugin.get_records_by_signature('NPC_')
-            for i, npc in enumerate(npcs):
-                if (i % 500) == 0 and i > 0:
-                    log.info(f"  {plugin.file_path.name}: {i}/{len(npcs)}")
+            for npc in plugin.get_records_by_signature('NPC_'):
+                obj_id = npc.form_id.value & 0x00FFFFFF
+                winning[obj_id] = npc
 
-                if not furrify_male and not is_npc_female(npc):
-                    continue
-                if not furrify_female and is_npc_female(npc):
-                    continue
+        count = 0
+        processed = 0
+        total = len(winning)
+        for obj_id, npc in winning.items():
+            processed += 1
+            if (processed % 500) == 0:
+                log.info(f"  NPCs: {processed}/{total}")
 
-                result = self.furrify_npc(npc)
-                if result is not None:
-                    count += 1
+            if not furrify_male and not is_npc_female(npc):
+                continue
+            if not furrify_female and is_npc_female(npc):
+                continue
 
-            log.info(f"Processed {plugin.file_path.name}: {len(npcs)} NPCs")
+            result = self.furrify_npc(npc)
+            if result is not None:
+                count += 1
 
         log.info(f"Total NPCs furrified: {count}")
         return count
@@ -515,37 +547,631 @@ class FurryContext:
         log.info(f"Furrified {count} races")
         return count
 
+    # -- Race preset furrification --
+
+    def furrify_race_presets(self, plugins) -> int:
+        """Copy furry race chargen presets and repoint them at furrified races.
+
+        Race presets are NPC_ records referenced by RPRM (male) and RPRF
+        (female) subrecords in the RACE record's Head Data. After
+        furrify_all_races() copies the furry race's head data to the
+        vanilla race, the presets still point at NPCs whose RNAM is the
+        furry race. This method:
+        1. For each furrified race in the patch, reads its preset FormIDs
+        2. Resolves them to NPC_ records
+        3. Copies each as a new record with RNAM set to the furrified race
+        4. Replaces the preset FormIDs in the race record
+
+        Returns count of preset NPC records created.
+        """
+        from esplib.record import SubRecord
+
+        # Build NPC obj_id -> Record lookup for preset resolution
+        npc_by_obj: dict[int, Record] = {}
+        for plugin in plugins:
+            for rec in plugin.get_records_by_signature('NPC_'):
+                obj_id = rec.form_id.value & 0x00FFFFFF
+                npc_by_obj[obj_id] = rec  # last wins
+
+        count = 0
+
+        for assignment in self.ctx.assignments.values():
+            vanilla_rec = self.races.get(assignment.vanilla_id)
+            furry_rec = self.races.get(assignment.furry_id)
+            if vanilla_rec is None or furry_rec is None:
+                continue
+
+            # Find the furrified race in the patch
+            furrified_rec = None
+            for rec in self.patch.get_records_by_signature('RACE'):
+                if rec.editor_id == assignment.vanilla_id:
+                    furrified_rec = rec
+                    break
+            if furrified_rec is None:
+                continue
+
+            # Process male (RPRM) and female (RPRF) presets
+            for preset_sig in ('RPRM', 'RPRF'):
+                old_srs = furrified_rec.get_subrecords(preset_sig)
+                if not old_srs:
+                    continue
+
+                new_fids = []
+                for sr in old_srs:
+                    preset_fid = sr.get_uint32()
+                    preset_obj = preset_fid & 0x00FFFFFF
+                    preset_npc = npc_by_obj.get(preset_obj)
+                    if preset_npc is None:
+                        continue
+
+                    # Copy preset NPC as a new record in the patch
+                    new_preset = self.patch.copy_record(preset_npc)
+                    new_preset.form_id = self.patch.get_next_form_id()
+                    self.patch._new_records.append(new_preset)
+
+                    # Set EDID
+                    old_edid = preset_npc.editor_id or 'Preset'
+                    new_edid = f"{old_edid}_{assignment.vanilla_id}"
+                    edid_sr = new_preset.get_subrecord('EDID')
+                    if edid_sr is not None:
+                        edid_sr.data = (new_edid + '\x00').encode('cp1252')
+                        edid_sr.modified = True
+
+                    # Set RNAM to the furrified race
+                    rnam_sr = new_preset.get_subrecord('RNAM')
+                    if rnam_sr is not None:
+                        rnam_sr.set_uint32(
+                            0, furrified_rec.form_id.value)
+                        rnam_sr.modified = True
+
+                    new_fids.append(new_preset.form_id.value)
+                    count += 1
+
+                # Replace preset subrecords in the furrified race
+                furrified_rec.remove_subrecords(preset_sig)
+                for fid in new_fids:
+                    furrified_rec.add_subrecord(
+                        preset_sig, struct.pack('<I', fid))
+                furrified_rec.modified = True
+
+        log.info(f"Created {count} race preset NPC records")
+        return count
+
+    # -- Headpart FormList furrification --
+
+    def furrify_all_headpart_lists(self, plugins) -> int:
+        """Update headpart race FormLists for furrified races.
+
+        For each HDPT record in the load order:
+        - Its RNAM subrecord points to a FLST of valid races.
+        - If the FLST contains a furrified vanilla race, remove it.
+        - If the FLST contains a furry race, add all furrified vanilla
+          races that map to that furry race.
+
+        This ensures that chargen shows the correct headparts for
+        furrified races.
+
+        Returns count of FLSTs modified.
+        """
+        from esplib import flst_forms, flst_add, flst_contains
+        from esplib.record import SubRecord
+
+        # Build lookup maps
+        # vanilla_obj_id -> furry_obj_id (furrified vanilla races to remove)
+        vanilla_to_furry: dict[int, int] = {}
+        # furry_obj_id -> list of furrified vanilla obj_ids (to add)
+        furry_to_furrified: dict[int, list[int]] = {}
+
+        for assignment in self.ctx.assignments.values():
+            vanilla_rec = self.races.get(assignment.vanilla_id)
+            furry_rec = self.races.get(assignment.furry_id)
+            if vanilla_rec is None or furry_rec is None:
+                continue
+            v_obj = vanilla_rec.form_id.value & 0x00FFFFFF
+            f_obj = furry_rec.form_id.value & 0x00FFFFFF
+            vanilla_to_furry[v_obj] = f_obj
+            furry_to_furrified.setdefault(f_obj, []).append(v_obj)
+
+        # Also include subraces: add the subrace's obj_id to the furry
+        # race's furrified list
+        for subrace in self.ctx.subraces.values():
+            furry_rec = self.races.get(subrace.furry_id)
+            subrace_rec = self.races.get(subrace.name)
+            if furry_rec is None or subrace_rec is None:
+                continue
+            f_obj = furry_rec.form_id.value & 0x00FFFFFF
+            s_obj = subrace_rec.form_id.value & 0x00FFFFFF
+            furry_to_furrified.setdefault(f_obj, []).append(s_obj)
+
+        # Build FLST lookup (obj_id -> winning record)
+        flst_by_obj: dict[int, Record] = {}
+        for plugin in plugins:
+            for rec in plugin.get_records_by_signature('FLST'):
+                obj_id = rec.form_id.value & 0x00FFFFFF
+                flst_by_obj[obj_id] = rec  # last wins
+
+        # Build RACE obj_id -> full FormID lookup (for writing back)
+        race_obj_to_fid: dict[int, int] = {}
+        for edid, rec in self.races.items():
+            obj_id = rec.form_id.value & 0x00FFFFFF
+            race_obj_to_fid[obj_id] = rec.form_id.value
+
+        # Track which FLSTs we've already processed (by obj_id)
+        processed_flsts: set[int] = set()
+        count = 0
+
+        # Walk all HDPT records (winning overrides only)
+        winning_hdpts: dict[int, Record] = {}
+        for plugin in plugins:
+            for rec in plugin.get_records_by_signature('HDPT'):
+                obj_id = rec.form_id.value & 0x00FFFFFF
+                winning_hdpts[obj_id] = rec  # last wins
+
+        for hdpt in winning_hdpts.values():
+            rnam = hdpt.get_subrecord('RNAM')
+            if rnam is None:
+                continue
+            flst_obj = rnam.get_uint32() & 0x00FFFFFF
+            if flst_obj in processed_flsts:
+                continue
+
+            flst_rec = flst_by_obj.get(flst_obj)
+            if flst_rec is None:
+                continue
+
+            # Read current race list from the FLST
+            current_race_objs = []
+            for sr in flst_rec.get_subrecords('LNAM'):
+                current_race_objs.append(sr.get_uint32() & 0x00FFFFFF)
+
+            # Build new race list
+            new_race_objs = []
+            changed = False
+            for race_obj in current_race_objs:
+                if race_obj in vanilla_to_furry:
+                    # Furrified vanilla race -- remove from list
+                    changed = True
+                    continue
+
+                new_race_objs.append(race_obj)
+
+                if race_obj in furry_to_furrified:
+                    # Furry race -- add all furrified vanilla races
+                    for furrified_obj in furry_to_furrified[race_obj]:
+                        if furrified_obj not in new_race_objs:
+                            new_race_objs.append(furrified_obj)
+                            changed = True
+
+            if changed:
+                # Create override of the FLST in the patch
+                patched_flst = self.patch.copy_record(flst_rec)
+                patched_flst.remove_subrecords('LNAM')
+                for race_obj in new_race_objs:
+                    fid = race_obj_to_fid.get(race_obj, race_obj)
+                    if self.patch and flst_rec.plugin:
+                        fid = self.patch.remap_formid(fid, flst_rec.plugin)
+                    patched_flst.add_subrecord(
+                        'LNAM', struct.pack('<I', fid))
+                count += 1
+
+            processed_flsts.add(flst_obj)
+
+        log.info(f"Modified {count} headpart FormLists")
+        return count
+
     # -- Armor furrification --
 
+    def _build_armor_fallbacks(self) -> dict[int, list[int]]:
+        """Build fallback race map from furry race RNAM subrecords.
+
+        Each furry race has an RNAM pointing to its "armor race" -- the
+        race whose armor meshes fit it. If an ARMA references the armor
+        race but not the furry race, we should still add the furrified
+        vanilla race.
+
+        Returns: fallback_fid -> list of furrified vanilla fids.
+        """
+        fallbacks: dict[int, list[int]] = {}
+        for assignment in self.ctx.assignments.values():
+            furry_rec = self.races.get(assignment.furry_id)
+            vanilla_rec = self.races.get(assignment.vanilla_id)
+            if furry_rec is None or vanilla_rec is None:
+                continue
+            rnam = furry_rec.get_subrecord('RNAM')
+            if rnam is None or rnam.size < 4:
+                continue
+            fb_fid = rnam.get_uint32()
+            if fb_fid == 0:
+                continue
+            # Only use as fallback if different from the furry race itself
+            fb_obj = fb_fid & 0x00FFFFFF
+            furry_obj = furry_rec.form_id.value & 0x00FFFFFF
+            if fb_obj == furry_obj:
+                continue
+            fallbacks.setdefault(fb_obj, []).append(
+                vanilla_rec.form_id.value)
+        return fallbacks
+
+
     def furrify_all_armor(self, plugins) -> int:
-        """Add furry races to all armor addons that support vanilla equivalents.
+        """Adjust armor addon race lists driven by ARMO addon order.
+
+        After race furrification, vanilla races like NordRace have furry
+        head meshes. This method walks each ARMO's ARMA list (MODL refs)
+        in order. For each furrified vanilla race, the first ARMA in the
+        list that has the corresponding furry race wins -- that ARMA gets
+        the furrified vanilla race added. ARMAs that lose the priority
+        contest (or have no furry/fallback race) get furrified vanilla
+        races removed.
+
+        Must be called after merge_armor_overrides() so the ARMO addon
+        lists are complete.
 
         Returns count of ARMA records modified.
         """
-        race_fid_map = {}
+        from .armor import get_bodypart_flags
+
+        # furry_obj -> list of (vanilla_obj, vanilla_fid)
+        furry_obj_to_vanilla: dict[int, list[tuple[int, int]]] = {}
+        for a in self.ctx.assignments.values():
+            furry_rec = self.races.get(a.furry_id)
+            vanilla_rec = self.races.get(a.vanilla_id)
+            if furry_rec and vanilla_rec:
+                f_obj = furry_rec.form_id.value & 0x00FFFFFF
+                v_obj = vanilla_rec.form_id.value & 0x00FFFFFF
+                v_fid = vanilla_rec.form_id.value
+                furry_obj_to_vanilla.setdefault(f_obj, []).append(
+                    (v_obj, v_fid))
+        furry_objs: set[int] = set(furry_obj_to_vanilla.keys())
+
+        # All furrified vanilla race obj_ids
+        furrified_objs: set[int] = set()
         for a in self.ctx.assignments.values():
             vanilla_rec = self.races.get(a.vanilla_id)
-            furry_rec = self.races.get(a.furry_id)
-            if vanilla_rec and furry_rec:
-                race_fid_map[vanilla_rec.form_id.value] = \
-                    furry_rec.form_id.value
+            if vanilla_rec:
+                furrified_objs.add(vanilla_rec.form_id.value & 0x00FFFFFF)
 
-        count = 0
+        # Fallback: fallback_obj -> list of (vanilla_obj, vanilla_fid)
+        armor_fallbacks_raw = self._build_armor_fallbacks()
+        armor_fallbacks: dict[int, list[tuple[int, int]]] = {}
+        for fb_obj, v_fids in armor_fallbacks_raw.items():
+            armor_fallbacks[fb_obj] = [
+                (fid & 0x00FFFFFF, fid) for fid in v_fids]
+        fallback_objs: set[int] = set(armor_fallbacks.keys())
+
+        # Winning ARMA records (last per obj_id, including patch)
+        winning_armas: dict[int, Record] = {}
         for plugin in plugins:
             for arma in plugin.get_records_by_signature('ARMA'):
-                from .armor import get_bodypart_flags, arma_has_race
-                bp_flags = get_bodypart_flags(arma)
-                if not (bp_flags & FURRIFIABLE_BODYPARTS):
-                    continue
+                obj_id = arma.form_id.value & 0x00FFFFFF
+                winning_armas[obj_id] = arma
+        for arma in self.patch.get_records_by_signature('ARMA'):
+            obj_id = arma.form_id.value & 0x00FFFFFF
+            winning_armas[obj_id] = arma
 
-                for vanilla_fid, furry_fid in race_fid_map.items():
-                    if arma_has_race(arma, vanilla_fid) and \
-                       not arma_has_race(arma, furry_fid):
-                        patched = self.patch.copy_record(arma)
-                        patched.add_subrecord(
-                            'MODL', struct.pack('<I', furry_fid))
-                        count += 1
-                        break
+        # Helper: get race obj_ids from an ARMA
+        def arma_race_objs(arma_rec):
+            objs = set()
+            rnam = arma_rec.get_subrecord('RNAM')
+            if rnam and rnam.size >= 4:
+                objs.add(rnam.get_uint32() & 0x00FFFFFF)
+            for sr in arma_rec.get_subrecords('MODL'):
+                if sr.size >= 4:
+                    objs.add(sr.get_uint32() & 0x00FFFFFF)
+            return objs
+
+        # Walk all ARMO records; for each, resolve the ARMA priority
+        # arma_obj -> set of vanilla_fids to add
+        arma_adds: dict[int, set[int]] = {}
+        # arma_obj -> set of vanilla_objs to remove
+        arma_removes: dict[int, set[int]] = {}
+
+        winning_armos: dict[int, Record] = {}
+        for plugin in plugins:
+            for armo in plugin.get_records_by_signature('ARMO'):
+                obj_id = armo.form_id.value & 0x00FFFFFF
+                winning_armos[obj_id] = armo
+        # Patch overrides from merge_armor_overrides win over everything
+        for armo in self.patch.get_records_by_signature('ARMO'):
+            obj_id = armo.form_id.value & 0x00FFFFFF
+            winning_armos[obj_id] = armo
+
+        for armo in winning_armos.values():
+            # Get this ARMO's ARMA refs in order
+            arma_refs = []
+            for sr in armo.get_subrecords('MODL'):
+                if sr.size >= 4:
+                    arma_obj = sr.get_uint32() & 0x00FFFFFF
+                    arma_rec = winning_armas.get(arma_obj)
+                    if arma_rec:
+                        bp = get_bodypart_flags(arma_rec)
+                        if bp & FURRIFIABLE_BODYPARTS:
+                            arma_refs.append((arma_obj, arma_rec))
+
+            if not arma_refs:
+                continue
+
+            # For each furrified vanilla race, find the first ARMA in
+            # the list that has its furry race (or fallback)
+            claimed: set[int] = set()  # vanilla objs assigned to an ARMA
+
+            for arma_obj, arma_rec in arma_refs:
+                race_objs = arma_race_objs(arma_rec)
+
+                # Which vanilla races can this ARMA claim?
+                claimable: list[tuple[int, int]] = []
+
+                # Direct furry race matches
+                for f_obj in (race_objs & furry_objs):
+                    for v_obj, v_fid in furry_obj_to_vanilla[f_obj]:
+                        if v_obj not in claimed and v_obj not in race_objs:
+                            claimable.append((v_obj, v_fid))
+
+                # Fallback matches (only if no direct furry)
+                if not (race_objs & furry_objs):
+                    for fb_obj in (race_objs & fallback_objs):
+                        for v_obj, v_fid in armor_fallbacks[fb_obj]:
+                            if v_obj not in claimed and v_obj not in race_objs:
+                                claimable.append((v_obj, v_fid))
+
+                if claimable:
+                    adds = arma_adds.setdefault(arma_obj, set())
+                    for v_obj, v_fid in claimable:
+                        adds.add(v_fid)
+                        claimed.add(v_obj)
+
+            # Any furrified vanilla race NOT claimed by any ARMA should
+            # be removed from all ARMAs in this ARMO's list
+            unclaimed = furrified_objs - claimed
+            if unclaimed:
+                for arma_obj, arma_rec in arma_refs:
+                    race_objs = arma_race_objs(arma_rec)
+                    removable = race_objs & unclaimed
+                    if removable:
+                        removes = arma_removes.setdefault(arma_obj, set())
+                        removes |= removable
+
+        # Apply changes to ARMA records
+        count = 0
+        all_affected = set(arma_adds.keys()) | set(arma_removes.keys())
+        for arma_obj in all_affected:
+            arma_rec = winning_armas.get(arma_obj)
+            if arma_rec is None:
+                continue
+
+            adds = arma_adds.get(arma_obj, set())
+            removes = arma_removes.get(arma_obj, set())
+            # Don't remove races that are being added
+            removes -= {fid & 0x00FFFFFF for fid in adds}
+
+            if not adds and not removes:
+                continue
+
+            patched = self.patch.copy_record(arma_rec)
+
+            if removes:
+                to_remove = []
+                for sr in list(patched.get_subrecords('MODL')):
+                    if sr.size >= 4:
+                        obj = sr.get_uint32() & 0x00FFFFFF
+                        if obj in removes:
+                            to_remove.append(sr)
+                for sr in to_remove:
+                    patched.remove_subrecord(sr)
+
+            for v_fid in adds:
+                patched.add_subrecord(
+                    'MODL', struct.pack('<I', v_fid))
+
+            count += 1
 
         log.info(f"Modified {count} armor addon records")
         return count
+
+
+    # Priority order for choosing the base keyword/addon set.
+    # The first match in this list is used as the base; mod overrides
+    # then add on top of it. This ensures that USSEP fixes (keyword
+    # removals, addon corrections) are preserved while mod additions
+    # are still collected.
+    _ARMOR_BASE_PRIORITY = [
+        'unofficial skyrim special edition patch.esp',
+        'dawnguard.esm',
+        'hearthfires.esm',
+        'dragonborn.esm',
+        'update.esm',
+        'skyrim.esm',
+    ]
+
+
+    def _get_record_objs(self, record: Record, sig: str) -> set[int]:
+        """Get obj_ids from a record's subrecords of a given signature."""
+        return {sr.get_uint32() & 0x00FFFFFF
+                for sr in record.get_subrecords(sig)
+                if sr.size >= 4}
+
+
+    def _find_base_override(self, overrides: list[Record]) -> Record:
+        """Find the most authoritative override for base keywords/addons.
+
+        Returns the override from the highest-priority plugin, or the
+        first override if none match the priority list.
+        """
+        by_name: dict[str, Record] = {}
+        for rec in overrides:
+            if rec.plugin and rec.plugin.file_path:
+                name = rec.plugin.file_path.name.lower()
+                by_name[name] = rec
+
+        for priority_name in self._ARMOR_BASE_PRIORITY:
+            if priority_name in by_name:
+                return by_name[priority_name]
+
+        return overrides[0]
+
+
+    def _is_base_plugin(self, record: Record) -> bool:
+        """Check if a record comes from a base/priority plugin."""
+        if record.plugin and record.plugin.file_path:
+            name = record.plugin.file_path.name.lower()
+            return name in self._ARMOR_BASE_PRIORITY
+        return False
+
+
+    def merge_armor_overrides(self, plugins) -> int:
+        """Merge ARMA references and keywords across ARMO overrides.
+
+        When multiple mods override the same ARMO to add their ARMA
+        (armor addon) or keywords, only the winning override survives.
+        This method merges MODL (ARMA refs) and KWDA (keywords) using:
+
+        1. Find the best base override (USSEP > DLCs > Update > Skyrim)
+        2. Start with the base's MODL/KWDA as the authoritative set
+        3. Add any MODL/KWDA introduced by non-base mod overrides
+        4. Sort MODL by plugin order (mod ARMAs first, base last) so
+           furrify_all_armor's priority-by-order works correctly
+
+        Returns count of ARMO records merged.
+        """
+        # Build plugin name -> load index for sorting
+        plugin_index: dict[str, int] = {}
+        for i, plugin in enumerate(plugins):
+            if plugin.file_path:
+                plugin_index[plugin.file_path.name.lower()] = i
+        base_names = set(self._ARMOR_BASE_PRIORITY)
+
+        def _plugin_sort_key(src_rec: Record) -> int:
+            """Sort key: mod plugins by load order, base plugins last."""
+            if src_rec.plugin and src_rec.plugin.file_path:
+                name = src_rec.plugin.file_path.name.lower()
+                idx = plugin_index.get(name, 0)
+                if name in base_names:
+                    # Base plugins sort after all mods
+                    return 10000 + idx
+                return idx
+            return 0
+
+        # Collect all overrides of each ARMO by obj_id
+        armo_overrides: dict[int, list[Record]] = {}
+        for plugin in plugins:
+            for rec in plugin.get_records_by_signature('ARMO'):
+                obj_id = rec.form_id.value & 0x00FFFFFF
+                armo_overrides.setdefault(obj_id, []).append(rec)
+
+        count = 0
+        for obj_id, overrides in armo_overrides.items():
+            if len(overrides) < 2:
+                continue
+
+            winner = overrides[-1]
+            base = self._find_base_override(overrides)
+
+            # Start with the base's sets as authoritative
+            # Store (fid, src_record) keyed by obj_id
+            merged_modl: dict[int, tuple[int, Record]] = {}
+            merged_kwda: dict[int, tuple[int, Record]] = {}
+
+            for sr in base.get_subrecords('MODL'):
+                if sr.size >= 4:
+                    fid = sr.get_uint32()
+                    merged_modl[fid & 0x00FFFFFF] = (fid, base)
+            for sr in base.get_subrecords('KWDA'):
+                if sr.size >= 4:
+                    fid = sr.get_uint32()
+                    merged_kwda[fid & 0x00FFFFFF] = (fid, base)
+
+            # Add entries from non-base overrides (mods)
+            for rec in overrides:
+                if rec is base:
+                    continue
+                if self._is_base_plugin(rec):
+                    continue
+                for sr in rec.get_subrecords('MODL'):
+                    if sr.size >= 4:
+                        fid = sr.get_uint32()
+                        obj = fid & 0x00FFFFFF
+                        if obj not in merged_modl:
+                            merged_modl[obj] = (fid, rec)
+                for sr in rec.get_subrecords('KWDA'):
+                    if sr.size >= 4:
+                        fid = sr.get_uint32()
+                        obj = fid & 0x00FFFFFF
+                        if obj not in merged_kwda:
+                            merged_kwda[obj] = (fid, rec)
+
+            # Check if the winner already has the merged set in the
+            # right order
+            winner_modl_list = [sr.get_uint32() & 0x00FFFFFF
+                                for sr in winner.get_subrecords('MODL')
+                                if sr.size >= 4]
+            winner_kwda = self._get_record_objs(winner, 'KWDA')
+
+            # Sort MODL: mod-added ARMAs first (by load order), base last
+            sorted_modl = sorted(
+                merged_modl.items(),
+                key=lambda item: _plugin_sort_key(item[1][1]))
+            sorted_modl_objs = [obj for obj, _ in sorted_modl]
+
+            need_modl = (sorted_modl_objs != winner_modl_list)
+            need_kwda = set(merged_kwda.keys()) != winner_kwda
+
+            if not need_modl and not need_kwda:
+                continue
+
+            patched = self.patch.copy_record(winner)
+
+            # Replace MODL list with sorted merged set
+            if need_modl:
+                patched.remove_subrecords('MODL')
+                for m_obj, (fid, src_rec) in sorted_modl:
+                    if src_rec.plugin:
+                        fid = self.patch.remap_formid(fid, src_rec.plugin)
+                    patched.add_subrecord('MODL', struct.pack('<I', fid))
+
+            # Replace KWDA list with merged set
+            if need_kwda:
+                patched.remove_subrecords('KWDA')
+                for k_obj, (fid, src_rec) in merged_kwda.items():
+                    if src_rec.plugin:
+                        fid = self.patch.remap_formid(fid, src_rec.plugin)
+                    patched.add_subrecord('KWDA', struct.pack('<I', fid))
+                ksiz = patched.get_subrecord('KSIZ')
+                if ksiz and ksiz.size >= 4:
+                    ksiz.data = struct.pack('<I', len(merged_kwda))
+                    ksiz.modified = True
+
+            count += 1
+
+        log.info(f"Merged overrides in {count} ARMO records")
+        return count
+
+    # -- Statistics --
+
+    def print_statistics(self) -> None:
+        """Print post-run summary statistics."""
+        total = sum(self.stats_race_counts.values())
+        if total == 0:
+            return
+
+        log.info("")
+        log.info("========== RACE DISTRIBUTION ==========")
+        for race_id in sorted(self.stats_race_counts,
+                              key=lambda r: -self.stats_race_counts[r]):
+            n = self.stats_race_counts[race_id]
+            pct = 100 * n / total
+            log.info(f"  {race_id}: {n} ({pct:.1f}%)")
+        log.info(f"  Total: {total}")
+
+        for label, hair_dict in [("MALE", self.stats_hair_male),
+                                 ("FEMALE", self.stats_hair_female)]:
+            if not hair_dict:
+                continue
+            hair_total = sum(hair_dict.values())
+            log.info("")
+            log.info(f"========== {label} HAIR DISTRIBUTION ==========")
+            for hp_id in sorted(hair_dict,
+                                key=lambda h: -hair_dict[h]):
+                n = hair_dict[hp_id]
+                pct = 100 * n / hair_total
+                log.info(f"  {hp_id}: {n} ({pct:.1f}%)")
+            log.info(f"  Total: {hair_total}")

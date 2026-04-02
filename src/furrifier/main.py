@@ -16,7 +16,7 @@ from .config import FurrifierConfig, build_parser, setup_logging
 from .context import FurryContext
 from .race_defs import load_scheme
 from .vanilla_setup import setup_vanilla
-from .furry_load import load_races, load_headparts
+from .furry_load import load_races, load_headparts, build_race_headparts, build_race_tints
 
 log = logging.getLogger(__name__)
 
@@ -45,10 +45,12 @@ def main() -> int:
     ctx = load_scheme(config.race_scheme)
     setup_vanilla(ctx)
 
-    # Load plugins
+    # Load plugins (exclude the patch file itself from the load order)
     log.info("Loading plugins...")
+    patch_name = config.patch_filename.lower()
     load_order = LoadOrder.from_list(
-        [p.name for p in data_dir.glob('*.es[mp]')],
+        [p.name for p in data_dir.glob('*.es[mp]')
+         if p.name.lower() != patch_name],
         data_dir=data_dir,
         game_id='tes5',
     )
@@ -61,13 +63,9 @@ def main() -> int:
     races = {edid: info.record for edid, info in races_by_edid.items()}
     headparts = load_headparts(plugin_set, ctx)
 
-    # Build race headpart index
-    race_headparts: dict = {}
-    # TODO: build this index from the loaded data
-
-    # Build race tint data
-    race_tints: dict = {}
-    # TODO: build this from race head data tint assets
+    # Build race headpart and tint indices
+    race_headparts = build_race_headparts(list(plugin_set), headparts)
+    race_tints = build_race_tints(list(plugin_set))
 
     # Create patch
     patch_path = data_dir / config.patch_filename
@@ -86,6 +84,21 @@ def main() -> int:
         max_tint_layers=config.max_tint_layers,
     )
 
+    # Furrify races
+    log.info("Furrifying races...")
+    race_count = furry.furrify_all_races()
+    log.info(f"Furrified {race_count} races")
+
+    # Furrify headpart FormLists (must be after race furrification)
+    log.info("Furrifying headpart lists...")
+    flst_count = furry.furrify_all_headpart_lists(plugin_set)
+    log.info(f"Modified {flst_count} headpart FormLists")
+
+    # Furrify race presets (must be after race furrification)
+    log.info("Furrifying race presets...")
+    preset_count = furry.furrify_race_presets(plugin_set)
+    log.info(f"Created {preset_count} race preset NPCs")
+
     # Furrify NPCs
     if config.furrify_npcs_male or config.furrify_npcs_female:
         log.info("Furrifying NPCs...")
@@ -98,6 +111,10 @@ def main() -> int:
 
     # Furrify armor
     if config.furrify_armor:
+        log.info("Merging armor overrides (addons + keywords)...")
+        merge_count = furry.merge_armor_overrides(plugin_set)
+        log.info(f"Merged {merge_count} ARMO records")
+
         log.info("Furrifying armor...")
         armor_count = furry.furrify_all_armor(plugin_set)
         log.info(f"Modified {armor_count} armor records")
@@ -106,7 +123,17 @@ def main() -> int:
     if config.furrify_schlongs:
         from .schlongs import furrify_all_schlongs
         log.info("Furrifying schlongs...")
-        furrify_all_schlongs(plugin_set, patch, [])
+        # Build maps needed by schlong furrification
+        race_assignments = {a.vanilla_id: a.furry_id
+                            for a in ctx.assignments.values()}
+        furry_to_vanilla: dict[str, list[str]] = {}
+        for a in ctx.assignments.values():
+            furry_to_vanilla.setdefault(a.furry_id, []).append(a.vanilla_id)
+        furrify_all_schlongs(plugin_set, patch, race_assignments,
+                             furry_to_vanilla, races)
+
+    # Print statistics
+    furry.print_statistics()
 
     # Save
     patch.save()

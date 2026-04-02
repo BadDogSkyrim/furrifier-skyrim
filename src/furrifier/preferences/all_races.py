@@ -5,8 +5,13 @@ Dogs for humans, cats for elves/orcs.
 Ported from BDFurrySkyrim_Preferences_AllRaces.pas.
 """
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from furrifier.race_defs import RaceDefContext
 
-def configure(ctx):
+
+def configure(ctx: RaceDefContext):
     """Configure race assignments for the All Races scheme."""
 
     # =========== NORD ===========
