@@ -8,105 +8,105 @@ the shared FurrifierTEST.esp patch.
 
 import pytest
 
-from furrifier.armor import get_bodypart_flags, arma_has_race
-from furrifier.models import Bodypart
-
 from conftest import (
-    requires_gamefiles, find_record, find_by_edid, run_verify_phase,
+    requires_gamefiles, find_by_edid, run_verify_phase,
 )
 
 
 pytestmark = requires_gamefiles
 
 
+def _get_bodypart_flags(arma):
+    """Get bodypart flags from BOD2 or BODT."""
+    bod = arma['BOD2'] or arma['BODT']
+    assert bod is not None, f"{arma.editor_id} has no BOD2 or BODT"
+    return bod['first_person_flags']
+
+
 class TestBodypartFlags:
     """Reading bodypart flags from real ARMA records."""
 
-    def test_draugr_gloves_have_hands(self, all_plugins):
+    def test_draugr_gloves_have_hands(self, plugin_set):
         """DraugrGlovesAA has hands bit set, hair bit clear."""
-        arma, _ = find_record(all_plugins, 'ARMA', 'DraugrGlovesAA')
+        arma = plugin_set.get_record_by_edid('ARMA', 'DraugrGlovesAA')
         assert arma is not None, "DraugrGlovesAA not found"
-        flags = get_bodypart_flags(arma)
-        assert flags & Bodypart.HANDS, "DraugrGlovesAA should have hands bit"
-        assert not (flags & Bodypart.HAIR), "DraugrGlovesAA should not have hair bit"
+        flags = _get_bodypart_flags(arma)
+        assert flags.Hands, "DraugrGlovesAA should have hands bit"
+        assert not flags.Hair, "DraugrGlovesAA should not have hair bit"
 
 
-    def test_mythic_dawn_hood_has_hair(self, all_plugins):
+    def test_mythic_dawn_hood_has_hair(self, plugin_set):
         """MythicDawnHoodAA has hair bit set, hands bit clear."""
-        arma, _ = find_record(all_plugins, 'ARMA', 'MythicDawnHoodAA')
+        arma = plugin_set.get_record_by_edid('ARMA', 'MythicDawnHoodAA')
         assert arma is not None, "MythicDawnHoodAA not found"
-        flags = get_bodypart_flags(arma)
-        assert flags & Bodypart.HAIR, "MythicDawnHoodAA should have hair bit"
-        assert not (flags & Bodypart.HANDS), "MythicDawnHoodAA should not have hands bit"
+        flags = _get_bodypart_flags(arma)
+        assert flags.Hair, "MythicDawnHoodAA should have hair bit"
+        assert not flags.Hands, "MythicDawnHoodAA should not have hands bit"
 
 
-    def test_thieves_guild_helmet_form44(self, all_plugins):
-        """ThievesGuildHelmetAA (form version 44, BOD2) has hair bit set."""
-        arma, _ = find_record(all_plugins, 'ARMA', 'ThievesGuildHelmetAA')
+    def test_thieves_guild_helmet_form44(self, plugin_set):
+        """ThievesGuildHelmetAA (form version 44) has hair bit set."""
+        arma = plugin_set.get_record_by_edid('ARMA', 'ThievesGuildHelmetAA')
         assert arma is not None, "ThievesGuildHelmetAA not found"
-        flags = get_bodypart_flags(arma)
-        assert flags & Bodypart.HAIR, "ThievesGuildHelmetAA should have hair bit"
-        assert not (flags & Bodypart.HANDS), \
-            "ThievesGuildHelmetAA should not have hands bit"
+        flags = _get_bodypart_flags(arma)
+        assert flags.Hair, "ThievesGuildHelmetAA should have hair bit"
+        assert not flags.Hands, "ThievesGuildHelmetAA should not have hands bit"
 
 
 class TestArmorFurrification:
     """Furrify armor and verify specific ARMA records."""
 
     def test_chefhat_gets_furrified_races(self, furrify_and_check,
-                                         all_plugins, races_by_edid):
-        """ChefHatAA gets furrified races because it has KhajiitRace.
+                                         plugin_set):
+        """ChefHatKhaAA claims furrified races via KhajiitRace fallback.
 
         ClothesChefHat ARMO lists [ChefHatArgAA, ChefHatAA, ChefHatKhaAA].
-        ChefHatAA has KhajiitRace (the armor fallback) in its Additional
-        Races, so it's the first ARMA that supports furry races.
-        Furrified vanilla races should be added to it.
+        ChefHatKhaAA has KhajiitRace (the armor fallback for furry races)
+        so it claims furrified vanilla races. ChefHatAA should have them
+        removed since it's not the claiming ARMA.
         """
-        chefhat, _ = find_record(all_plugins, 'ARMA', 'ChefHatAA')
-        assert chefhat is not None, "ChefHatAA not found"
-
-        nord = races_by_edid.get('NordRace')
+        nord = plugin_set.get_record_by_edid('RACE', 'NordRace')
         assert nord is not None, "NordRace not loaded"
-        nord_obj = nord.form_id.value & 0x00FFFFFF
+        nord_obj = nord.form_id.object_index
 
 
         def write(furry_ctx):
-            furry_ctx.merge_armor_overrides(all_plugins)
-            furry_ctx.furrify_all_armor(all_plugins)
+            furry_ctx.merge_armor_overrides(plugin_set)
+            furry_ctx.furrify_all_armor(plugin_set)
 
 
         def verify(reloaded):
             patched = find_by_edid(reloaded, 'ChefHatAA')
             assert patched is not None, \
                 "ChefHatAA should be in the patch"
-            modl_objs = {sr.get_uint32() & 0x00FFFFFF
+            modl_objs = {sr.get_form_id().object_index
                          for sr in patched.get_subrecords('MODL')
                          if sr.size >= 4}
-            assert nord_obj in modl_objs, \
-                f"NordRace ({hex(nord_obj)}) should be ADDED to " \
-                f"ChefHatAA (has KhajiitRace, first in ARMO list)"
+            assert nord_obj not in modl_objs, \
+                f"NordRace ({hex(nord_obj)}) should be REMOVED from " \
+                f"ChefHatAA (ChefHatKhaAA claims it via KhajiitRace fallback)"
 
         furrify_and_check(write, verify)
 
 
     def test_dog_arma_gets_furrified_races(self, furrify_and_check,
-                                          all_plugins, races_by_edid):
+                                          plugin_set):
         """YASStormcloakHelm_DOG (canine ARMA) gets furrified vanilla races.
 
         This ARMA has canine furry races but not the furrified vanilla
         races (NordRace etc.). After furrification, NordRace has wolf
         head data and needs to be in this ARMA's race list.
         """
-        dog_arma, _ = find_record(all_plugins, 'ARMA', 'YASStormcloakHelm_DOG')
+        dog_arma = plugin_set.get_record_by_edid('ARMA', 'YASStormcloakHelm_DOG')
         assert dog_arma is not None, "YASStormcloakHelm_DOG not found"
 
-        nord = races_by_edid.get('NordRace')
+        nord = plugin_set.get_record_by_edid('RACE', 'NordRace')
         assert nord is not None, "NordRace not loaded"
-        nord_obj = nord.form_id.value & 0x00FFFFFF
+        nord_obj = nord.form_id.object_index
 
-        imperial = races_by_edid.get('ImperialRace')
+        imperial = plugin_set.get_record_by_edid('RACE', 'ImperialRace')
         assert imperial is not None, "ImperialRace not loaded"
-        imperial_obj = imperial.form_id.value & 0x00FFFFFF
+        imperial_obj = imperial.form_id.object_index
 
 
         def write(_furry_ctx):
@@ -117,7 +117,7 @@ class TestArmorFurrification:
             patched = find_by_edid(reloaded, 'YASDaedricHelmetAA_DOG')
             assert patched is not None, \
                 "YASStormcloakHelm_DOG should be in the patch"
-            modl_objs = {sr.get_uint32() & 0x00FFFFFF
+            modl_objs = {sr.get_form_id().object_index
                          for sr in patched.get_subrecords('MODL')
                          if sr.size >= 4}
             assert nord_obj in modl_objs, \
@@ -131,23 +131,23 @@ class TestArmorFurrification:
 
 
     def test_cat_arma_gets_furrified_races(self, furrify_and_check,
-                                           all_plugins, races_by_edid):
+                                           plugin_set):
         """BDStormcloakHelm_CAT (cat ARMA) gets furrified vanilla races.
 
         This ARMA has cat furry races but not the furrified vanilla
         races (HighElfRace etc.). After furrification, HighElfRace has
         cat head data and needs to be in this ARMA's race list.
         """
-        cat_arma, _ = find_record(all_plugins, 'ARMA', 'BDStormcloakHelm_CAT')
+        cat_arma = plugin_set.get_record_by_edid('ARMA', 'BDStormcloakHelm_CAT')
         assert cat_arma is not None, "BDStormcloakHelm_CAT not found"
 
-        high_elf = races_by_edid.get('HighElfRace')
+        high_elf = plugin_set.get_record_by_edid('RACE', 'HighElfRace')
         assert high_elf is not None, "HighElfRace not loaded"
-        high_elf_obj = high_elf.form_id.value & 0x00FFFFFF
+        high_elf_obj = high_elf.form_id.object_index
 
-        orc = races_by_edid.get('OrcRace')
+        orc = plugin_set.get_record_by_edid('RACE', 'OrcRace')
         assert orc is not None, "OrcRace not loaded"
-        orc_obj = orc.form_id.value & 0x00FFFFFF
+        orc_obj = orc.form_id.object_index
 
 
         def write(_furry_ctx):
@@ -158,7 +158,7 @@ class TestArmorFurrification:
             patched = find_by_edid(reloaded, 'BDStormcloakHelm_CAT')
             assert patched is not None, \
                 "BDStormcloakHelm_CAT should be in the patch"
-            modl_objs = {sr.get_uint32() & 0x00FFFFFF
+            modl_objs = {sr.get_form_id().object_index
                          for sr in patched.get_subrecords('MODL')
                          if sr.size >= 4}
             assert high_elf_obj in modl_objs, \
@@ -175,7 +175,7 @@ class TestArmorAddonMerge:
     """Merge ARMA refs from multiple overrides of the same ARMO."""
 
     def test_stormcloak_helmet_collects_cat_and_dog(self, furrify_and_check,
-                                                    all_plugins):
+                                                    plugin_set):
         """ArmorStormcloakHelmetFull should have both cat and dog ARMAs.
 
         BDCatRaces.esp and YASCanineRaces.esp each override this ARMO to
@@ -183,27 +183,27 @@ class TestArmorAddonMerge:
         collect both into the patch.
         """
         # Find the ARMO and the cat/dog ARMAs
-        armo, _ = find_record(all_plugins, 'ARMO', 'ArmorStormcloakHelmetFull')
+        armo = plugin_set.get_record_by_edid('ARMO', 'ArmorStormcloakHelmetFull')
         assert armo is not None, "ArmorStormcloakHelmetFull not found"
 
-        cat_arma, _ = find_record(all_plugins, 'ARMA', 'BDStormcloakHelm_CAT')
+        cat_arma = plugin_set.get_record_by_edid('ARMA', 'BDStormcloakHelm_CAT')
         assert cat_arma is not None, "BDStormcloakHelm_CAT not found"
-        cat_obj = cat_arma.form_id.value & 0x00FFFFFF
+        cat_obj = cat_arma.form_id.object_index
 
-        dog_arma, _ = find_record(all_plugins, 'ARMA', 'YASStormcloakHelm_DOG')
+        dog_arma = plugin_set.get_record_by_edid('ARMA', 'YASStormcloakHelm_DOG')
         assert dog_arma is not None, "YASStormcloakHelm_DOG not found"
-        dog_obj = dog_arma.form_id.value & 0x00FFFFFF
+        dog_obj = dog_arma.form_id.object_index
 
 
         def write(furry_ctx):
-            furry_ctx.merge_armor_overrides(all_plugins)
+            furry_ctx.merge_armor_overrides(plugin_set)
 
 
         def verify(reloaded):
             patched = find_by_edid(reloaded, 'ArmorStormcloakHelmetFull')
             assert patched is not None, \
                 "ArmorStormcloakHelmetFull should be in the patch"
-            modl_objs = {sr.get_uint32() & 0x00FFFFFF
+            modl_objs = {sr.get_form_id().object_index
                          for sr in patched.get_subrecords('MODL')
                          if sr.size >= 4}
             assert cat_obj in modl_objs, \
@@ -222,13 +222,13 @@ class TestDaedricHelmet:
         'dragonborn.esm', 'bdcatraces.esp', 'yascanineraces.esp',
     }
 
-    def _build_race_lookup(self, all_plugins):
+    def _build_race_lookup(self, plugin_set):
         """Build obj_id -> (editor_id, plugin_name) for all races."""
         lookup = {}
-        for plugin in all_plugins:
+        for plugin in plugin_set:
             pname = plugin.file_path.name.lower() if plugin.file_path else '?'
             for rec in plugin.get_records_by_signature('RACE'):
-                obj = rec.form_id.value & 0x00FFFFFF
+                obj = rec.form_id.object_index
                 if rec.editor_id:
                     lookup[obj] = (rec.editor_id, pname)
         return lookup
@@ -238,7 +238,7 @@ class TestDaedricHelmet:
         result = []
         for sr in arma.get_subrecords('MODL'):
             if sr.size >= 4:
-                obj = sr.get_uint32() & 0x00FFFFFF
+                obj = sr.get_form_id().object_index
                 edid, pname = race_lookup.get(obj, (None, None))
                 result.append((obj, edid, pname))
         return result
@@ -256,44 +256,46 @@ class TestDaedricHelmet:
             for sr in record.get_subrecords(sig):
                 if sr.size < 4:
                     continue
-                raw = sr.get_uint32()
-                idx = raw >> 24
-                if idx >= len(masters):
+                fid = sr.get_form_id()
+                if fid.file_index >= len(masters):
                     errors.append(
-                        f"{sig} {hex(raw)}: master index {idx} >= "
+                        f"{sig} {hex(fid.value)}: master index "
+                        f"{fid.file_index} >= "
                         f"master count {len(masters)}")
                     continue
-                master_name = masters[idx].lower()
+                master_name = masters[fid.file_index].lower()
                 if master_name not in self.VALID_PLUGINS:
                     errors.append(
-                        f"{sig} {hex(raw)}: master [{idx:02x}] = "
-                        f"{masters[idx]}, not a valid source plugin")
+                        f"{sig} {hex(fid.value)}: master "
+                        f"[{fid.file_index:02x}] = "
+                        f"{masters[fid.file_index]}, "
+                        f"not a valid source plugin")
         return errors
 
     def test_daedric_helmet_armo_has_cat_and_dog(self, furrify_and_check,
-                                                 all_plugins):
+                                                 plugin_set):
         """Merged ArmorDaedricHelmet has cat and dog ARMAs in its list."""
-        cat_arma, _ = find_record(all_plugins, 'ARMA', 'YAS_DaedricHelmetAA_CAT')
+        cat_arma = plugin_set.get_record_by_edid('ARMA', 'YAS_DaedricHelmetAA_CAT')
         assert cat_arma is not None
-        cat_obj = cat_arma.form_id.value & 0x00FFFFFF
+        cat_obj = cat_arma.form_id.object_index
 
-        dog_arma, _ = find_record(all_plugins, 'ARMA', 'YASDaedricHelmetAA_DOG')
+        dog_arma = plugin_set.get_record_by_edid('ARMA', 'YASDaedricHelmetAA_DOG')
         assert dog_arma is not None
-        dog_obj = dog_arma.form_id.value & 0x00FFFFFF
+        dog_obj = dog_arma.form_id.object_index
 
-        race_lookup = self._build_race_lookup(all_plugins)
+        race_lookup = self._build_race_lookup(plugin_set)
 
 
         def write(furry_ctx):
-            furry_ctx.merge_armor_overrides(all_plugins)
-            furry_ctx.furrify_all_armor(all_plugins)
+            furry_ctx.merge_armor_overrides(plugin_set)
+            furry_ctx.furrify_all_armor(plugin_set)
 
 
         def verify(reloaded):
             # Check the ARMO has both ARMAs
             armo = find_by_edid(reloaded, 'ArmorDaedricHelmet')
             assert armo is not None, "ArmorDaedricHelmet not in patch"
-            modl_objs = {sr.get_uint32() & 0x00FFFFFF
+            modl_objs = {sr.get_form_id().object_index
                          for sr in armo.get_subrecords('MODL')
                          if sr.size >= 4}
             assert cat_obj in modl_objs, \
@@ -302,6 +304,19 @@ class TestDaedricHelmet:
             assert dog_obj in modl_objs, \
                 f"YASDaedricHelmetAA_DOG ({hex(dog_obj)}) not in " \
                 f"ArmorDaedricHelmet MODL list"
+
+            # Vanilla ARMA should have furrified races removed
+            vanilla = find_by_edid(reloaded, 'DaedricHelmetAA')
+            assert vanilla is not None, "DaedricHelmetAA not in patch"
+            vanilla_races = self._get_additional_race_info(
+                vanilla, race_lookup)
+            vanilla_edids = {edid for _, edid, _ in vanilla_races}
+            assert 'NordRace' not in vanilla_edids, \
+                "NordRace should be REMOVED from DaedricHelmetAA " \
+                "(has furry dog variant)"
+            assert 'HighElfRace' not in vanilla_edids, \
+                "HighElfRace should be REMOVED from DaedricHelmetAA " \
+                "(has furry cat variant)"
 
             # Check the dog ARMA
             dog = find_by_edid(reloaded, 'YASDaedricHelmetAA_DOG')
@@ -369,17 +384,33 @@ class TestDaedricHelmet:
 
 
 class TestNonHeadArmor:
-    """Body-only armor is not modified."""
+    """Body-only armor should not be modified by furrification."""
 
-    def test_non_head_armor_unchanged(self, all_plugins):
-        for plugin in all_plugins:
-            for arma in plugin.get_records_by_signature('ARMA'):
-                flags = get_bodypart_flags(arma)
-                furrifiable = (Bodypart.HEAD | Bodypart.HAIR | Bodypart.HANDS |
-                               Bodypart.LONGHAIR | Bodypart.CIRCLET)
-                if flags and not (flags & furrifiable):
-                    return  # Found one, test passes
-        pytest.skip("No body-only ARMA found to test")
+    def test_bandit_cuirass_not_in_patch(self, furrify_and_check, plugin_set):
+        """ArmorBanditCuirass and BanditCuirassAA are body-only
+        and should not appear in the patch."""
+        armo = plugin_set.get_record_by_edid('ARMO', 'ArmorBanditCuirass')
+        assert armo is not None, "ArmorBanditCuirass not found"
+        arma = plugin_set.get_record_by_edid('ARMA', 'BanditCuirassAA')
+        assert arma is not None, "BanditCuirassAA not found"
+        flags = _get_bodypart_flags(arma)
+        assert not flags.Head and not flags.Hair, \
+            "BanditCuirassAA should be body-only"
+
+
+        def write(furry_ctx):
+            furry_ctx.merge_armor_overrides(plugin_set)
+            furry_ctx.furrify_all_armor(plugin_set)
+
+
+        def verify(reloaded):
+            # Body-only ARMA should not be modified by furrification
+            patched_arma = find_by_edid(reloaded, 'BanditCuirassAA')
+            assert patched_arma is None, \
+                "BanditCuirassAA should NOT be in the patch " \
+                "(body-only armor addon, no head/hair slots)"
+
+        furrify_and_check(write, verify)
 
 
 # ===================================================================

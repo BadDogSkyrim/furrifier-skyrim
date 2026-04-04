@@ -12,6 +12,7 @@ import struct
 from typing import Optional
 
 from esplib import Plugin, PluginSet, Record
+from esplib.utils import FormID
 
 from .models import Sex, HeadpartType, HeadpartInfo, Bodypart
 from .race_defs import RaceDefContext
@@ -25,7 +26,7 @@ log = logging.getLogger(__name__)
 # Bodypart flags that indicate armor needing furry race support
 FURRIFIABLE_BODYPARTS = (
     Bodypart.HEAD | Bodypart.HAIR | Bodypart.HANDS |
-    Bodypart.LONGHAIR | Bodypart.CIRCLET
+    Bodypart.LONGHAIR | Bodypart.CIRCLET | Bodypart.SCHLONG
 )
 
 
@@ -49,11 +50,17 @@ class FurryContext:
         self.race_tints = race_tints
         self.plugin_set = plugin_set
         self.max_tint_layers = max_tint_layers
-
         # Statistics (populated during furrification)
         self.stats_race_counts: dict[str, int] = {}   # furry_race_id -> count
         self.stats_hair_male: dict[str, int] = {}     # headpart_edid -> count
         self.stats_hair_female: dict[str, int] = {}   # headpart_edid -> count
+
+
+    def _copy_record(self, record, source_plugin=None):
+        """Copy a record into the patch, with string fallback resolution."""
+        return self.patch.copy_record(
+            record, source_plugin,
+            plugin_set=self.plugin_set)
 
     # -- NPC furrification --
 
@@ -64,12 +71,10 @@ class FurryContext:
         return Sex.from_flags(female=female, child=child)
 
     def _add_headpart_pnam(self, record: Record, hp: HeadpartInfo) -> None:
-        """Add a PNAM subrecord for a headpart, remapping the FormID."""
-        hp_fid = hp.record.form_id.value
-        hp_plugin = hp.record.plugin
-        if hp_plugin:
-            hp_fid = self.patch.remap_formid(hp_fid, hp_plugin)
-        record.add_subrecord('PNAM', struct.pack('<I', hp_fid))
+        """Add a PNAM subrecord for a headpart."""
+        norm_fid = hp.record.normalize_form_id(hp.record.form_id)
+        sr = record.add_subrecord('PNAM', b'\x00\x00\x00\x00')
+        self.patch.write_form_id(sr, 0, norm_fid)
 
 
     def determine_npc_race(self, npc: Record,
@@ -82,11 +87,12 @@ class FurryContext:
         rnam = npc.get_subrecord('RNAM')
         if rnam is None:
             return None
-        race_fid = rnam.get_uint32()
+        race_fid = npc.normalize_form_id(rnam.get_form_id()).value
 
         original_race_id = None
         for edid, rec in self.races.items():
-            if rec.form_id.value == race_fid:
+            norm = rec.normalize_form_id(rec.form_id).value
+            if norm == race_fid:
                 original_race_id = edid
                 break
 
@@ -147,9 +153,9 @@ class FurryContext:
         npc_sex = self.determine_npc_sex(npc, race_record)
         npc_alias = unalias(npc.editor_id or str(npc.form_id))
 
-        log.info(f"Furrifying {npc_alias}: {original_race_id} -> {furry_race_id}")
+        log.debug(f"Furrifying {npc_alias}: {original_race_id} -> {furry_race_id}")
 
-        patched = self.patch.copy_record(npc)
+        patched = self._copy_record(npc)
 
         # Only change RNAM for subraces (e.g. Breton -> Reachman).
         # Normal races (e.g. Nord) are furrified at the race record level,
@@ -158,8 +164,9 @@ class FurryContext:
         if assigned_race_id != original_race_id:
             subrace_rec = self.races.get(assigned_race_id)
             if subrace_rec is not None:
-                patched.get_subrecord('RNAM').set_uint32(
-                    0, subrace_rec.form_id.value)
+                rnam_sr = patched.get_subrecord('RNAM')
+                self.patch.write_form_id(
+                    rnam_sr, 0, subrace_rec.form_id)
 
         # Remove vanilla character customization
         patched.remove_subrecords('FTST')
@@ -363,7 +370,7 @@ class FurryContext:
         for obj_id, npc in winning.items():
             processed += 1
             if (processed % 500) == 0:
-                log.info(f"  NPCs: {processed}/{total}")
+                log.debug(f"  NPCs: {processed}/{total}")
 
             if not furrify_male and not is_npc_female(npc):
                 continue
@@ -374,7 +381,7 @@ class FurryContext:
             if result is not None:
                 count += 1
 
-        log.info(f"Total NPCs furrified: {count}")
+        log.debug(f"Total NPCs furrified: {count}")
         return count
 
     # -- Race furrification --
@@ -412,30 +419,23 @@ class FurryContext:
 
         Returns the patched race record.
         """
-        patched = target or self.patch.copy_record(vanilla_race)
+        patched = target or self._copy_record(vanilla_race)
         furry_plugin = furry_race.plugin
 
         # Copy simple FormID subrecords (WNAM, RNAM)
         for sig in self._RACE_COPY_SIGS:
             src_sr = furry_race.get_subrecord(sig)
             if src_sr is not None and src_sr.size == 4:
-                raw_fid = src_sr.get_uint32()
-                if furry_plugin:
-                    remapped = self.patch.remap_formid(raw_fid, furry_plugin)
-                else:
-                    remapped = raw_fid
+                norm_fid = furry_race.normalize_form_id(src_sr.get_form_id())
                 dst_sr = patched.get_subrecord(sig)
-                if dst_sr is not None:
-                    dst_sr.set_uint32(0, remapped)
-                    dst_sr.modified = True
-                else:
-                    patched.add_subrecord(
-                        sig, struct.pack('<I', remapped))
+                if dst_sr is None:
+                    dst_sr = patched.add_subrecord(sig, b'\x00\x00\x00\x00')
+                self.patch.write_form_id(dst_sr, 0, norm_fid)
 
         # Replace Head Data: remove vanilla head data, insert furry head data
         self._replace_head_data(patched, furry_race, furry_plugin)
 
-        log.info(f"Furrified race {vanilla_race.editor_id} "
+        log.debug(f"Furrified race {vanilla_race.editor_id} "
                  f"from {furry_race.editor_id}")
         return patched
 
@@ -477,13 +477,10 @@ class FurryContext:
         # Copy with FormID remapping and insert
         from esplib.record import SubRecord
         for sr in furry_head:
-            new_data = bytearray(sr.data)
-            if (sr.signature in self._HEAD_FORMID_SIGS
-                    and sr.size == 4 and furry_plugin):
-                raw_fid = struct.unpack('<I', sr.data)[0]
-                remapped = self.patch.remap_formid(raw_fid, furry_plugin)
-                new_data = bytearray(struct.pack('<I', remapped))
-            new_sr = SubRecord(sr.signature, bytes(new_data))
+            new_sr = SubRecord(sr.signature, bytes(sr.data))
+            if sr.signature in self._HEAD_FORMID_SIGS and sr.size == 4:
+                norm_fid = furry_race.normalize_form_id(sr.get_form_id())
+                self.patch.write_form_id(new_sr, 0, norm_fid)
             patched.subrecords.insert(head_start, new_sr)
             head_start += 1
 
@@ -519,7 +516,7 @@ class FurryContext:
 
             # Create a new race record as a copy of the vanilla basis.
             # copy_record handles delocalization (FULL, DESC) and masters.
-            new_race = self.patch.copy_record(basis_rec)
+            new_race = self._copy_record(basis_rec)
 
             # Assign a fresh FormID (copy_record gave it the basis's FormID)
             new_race.form_id = self.patch.get_next_form_id()
@@ -544,7 +541,7 @@ class FurryContext:
             self.races[subrace.name] = new_race
             count += 1
 
-        log.info(f"Furrified {count} races")
+        log.debug(f"Furrified {count} races")
         return count
 
     # -- Race preset furrification --
@@ -596,16 +593,15 @@ class FurryContext:
                 if not old_srs:
                     continue
 
-                new_fids = []
+                new_preset_fids = []
                 for sr in old_srs:
-                    preset_fid = sr.get_uint32()
-                    preset_obj = preset_fid & 0x00FFFFFF
+                    preset_obj = sr.get_form_id().object_index
                     preset_npc = npc_by_obj.get(preset_obj)
                     if preset_npc is None:
                         continue
 
                     # Copy preset NPC as a new record in the patch
-                    new_preset = self.patch.copy_record(preset_npc)
+                    new_preset = self._copy_record(preset_npc)
                     new_preset.form_id = self.patch.get_next_form_id()
                     self.patch._new_records.append(new_preset)
 
@@ -620,21 +616,38 @@ class FurryContext:
                     # Set RNAM to the furrified race
                     rnam_sr = new_preset.get_subrecord('RNAM')
                     if rnam_sr is not None:
-                        rnam_sr.set_uint32(
-                            0, furrified_rec.form_id.value)
-                        rnam_sr.modified = True
+                        self.patch.write_form_id(
+                            rnam_sr, 0, furrified_rec.form_id)
 
-                    new_fids.append(new_preset.form_id.value)
+                    new_preset_fids.append(new_preset.form_id)
                     count += 1
 
-                # Replace preset subrecords in the furrified race
+                # Replace preset subrecords in the furrified race.
+                # Find the insertion point before removing, so new
+                # subrecords go in the same position (not at the end).
+                insert_idx = None
+                for idx, sr in enumerate(furrified_rec.subrecords):
+                    if sr.signature == preset_sig:
+                        insert_idx = idx
+                        break
                 furrified_rec.remove_subrecords(preset_sig)
-                for fid in new_fids:
-                    furrified_rec.add_subrecord(
-                        preset_sig, struct.pack('<I', fid))
+                if insert_idx is None:
+                    marker = 'MNAM' if preset_sig == 'RPRM' else 'FNAM'
+                    in_section = False
+                    for idx, sr in enumerate(furrified_rec.subrecords):
+                        if sr.signature == marker:
+                            in_section = True
+                        if in_section and sr.signature == 'MPAV':
+                            insert_idx = idx + 1
+                    if insert_idx is None:
+                        insert_idx = len(furrified_rec.subrecords)
+                for i, fid in enumerate(new_preset_fids):
+                    new_sr = furrified_rec.insert_subrecord(
+                        insert_idx + i, preset_sig, b'\x00\x00\x00\x00')
+                    self.patch.write_form_id(new_sr, 0, fid)
                 furrified_rec.modified = True
 
-        log.info(f"Created {count} race preset NPC records")
+        log.debug(f"Created {count} race preset NPC records")
         return count
 
     # -- Headpart FormList furrification --
@@ -656,10 +669,12 @@ class FurryContext:
         from esplib import flst_forms, flst_add, flst_contains
         from esplib.record import SubRecord
 
-        # Build lookup maps
-        # vanilla_obj_id -> furry_obj_id (furrified vanilla races to remove)
+        # Build lookup maps using normalized (load-order) FormIDs.
+        # All FormIDs are in the same space so comparisons just work.
+
+        # vanilla_fid -> furry_fid (furrified vanilla races to remove)
         vanilla_to_furry: dict[int, int] = {}
-        # furry_obj_id -> list of furrified vanilla obj_ids (to add)
+        # furry_fid -> list of furrified vanilla fids (to add)
         furry_to_furrified: dict[int, list[int]] = {}
 
         for assignment in self.ctx.assignments.values():
@@ -667,36 +682,40 @@ class FurryContext:
             furry_rec = self.races.get(assignment.furry_id)
             if vanilla_rec is None or furry_rec is None:
                 continue
-            v_obj = vanilla_rec.form_id.value & 0x00FFFFFF
-            f_obj = furry_rec.form_id.value & 0x00FFFFFF
-            vanilla_to_furry[v_obj] = f_obj
-            furry_to_furrified.setdefault(f_obj, []).append(v_obj)
+            v_fid = vanilla_rec.normalize_form_id(vanilla_rec.form_id).value
+            f_fid = furry_rec.normalize_form_id(furry_rec.form_id).value
+            vanilla_to_furry[v_fid] = f_fid
+            furry_to_furrified.setdefault(f_fid, []).append(v_fid)
 
-        # Also include subraces: add the subrace's obj_id to the furry
-        # race's furrified list
+        # Also include subraces
         for subrace in self.ctx.subraces.values():
             furry_rec = self.races.get(subrace.furry_id)
             subrace_rec = self.races.get(subrace.name)
             if furry_rec is None or subrace_rec is None:
                 continue
-            f_obj = furry_rec.form_id.value & 0x00FFFFFF
-            s_obj = subrace_rec.form_id.value & 0x00FFFFFF
-            furry_to_furrified.setdefault(f_obj, []).append(s_obj)
+            f_fid = furry_rec.normalize_form_id(furry_rec.form_id).value
+            s_fid = subrace_rec.form_id.value  # local, already sentinel
+            furry_to_furrified.setdefault(f_fid, []).append(s_fid)
 
-        # Build FLST lookup (obj_id -> winning record)
-        flst_by_obj: dict[int, Record] = {}
+        # Build FLST lookup (normalized FormID -> winning record)
+        flst_by_fid: dict[int, Record] = {}
         for plugin in plugins:
             for rec in plugin.get_records_by_signature('FLST'):
-                obj_id = rec.form_id.value & 0x00FFFFFF
-                flst_by_obj[obj_id] = rec  # last wins
+                norm = rec.normalize_form_id(rec.form_id).value
+                flst_by_fid[norm] = rec
 
-        # Build RACE obj_id -> full FormID lookup (for writing back)
-        race_obj_to_fid: dict[int, int] = {}
+        # Build normalized RACE FormID lookup for writing LNAMs
+        # Maps normalized FormID value -> FormID object
+        race_fid_lookup: dict[int, FormID] = {}
+        for plugin in plugins:
+            for rec in plugin.get_records_by_signature('RACE'):
+                nfid = rec.normalize_form_id(rec.form_id)
+                race_fid_lookup[nfid.value] = nfid
+        # Include local races (subraces with sentinel FormIDs)
         for edid, rec in self.races.items():
-            obj_id = rec.form_id.value & 0x00FFFFFF
-            race_obj_to_fid[obj_id] = rec.form_id.value
+            race_fid_lookup[rec.form_id.value] = rec.form_id
 
-        # Track which FLSTs we've already processed (by obj_id)
+        # Track which FLSTs we've already processed (by normalized FormID)
         processed_flsts: set[int] = set()
         count = 0
 
@@ -704,59 +723,66 @@ class FurryContext:
         winning_hdpts: dict[int, Record] = {}
         for plugin in plugins:
             for rec in plugin.get_records_by_signature('HDPT'):
-                obj_id = rec.form_id.value & 0x00FFFFFF
-                winning_hdpts[obj_id] = rec  # last wins
+                winning_hdpts[rec.form_id.object_index] = rec
 
         for hdpt in winning_hdpts.values():
             rnam = hdpt.get_subrecord('RNAM')
             if rnam is None:
                 continue
-            flst_obj = rnam.get_uint32() & 0x00FFFFFF
-            if flst_obj in processed_flsts:
+            flst_norm = hdpt.plugin.normalize_form_id(
+                rnam.get_form_id()).value
+            if flst_norm in processed_flsts:
                 continue
 
-            flst_rec = flst_by_obj.get(flst_obj)
+            flst_rec = flst_by_fid.get(flst_norm)
             if flst_rec is None:
                 continue
 
-            # Read current race list from the FLST
-            current_race_objs = []
+            # Read current race list as normalized FormIDs
+            current_fids = []
             for sr in flst_rec.get_subrecords('LNAM'):
-                current_race_objs.append(sr.get_uint32() & 0x00FFFFFF)
+                raw = sr.get_form_id()
+                current_fids.append(
+                    flst_rec.normalize_form_id(raw).value)
 
             # Build new race list
-            new_race_objs = []
+            new_fids = []
             changed = False
-            for race_obj in current_race_objs:
-                if race_obj in vanilla_to_furry:
-                    # Furrified vanilla race -- remove from list
+            for fid in current_fids:
+                if fid in vanilla_to_furry:
                     changed = True
                     continue
 
-                new_race_objs.append(race_obj)
+                new_fids.append(fid)
 
-                if race_obj in furry_to_furrified:
-                    # Furry race -- add all furrified vanilla races
-                    for furrified_obj in furry_to_furrified[race_obj]:
-                        if furrified_obj not in new_race_objs:
-                            new_race_objs.append(furrified_obj)
+                if fid in furry_to_furrified:
+                    for furrified_fid in furry_to_furrified[fid]:
+                        if furrified_fid not in new_fids:
+                            new_fids.append(furrified_fid)
                             changed = True
 
             if changed:
-                # Create override of the FLST in the patch
-                patched_flst = self.patch.copy_record(flst_rec)
+                # Get existing override or create one
+                patched_fid = self.patch.denormalize_form_id(
+                    flst_rec.normalize_form_id(flst_rec.form_id))
+                patched_flst = self.patch.get_record_by_form_id(patched_fid)
+                if patched_flst is None:
+                    patched_flst = self._copy_record(flst_rec)
                 patched_flst.remove_subrecords('LNAM')
-                for race_obj in new_race_objs:
-                    fid = race_obj_to_fid.get(race_obj, race_obj)
-                    if self.patch and flst_rec.plugin:
-                        fid = self.patch.remap_formid(fid, flst_rec.plugin)
-                    patched_flst.add_subrecord(
-                        'LNAM', struct.pack('<I', fid))
+                for fid in new_fids:
+                    race_formid = race_fid_lookup.get(fid)
+                    if race_formid is None:
+                        log.warning(
+                            "Race FormID %#010x not found for FLST LNAM",
+                            fid)
+                        continue
+                    sr = patched_flst.add_subrecord('LNAM', b'\x00\x00\x00\x00')
+                    self.patch.write_form_id(sr, 0, race_formid)
                 count += 1
 
-            processed_flsts.add(flst_obj)
+            processed_flsts.add(flst_norm)
 
-        log.info(f"Modified {count} headpart FormLists")
+        log.debug(f"Modified {count} headpart FormLists")
         return count
 
     # -- Armor furrification --
@@ -769,9 +795,9 @@ class FurryContext:
         race but not the furry race, we should still add the furrified
         vanilla race.
 
-        Returns: fallback_fid -> list of furrified vanilla fids.
+        Returns: fallback_obj -> list of normalized vanilla FormIDs.
         """
-        fallbacks: dict[int, list[int]] = {}
+        fallbacks: dict[int, list[FormID]] = {}
         for assignment in self.ctx.assignments.values():
             furry_rec = self.races.get(assignment.furry_id)
             vanilla_rec = self.races.get(assignment.vanilla_id)
@@ -780,16 +806,15 @@ class FurryContext:
             rnam = furry_rec.get_subrecord('RNAM')
             if rnam is None or rnam.size < 4:
                 continue
-            fb_fid = rnam.get_uint32()
-            if fb_fid == 0:
+            fb_fid = rnam.get_form_id()
+            if fb_fid.value == 0:
                 continue
-            # Only use as fallback if different from the furry race itself
-            fb_obj = fb_fid & 0x00FFFFFF
-            furry_obj = furry_rec.form_id.value & 0x00FFFFFF
+            fb_obj = fb_fid.object_index
+            furry_obj = furry_rec.form_id.object_index
             if fb_obj == furry_obj:
                 continue
-            fallbacks.setdefault(fb_obj, []).append(
-                vanilla_rec.form_id.value)
+            v_norm = vanilla_rec.normalize_form_id(vanilla_rec.form_id)
+            fallbacks.setdefault(fb_obj, []).append(v_norm)
         return fallbacks
 
 
@@ -811,15 +836,15 @@ class FurryContext:
         """
         from .armor import get_bodypart_flags
 
-        # furry_obj -> list of (vanilla_obj, vanilla_fid)
-        furry_obj_to_vanilla: dict[int, list[tuple[int, int]]] = {}
+        # furry_obj -> list of (vanilla_obj, vanilla_norm_fid)
+        furry_obj_to_vanilla: dict[int, list[tuple[int, FormID]]] = {}
         for a in self.ctx.assignments.values():
             furry_rec = self.races.get(a.furry_id)
             vanilla_rec = self.races.get(a.vanilla_id)
             if furry_rec and vanilla_rec:
-                f_obj = furry_rec.form_id.value & 0x00FFFFFF
-                v_obj = vanilla_rec.form_id.value & 0x00FFFFFF
-                v_fid = vanilla_rec.form_id.value
+                f_obj = furry_rec.form_id.object_index
+                v_obj = vanilla_rec.form_id.object_index
+                v_fid = vanilla_rec.normalize_form_id(vanilla_rec.form_id)
                 furry_obj_to_vanilla.setdefault(f_obj, []).append(
                     (v_obj, v_fid))
         furry_objs: set[int] = set(furry_obj_to_vanilla.keys())
@@ -829,14 +854,14 @@ class FurryContext:
         for a in self.ctx.assignments.values():
             vanilla_rec = self.races.get(a.vanilla_id)
             if vanilla_rec:
-                furrified_objs.add(vanilla_rec.form_id.value & 0x00FFFFFF)
+                furrified_objs.add(vanilla_rec.form_id.object_index)
 
-        # Fallback: fallback_obj -> list of (vanilla_obj, vanilla_fid)
+        # Fallback: fallback_obj -> list of (vanilla_obj, vanilla_norm_fid)
         armor_fallbacks_raw = self._build_armor_fallbacks()
-        armor_fallbacks: dict[int, list[tuple[int, int]]] = {}
+        armor_fallbacks: dict[int, list[tuple[int, FormID]]] = {}
         for fb_obj, v_fids in armor_fallbacks_raw.items():
             armor_fallbacks[fb_obj] = [
-                (fid & 0x00FFFFFF, fid) for fid in v_fids]
+                (fid.object_index, fid) for fid in v_fids]
         fallback_objs: set[int] = set(armor_fallbacks.keys())
 
         # Winning ARMA records (last per obj_id, including patch)
@@ -854,15 +879,15 @@ class FurryContext:
             objs = set()
             rnam = arma_rec.get_subrecord('RNAM')
             if rnam and rnam.size >= 4:
-                objs.add(rnam.get_uint32() & 0x00FFFFFF)
+                objs.add(rnam.get_form_id().object_index)
             for sr in arma_rec.get_subrecords('MODL'):
                 if sr.size >= 4:
-                    objs.add(sr.get_uint32() & 0x00FFFFFF)
+                    objs.add(sr.get_form_id().object_index)
             return objs
 
         # Walk all ARMO records; for each, resolve the ARMA priority
-        # arma_obj -> set of vanilla_fids to add
-        arma_adds: dict[int, set[int]] = {}
+        # arma_obj -> set of normalized vanilla FormIDs to add
+        arma_adds: dict[int, set] = {}
         # arma_obj -> set of vanilla_objs to remove
         arma_removes: dict[int, set[int]] = {}
 
@@ -892,8 +917,12 @@ class FurryContext:
                 continue
 
             # For each furrified vanilla race, find the first ARMA in
-            # the list that has its furry race (or fallback)
+            # the list that has its furry race (or fallback).
+            # Track which ARMA "owns" each vanilla race (claimed globally,
+            # and per-ARMA so we know which to keep vs remove).
             claimed: set[int] = set()  # vanilla objs assigned to an ARMA
+            # arma_obj -> set of vanilla objs this ARMA owns
+            arma_owns: dict[int, set[int]] = {}
 
             for arma_obj, arma_rec in arma_refs:
                 race_objs = arma_race_objs(arma_rec)
@@ -904,32 +933,36 @@ class FurryContext:
                 # Direct furry race matches
                 for f_obj in (race_objs & furry_objs):
                     for v_obj, v_fid in furry_obj_to_vanilla[f_obj]:
-                        if v_obj not in claimed and v_obj not in race_objs:
+                        if v_obj not in claimed:
                             claimable.append((v_obj, v_fid))
 
                 # Fallback matches (only if no direct furry)
                 if not (race_objs & furry_objs):
                     for fb_obj in (race_objs & fallback_objs):
                         for v_obj, v_fid in armor_fallbacks[fb_obj]:
-                            if v_obj not in claimed and v_obj not in race_objs:
+                            if v_obj not in claimed:
                                 claimable.append((v_obj, v_fid))
 
                 if claimable:
+                    owns = arma_owns.setdefault(arma_obj, set())
                     adds = arma_adds.setdefault(arma_obj, set())
                     for v_obj, v_fid in claimable:
-                        adds.add(v_fid)
                         claimed.add(v_obj)
+                        owns.add(v_obj)
+                        # Only add if not already on this ARMA
+                        if v_obj not in race_objs:
+                            adds.add(v_fid)
 
-            # Any furrified vanilla race NOT claimed by any ARMA should
-            # be removed from all ARMAs in this ARMO's list
-            unclaimed = furrified_objs - claimed
-            if unclaimed:
-                for arma_obj, arma_rec in arma_refs:
-                    race_objs = arma_race_objs(arma_rec)
-                    removable = race_objs & unclaimed
-                    if removable:
-                        removes = arma_removes.setdefault(arma_obj, set())
-                        removes |= removable
+            # Remove furrified vanilla races from ARMAs that don't
+            # own them. Races already present but owned stay; races
+            # present but not owned get removed.
+            for arma_obj, arma_rec in arma_refs:
+                race_objs = arma_race_objs(arma_rec)
+                owned = arma_owns.get(arma_obj, set())
+                removable = (race_objs & furrified_objs) - owned
+                if removable:
+                    removes = arma_removes.setdefault(arma_obj, set())
+                    removes |= removable
 
         # Apply changes to ARMA records
         count = 0
@@ -942,30 +975,30 @@ class FurryContext:
             adds = arma_adds.get(arma_obj, set())
             removes = arma_removes.get(arma_obj, set())
             # Don't remove races that are being added
-            removes -= {fid & 0x00FFFFFF for fid in adds}
+            removes -= {fid.object_index for fid in adds}
 
             if not adds and not removes:
                 continue
 
-            patched = self.patch.copy_record(arma_rec)
+            patched = self._copy_record(arma_rec)
 
             if removes:
                 to_remove = []
                 for sr in list(patched.get_subrecords('MODL')):
                     if sr.size >= 4:
-                        obj = sr.get_uint32() & 0x00FFFFFF
+                        obj = sr.get_form_id().object_index
                         if obj in removes:
                             to_remove.append(sr)
                 for sr in to_remove:
                     patched.remove_subrecord(sr)
 
             for v_fid in adds:
-                patched.add_subrecord(
-                    'MODL', struct.pack('<I', v_fid))
+                sr = patched.add_subrecord('MODL', b'\x00\x00\x00\x00')
+                self.patch.write_form_id(sr, 0, v_fid)
 
             count += 1
 
-        log.info(f"Modified {count} armor addon records")
+        log.debug(f"Modified {count} armor addon records")
         return count
 
 
@@ -1067,18 +1100,20 @@ class FurryContext:
             base = self._find_base_override(overrides)
 
             # Start with the base's sets as authoritative
-            # Store (fid, src_record) keyed by obj_id
-            merged_modl: dict[int, tuple[int, Record]] = {}
-            merged_kwda: dict[int, tuple[int, Record]] = {}
+            # Store normalized FormIDs keyed by obj_id
+            merged_modl: dict[int, tuple[FormID, Record]] = {}
+            merged_kwda: dict[int, FormID] = {}
 
             for sr in base.get_subrecords('MODL'):
                 if sr.size >= 4:
-                    fid = sr.get_uint32()
-                    merged_modl[fid & 0x00FFFFFF] = (fid, base)
+                    nfid = base.normalize_form_id(sr.get_form_id())
+                    merged_modl[nfid.object_index] = (nfid, base)
             for sr in base.get_subrecords('KWDA'):
-                if sr.size >= 4:
-                    fid = sr.get_uint32()
-                    merged_kwda[fid & 0x00FFFFFF] = (fid, base)
+                # KWDA is a packed array — iterate 4 bytes at a time
+                for off in range(0, sr.size, 4):
+                    fid = base.normalize_form_id(
+                        FormID(struct.unpack_from('<I', sr.data, off)[0]))
+                    merged_kwda[fid.object_index] = fid
 
             # Add entries from non-base overrides (mods)
             for rec in overrides:
@@ -1088,22 +1123,21 @@ class FurryContext:
                     continue
                 for sr in rec.get_subrecords('MODL'):
                     if sr.size >= 4:
-                        fid = sr.get_uint32()
-                        obj = fid & 0x00FFFFFF
-                        if obj not in merged_modl:
-                            merged_modl[obj] = (fid, rec)
+                        nfid = rec.normalize_form_id(sr.get_form_id())
+                        if nfid.object_index not in merged_modl:
+                            merged_modl[nfid.object_index] = (nfid, rec)
                 for sr in rec.get_subrecords('KWDA'):
-                    if sr.size >= 4:
-                        fid = sr.get_uint32()
-                        obj = fid & 0x00FFFFFF
-                        if obj not in merged_kwda:
-                            merged_kwda[obj] = (fid, rec)
+                    for off in range(0, sr.size, 4):
+                        fid = rec.normalize_form_id(
+                            FormID(struct.unpack_from('<I', sr.data, off)[0]))
+                        if fid.object_index not in merged_kwda:
+                            merged_kwda[fid.object_index] = fid
 
-            # Check if the winner already has the merged set in the
-            # right order
-            winner_modl_list = [sr.get_uint32() & 0x00FFFFFF
-                                for sr in winner.get_subrecords('MODL')
-                                if sr.size >= 4]
+            # Check if the winner already has the merged set
+            winner_modl_list = [
+                sr.get_form_id().object_index
+                for sr in winner.get_subrecords('MODL')
+                if sr.size >= 4]
             winner_kwda = self._get_record_objs(winner, 'KWDA')
 
             # Sort MODL: mod-added ARMAs first (by load order), base last
@@ -1118,31 +1152,33 @@ class FurryContext:
             if not need_modl and not need_kwda:
                 continue
 
-            patched = self.patch.copy_record(winner)
+            patched = self._copy_record(winner)
 
             # Replace MODL list with sorted merged set
             if need_modl:
                 patched.remove_subrecords('MODL')
-                for m_obj, (fid, src_rec) in sorted_modl:
-                    if src_rec.plugin:
-                        fid = self.patch.remap_formid(fid, src_rec.plugin)
-                    patched.add_subrecord('MODL', struct.pack('<I', fid))
+                for m_obj, (nfid, src_rec) in sorted_modl:
+                    sr = patched.add_subrecord('MODL', b'\x00\x00\x00\x00')
+                    self.patch.write_form_id(sr, 0, nfid)
 
-            # Replace KWDA list with merged set
+            # Replace KWDA with a single subrecord containing all keywords
             if need_kwda:
                 patched.remove_subrecords('KWDA')
-                for k_obj, (fid, src_rec) in merged_kwda.items():
-                    if src_rec.plugin:
-                        fid = self.patch.remap_formid(fid, src_rec.plugin)
-                    patched.add_subrecord('KWDA', struct.pack('<I', fid))
+                kwda_data = bytearray(4 * len(merged_kwda))
+                sr = patched.add_subrecord('KWDA', bytes(kwda_data))
+                for i, (k_obj, nfid) in enumerate(merged_kwda.items()):
+                    self.patch.write_form_id(sr, i * 4, nfid)
                 ksiz = patched.get_subrecord('KSIZ')
-                if ksiz and ksiz.size >= 4:
+                if ksiz:
                     ksiz.data = struct.pack('<I', len(merged_kwda))
                     ksiz.modified = True
+                else:
+                    patched.add_subrecord(
+                        'KSIZ', struct.pack('<I', len(merged_kwda)))
 
             count += 1
 
-        log.info(f"Merged overrides in {count} ARMO records")
+        log.debug(f"Merged overrides in {count} ARMO records")
         return count
 
     # -- Statistics --

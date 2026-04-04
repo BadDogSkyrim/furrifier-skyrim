@@ -44,26 +44,30 @@ def furrify_all_schlongs(plugins,
     """
     count = 0
 
-    # Build FormID lookups
+    # Build FormID lookups (normalized to load-order space)
     race_fid_by_edid = {}
-    race_edid_by_obj = {}
+    race_edid_by_fid: dict[int, str] = {}
     for edid, rec in races.items():
-        race_fid_by_edid[edid] = rec.form_id.value
-        race_edid_by_obj[rec.form_id.value & 0x00FFFFFF] = edid
+        norm = rec.normalize_form_id(rec.form_id)
+        race_fid_by_edid[edid] = norm
+        race_edid_by_fid[norm.value] = edid
 
-    # Build FLST lookup (obj_id -> winning record)
-    flst_by_obj: dict[int, Record] = {}
+    # Build FLST lookup keyed by normalized FormID (not object index —
+    # different plugins can have different FLSTs at the same object index)
+    flst_by_fid: dict[int, Record] = {}
     for plugin in plugins:
         for rec in plugin.get_records_by_signature('FLST'):
-            obj_id = rec.form_id.value & 0x00FFFFFF
-            flst_by_obj[obj_id] = rec
+            norm = rec.normalize_form_id(rec.form_id).value
+            flst_by_fid[norm] = rec
 
-    # Build GLOB lookup (obj_id -> winning record)
-    glob_by_obj: dict[int, Record] = {}
+    # Build GLOB lookup keyed by normalized FormID
+    glob_by_fid: dict[int, Record] = {}
     for plugin in plugins:
         for rec in plugin.get_records_by_signature('GLOB'):
-            obj_id = rec.form_id.value & 0x00FFFFFF
-            glob_by_obj[obj_id] = rec
+            norm = rec.normalize_form_id(rec.form_id).value
+            glob_by_fid[norm] = rec
+
+    from esplib.utils import FormID
 
     for plugin in plugins:
         for quest in plugin.get_records_by_signature('QUST'):
@@ -88,9 +92,18 @@ def furrify_all_schlongs(plugins,
                 log.warning(f"SOS quest {quest.editor_id} missing expected properties")
                 continue
 
-            compat_flst = flst_by_obj.get(compat_prop.value.form_id & 0x00FFFFFF)
-            prob_flst = flst_by_obj.get(prob_prop.value.form_id & 0x00FFFFFF)
-            size_flst = flst_by_obj.get(size_prop.value.form_id & 0x00FFFFFF)
+            # Normalize VMAD FormIDs from quest's plugin space to load-order
+            qp = quest.plugin
+            compat_fid = qp.normalize_form_id(
+                FormID(compat_prop.value.form_id)).value
+            prob_fid = qp.normalize_form_id(
+                FormID(prob_prop.value.form_id)).value
+            size_fid = qp.normalize_form_id(
+                FormID(size_prop.value.form_id)).value
+
+            compat_flst = flst_by_fid.get(compat_fid)
+            prob_flst = flst_by_fid.get(prob_fid)
+            size_flst = flst_by_fid.get(size_fid)
 
             if compat_flst is None or prob_flst is None or size_flst is None:
                 log.warning(f"SOS quest {quest.editor_id}: could not resolve FormLists")
@@ -99,8 +112,9 @@ def furrify_all_schlongs(plugins,
             modified = _furrify_schlong_lists(
                 compat_flst, prob_flst, size_flst,
                 patch, race_assignments, furry_races,
-                race_fid_by_edid, race_edid_by_obj,
-                flst_by_obj, glob_by_obj,
+                race_fid_by_edid, race_edid_by_fid,
+                glob_by_fid,
+                quest_edid=quest.editor_id or '',
             )
             if modified:
                 count += 1
@@ -109,122 +123,181 @@ def furrify_all_schlongs(plugins,
     return count
 
 
+def _short_race_name(edid: str) -> str:
+    """Shorten a race editor ID for GLOB naming.
+
+    Strip 'YAS' prefix, replace 'RaceVampire' suffix with 'V',
+    strip 'Race' suffix.
+    """
+    name = edid
+    if name.startswith('YAS'):
+        name = name[3:]
+    if name.endswith('RaceVampire'):
+        name = name[:-len('RaceVampire')] + 'V'
+    elif name.endswith('Race'):
+        name = name[:-4]
+    return name
+
+
+def _quest_stem(quest_edid: str) -> str:
+    """Derive the GLOB name prefix from a quest editor ID.
+
+    Strips trailing 'Q' or '_Quest' to get the addon name,
+    e.g. 'YASDogSheathMaleQ' -> 'YASDogSheathMale'.
+    """
+    if quest_edid.endswith('_Quest'):
+        return quest_edid[:-6]
+    if quest_edid.endswith('Q'):
+        return quest_edid[:-1]
+    return quest_edid
+
+
 def _furrify_schlong_lists(compat_flst: Record, prob_flst: Record,
                            size_flst: Record, patch: Plugin,
                            race_assignments: dict[str, str],
                            furry_races: dict[str, list[str]],
                            race_fid_by_edid: dict[str, int],
-                           race_edid_by_obj: dict[int, str],
-                           flst_by_obj: dict[int, Record],
-                           glob_by_obj: dict[int, Record],
+                           race_edid_by_fid: dict[int, str],
+                           glob_by_fid: dict[int, Record],
+                           quest_edid: str = '',
                            ) -> bool:
     """Process one set of SOS FormLists.
 
+    The three lists must stay strictly parallel: entry N in
+    compatibleRaces pairs with entry N in RaceProbabilities and
+    RaceSizes. We rebuild all three lists together to guarantee this.
+
     Returns True if any modifications were made.
     """
-    # Get current races in the compat list
+    # Read the three parallel lists from the originals
     compat_forms = flst_forms(compat_flst)
+    prob_forms = flst_forms(prob_flst)
+    size_forms = flst_forms(size_flst)
+
+    # Identify which races are present and which furry races are supported
+    # compat_forms are normalized to load-order space by flst_forms
     current_race_edids = set()
     for fid in compat_forms:
-        edid = race_edid_by_obj.get(fid.value & 0x00FFFFFF)
+        edid = race_edid_by_fid.get(fid.value)
         if edid:
             current_race_edids.add(edid)
 
     # Determine races to add and remove
     add_races: list[str] = []
-    remove_races: list[str] = []
+    remove_fids: set[int] = set()
 
     for race_edid in current_race_edids:
         if race_edid in furry_races:
-            # This is a furry race -- add its furrified vanilla races
+            # Furry race present — add its vanilla races
             for vanilla_edid in furry_races[race_edid]:
                 if vanilla_edid not in current_race_edids:
                     add_races.append(vanilla_edid)
         elif race_edid in race_assignments:
-            # This is a furrified vanilla race -- check if its furry race
-            # is present. If not, remove it.
+            # Vanilla race whose furry race is absent — remove it
             furry_edid = race_assignments[race_edid]
             if furry_edid not in current_race_edids:
-                remove_races.append(race_edid)
+                fid = race_fid_by_edid.get(race_edid)
+                if fid:
+                    remove_fids.add(fid.value)
 
-    if not add_races and not remove_races:
+    if not add_races and not remove_fids:
         return False
 
-    # Get probability and size lists (parallel to compat list)
-    prob_forms = flst_forms(prob_flst)
-    size_forms = flst_forms(size_flst)
+    # Build the new parallel entries: (race_fid, prob_fid, size_fid)
+    # All FormIDs are in load-order-normalized space (flst_forms
+    # normalizes automatically when a PluginSet is available).
+    # Start with existing entries, skipping removed races
+    entries: list[tuple] = []
+    for i, fid in enumerate(compat_forms):
+        if fid.value in remove_fids:
+            edid = race_edid_by_fid.get(fid.value, '?')
+            log.debug(f"  Removed {edid} from SOS lists")
+            continue
+        prob_fid = prob_forms[i] if i < len(prob_forms) else None
+        size_fid = size_forms[i] if i < len(size_forms) else None
+        entries.append((fid, prob_fid, size_fid))
 
-    # Remove races from all three lists (in reverse order to preserve indices)
-    if remove_races:
-        compat_patched = patch.copy_record(compat_flst)
-        prob_patched = patch.copy_record(prob_flst)
-        size_patched = patch.copy_record(size_flst)
+    # Add new vanilla races with cloned prob/size GLOBs
+    for vanilla_edid in add_races:
+        vanilla_fid = race_fid_by_edid.get(vanilla_edid)
+        if vanilla_fid is None:
+            continue
 
-        for race_edid in remove_races:
-            race_fid = race_fid_by_edid.get(race_edid)
-            if race_fid is not None:
-                # Find index in compat list
-                for i, fid in enumerate(compat_forms):
-                    if (fid.value & 0x00FFFFFF) == (race_fid & 0x00FFFFFF):
-                        flst_remove(compat_patched, fid.value)
-                        if i < len(prob_forms):
-                            flst_remove(prob_patched, prob_forms[i].value)
-                        if i < len(size_forms):
-                            flst_remove(size_patched, size_forms[i].value)
-                        break
-                log.info(f"  Removed {race_edid} from SOS lists")
+        # Find the furry race's entry to clone prob/size from
+        furry_edid = race_assignments.get(vanilla_edid)
+        furry_fid = race_fid_by_edid.get(furry_edid) if furry_edid else None
+        furry_index = None
+        if furry_fid is not None:
+            for i, fid in enumerate(compat_forms):
+                if fid.value == furry_fid.value:
+                    furry_index = i
+                    break
 
-    # Add races
-    if add_races:
-        if not remove_races:
-            compat_patched = patch.copy_record(compat_flst)
-            prob_patched = patch.copy_record(prob_flst)
-            size_patched = patch.copy_record(size_flst)
+        new_prob_fid = None
+        new_size_fid = None
+        stem = _quest_stem(quest_edid)
+        furry_short = _short_race_name(furry_edid) if furry_edid else ''
+        vanilla_short = _short_race_name(vanilla_edid)
 
-        for vanilla_edid in add_races:
-            vanilla_fid = race_fid_by_edid.get(vanilla_edid)
-            if vanilla_fid is None:
-                continue
+        if furry_index is not None:
+            if furry_index < len(prob_forms):
+                prob_glob = glob_by_fid.get(prob_forms[furry_index].value)
+                if prob_glob:
+                    new_prob = glob_copy_as(
+                        prob_glob,
+                        f"{stem}Prob_{furry_short}_{vanilla_short}",
+                        patch.get_next_form_id(),
+                    )
+                    patch.add_record(new_prob)
+                    new_prob_fid = new_prob.form_id
 
-            # Find the furry race's entry to copy prob/size from
-            furry_edid = race_assignments.get(vanilla_edid)
-            furry_fid = race_fid_by_edid.get(furry_edid) if furry_edid else None
-            furry_index = None
-            if furry_fid is not None:
-                for i, fid in enumerate(compat_forms):
-                    if (fid.value & 0x00FFFFFF) == (furry_fid & 0x00FFFFFF):
-                        furry_index = i
-                        break
+            if furry_index < len(size_forms):
+                size_glob = glob_by_fid.get(size_forms[furry_index].value)
+                if size_glob:
+                    new_size = glob_copy_as(
+                        size_glob,
+                        f"{stem}Size_{furry_short}_{vanilla_short}",
+                        patch.get_next_form_id(),
+                    )
+                    patch.add_record(new_size)
+                    new_size_fid = new_size.form_id
 
-            # Add race to compat list
-            flst_add(compat_patched, vanilla_fid)
+        if new_prob_fid is None or new_size_fid is None:
+            log.warning(
+                f"  Skipping {vanilla_edid} — could not create "
+                f"matching prob/size GLOBs")
+            continue
 
-            # Copy prob/size GLOBs from the furry race's entries
-            if furry_index is not None:
-                if furry_index < len(prob_forms):
-                    prob_glob = glob_by_obj.get(
-                        prob_forms[furry_index].value & 0x00FFFFFF)
-                    if prob_glob:
-                        new_prob = glob_copy_as(
-                            prob_glob,
-                            f"{prob_glob.editor_id}_{vanilla_edid}",
-                            patch.get_next_form_id(),
-                        )
-                        patch._new_records.append(new_prob)
-                        flst_add(prob_patched, new_prob.form_id.value)
+        entries.append((vanilla_fid, new_prob_fid, new_size_fid))
+        log.info(f"  Added {vanilla_edid} to SOS lists")
 
-                if furry_index < len(size_forms):
-                    size_glob = glob_by_obj.get(
-                        size_forms[furry_index].value & 0x00FFFFFF)
-                    if size_glob:
-                        new_size = glob_copy_as(
-                            size_glob,
-                            f"{size_glob.editor_id}_{vanilla_edid}",
-                            patch.get_next_form_id(),
-                        )
-                        patch._new_records.append(new_size)
-                        flst_add(size_patched, new_size.form_id.value)
+    # Write all three lists from the parallel entries
+    def _get_or_copy(flst_rec):
+        norm_fid = flst_rec.normalize_form_id(flst_rec.form_id)
+        patch_fid = patch.denormalize_form_id(norm_fid)
+        existing = patch.get_record_by_form_id(patch_fid)
+        if existing is not None:
+            return existing
+        return patch.copy_record(flst_rec)
 
-            log.info(f"  Added {vanilla_edid} to SOS lists")
+    compat_patched = _get_or_copy(compat_flst)
+    prob_patched = _get_or_copy(prob_flst)
+    size_patched = _get_or_copy(size_flst)
+
+    # Clear existing LNAMs
+    compat_patched.remove_subrecords('LNAM')
+    prob_patched.remove_subrecords('LNAM')
+    size_patched.remove_subrecords('LNAM')
+
+    # Write entries in order
+    for race_fid, prob_fid, size_fid in entries:
+        sr = compat_patched.add_subrecord('LNAM', b'\x00\x00\x00\x00')
+        patch.write_form_id(sr, 0, race_fid)
+
+        sr = prob_patched.add_subrecord('LNAM', b'\x00\x00\x00\x00')
+        patch.write_form_id(sr, 0, prob_fid)
+
+        sr = size_patched.add_subrecord('LNAM', b'\x00\x00\x00\x00')
+        patch.write_form_id(sr, 0, size_fid)
 
     return True

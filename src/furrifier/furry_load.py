@@ -132,22 +132,21 @@ def build_race_headparts(plugins,
     - DATA: flags byte (bit 0 = male, bit 2 = female)
     - RNAM: FormID → FormList (FLST) of valid races
     """
-    # Build a FormID→EditorID lookup for all RACE records across plugins
+    # Build a normalized FormID → EditorID lookup for all RACE records
     race_fid_to_edid: dict[int, str] = {}
     for plugin in plugins:
         for record in plugin.get_records_by_signature('RACE'):
             edid = record.editor_id
             if edid:
-                # Store with the object ID only (master-independent)
-                obj_id = record.form_id.value & 0x00FFFFFF
-                race_fid_to_edid[obj_id] = edid
+                norm = record.normalize_form_id(record.form_id).value
+                race_fid_to_edid[norm] = edid
 
-    # Build a FormID→FLST record lookup for FormList resolution
+    # Build a normalized FormID → FLST record lookup
     flst_by_fid: dict[int, Record] = {}
     for plugin in plugins:
         for record in plugin.get_records_by_signature('FLST'):
-            obj_id = record.form_id.value & 0x00FFFFFF
-            flst_by_fid[obj_id] = record
+            norm = record.normalize_form_id(record.form_id).value
+            flst_by_fid[norm] = record
 
     race_headparts: dict[tuple, set[str]] = {}
 
@@ -163,22 +162,25 @@ def build_race_headparts(plugins,
         is_male = bool(flags & 0x02)    # bit 1
         is_female = bool(flags & 0x04)  # bit 2
 
-        # Get RNAM → FormList
+        # Get RNAM → FormList (normalize through the HDPT's plugin)
         rnam = hp.record.get_subrecord('RNAM')
         if rnam is None:
             continue
-        rnam_fid = rnam.get_uint32()
-        rnam_obj = rnam_fid & 0x00FFFFFF
+        hp_plugin = hp.record.plugin
+        rnam_norm = hp_plugin.normalize_form_id(rnam.get_form_id()).value
 
-        flst = flst_by_fid.get(rnam_obj)
+        flst = flst_by_fid.get(rnam_norm)
         if flst is None:
             continue
 
-        # Get races from the FormList's LNAM entries
+        # Get races from the FormList's LNAM entries (normalize through
+        # the FLST's plugin)
+        flst_plugin = flst.plugin
         race_edids = set()
         for lnam in flst.get_subrecords('LNAM'):
-            lnam_obj = lnam.get_uint32() & 0x00FFFFFF
-            edid = race_fid_to_edid.get(lnam_obj)
+            lnam_norm = flst_plugin.normalize_form_id(
+                lnam.get_form_id()).value
+            edid = race_fid_to_edid.get(lnam_norm)
             if edid:
                 race_edids.add(edid)
 
