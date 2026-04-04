@@ -90,15 +90,9 @@ def plugin_set(data_dir):
 
 
 @pytest.fixture(scope="session")
-def all_plugins(plugin_set):
-    """All loaded plugins as a list (for backward compatibility)."""
-    return list(plugin_set)
-
-
-@pytest.fixture(scope="session")
-def races_by_edid(plugin_set, ctx):
-    """Race records indexed by EditorID, with assignments linked."""
-    races = {}
+def races_by_obj(plugin_set, ctx):
+    """Race records indexed by object_index, with assignments linked."""
+    by_edid = {}
     needed = set()
     for a in ctx.assignments.values():
         needed.add(a.vanilla_id)
@@ -111,14 +105,14 @@ def races_by_edid(plugin_set, ctx):
         for record in plugin.get_records_by_signature('RACE'):
             edid = record.editor_id
             if edid and edid in needed:
-                races[edid] = record  # last wins = winning override
+                by_edid[edid] = record  # last wins = winning override
 
     # Link assignments
     for a in ctx.assignments.values():
-        a.vanilla = _to_race_info(races.get(a.vanilla_id))
-        a.furry = _to_race_info(races.get(a.furry_id))
+        a.vanilla = _to_race_info(by_edid.get(a.vanilla_id))
+        a.furry = _to_race_info(by_edid.get(a.furry_id))
 
-    return races
+    return {rec.form_id.object_index: rec for rec in by_edid.values()}
 
 
 def _to_race_info(record):
@@ -160,8 +154,8 @@ def patch(request, plugin_set, data_dir):
     saved to FurrifierTEST.esp at session end for xEdit inspection.
     """
     patch_path = data_dir / PATCH_FILENAME
-    masters = [p.file_path.name for p in plugin_set if p.file_path]
-    p = Plugin.new_plugin(patch_path, masters=masters[:254])
+    p = Plugin.new_plugin(patch_path)
+    p.plugin_set = plugin_set
 
 
     def save_patch():
@@ -187,10 +181,11 @@ def race_tints(plugin_set):
 
 
 @pytest.fixture(scope="session")
-def furry_ctx(patch, ctx, races_by_edid, all_headparts, race_headparts,
+def furry_ctx(patch, ctx, races_by_obj, all_headparts, race_headparts,
               race_tints, plugin_set):
     """FurryContext wired up for testing."""
     from furrifier.context import FurryContext
+    races_by_edid = {rec.editor_id: rec for rec in races_by_obj.values()}
     fc = FurryContext(
         patch=patch,
         ctx=ctx,
@@ -209,8 +204,8 @@ def furrify_and_check(request, furry_ctx):
     """Two-phase test fixture: write now, verify after save/reload.
 
     Usage:
-        def test_something(furrify_and_check, all_plugins):
-            npc, _ = find_record(all_plugins, 'NPC_', 'SomeNPC')
+        def test_something(furrify_and_check, plugin_set):
+            npc = plugin_set.get_record_by_edid('NPC_', 'SomeNPC')
 
             def write(furry_ctx):
                 furry_ctx.furrify_npc(npc)
@@ -235,15 +230,6 @@ def furrify_and_check(request, furry_ctx):
 
 
 # -- Helpers --
-
-
-def find_record(plugins, signature, editor_id):
-    """Find a record by signature and EditorID across plugins."""
-    for plugin in plugins:
-        for record in plugin.get_records_by_signature(signature):
-            if record.editor_id == editor_id:
-                return record, plugin
-    return None, None
 
 
 def run_verify_phase(patch):
@@ -281,12 +267,10 @@ def run_verify_phase(patch):
 
 def find_by_formid(plugin, form_id):
     """Find a record by FormID in a plugin."""
-    fid = form_id.value if hasattr(form_id, 'value') else form_id
-    # Search by obj_id (master-independent) across all record types
-    obj_id = fid & 0x00FFFFFF
+    obj_id = form_id.object_index if hasattr(form_id, 'object_index') else form_id & 0x00FFFFFF
     for sig in ('NPC_', 'RACE', 'ARMA', 'ARMO', 'FLST', 'GLOB', 'HDPT'):
         for record in plugin.get_records_by_signature(sig):
-            if (record.form_id.value & 0x00FFFFFF) == obj_id:
+            if record.form_id.object_index == obj_id:
                 return record
     return None
 

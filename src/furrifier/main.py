@@ -10,7 +10,7 @@ import logging
 import sys
 from pathlib import Path
 
-from esplib import Plugin, PluginSet, LoadOrder, find_game
+from esplib import Plugin, PluginSet, LoadOrder, find_game_data, find_strings_dir
 
 from .config import FurrifierConfig, build_parser, setup_logging
 from .context import FurryContext
@@ -26,37 +26,49 @@ def main() -> int:
     args = parser.parse_args()
     config = FurrifierConfig.from_args(args)
     setup_logging(config)
+    logging.getLogger().addHandler(_log_counter)
 
-    log.info(f"Furrifier v0.1.0 -- scheme: {config.race_scheme}")
+    log.info("Skyrim Furrifier v0.1.0")
+    log.info(f"  Scheme: {config.race_scheme}")
+    log.info(f"  Patch: {config.patch_filename}")
+    log.info(f"  NPCs: male={config.furrify_npcs_male}, "
+             f"female={config.furrify_npcs_female}")
+    log.info(f"  Armor: {config.furrify_armor}")
+    log.info(f"  Schlongs: {config.furrify_schlongs}")
 
     # Find Skyrim
-    game = find_game('tes5')
-    if game is None and config.game_data_dir:
+    if config.game_data_dir:
         data_dir = Path(config.game_data_dir)
-    elif game is not None:
-        data_dir = game.data_dir
     else:
+        data_dir = find_game_data('tes5')
+    if data_dir is None:
         log.error("Could not find Skyrim installation. Use --data-dir.")
         return 1
 
-    log.info(f"Data directory: {data_dir}")
+    log.debug(f"Data directory: {data_dir}")
 
     # Load preference scheme
     ctx = load_scheme(config.race_scheme)
     setup_vanilla(ctx)
 
-    # Load plugins (exclude the patch file itself from the load order)
-    log.info("Loading plugins...")
+    # Load active plugins from plugins.txt (exclude the patch itself)
+    log.debug("Loading plugins...")
     patch_name = config.patch_filename.lower()
-    load_order = LoadOrder.from_list(
-        [p.name for p in data_dir.glob('*.es[mp]')
-         if p.name.lower() != patch_name],
-        data_dir=data_dir,
-        game_id='tes5',
-    )
+    load_order = LoadOrder.from_game('tes5', active_only=True)
+    load_order.plugins = [p for p in load_order.plugins
+                          if p.lower() != patch_name]
     plugin_set = PluginSet(load_order)
+    string_dirs = []
+    strings_dir = find_strings_dir('tes5')
+    if strings_dir:
+        string_dirs.append(str(strings_dir))
+    # Also check the game's own Strings directory (for CC plugins etc.)
+    game_strings = data_dir / 'Strings'
+    if game_strings.is_dir() and str(game_strings) not in string_dirs:
+        string_dirs.append(str(game_strings))
+    plugin_set.string_search_dirs = string_dirs
     plugin_set.load_all()
-    log.info(f"Loaded {len(plugin_set)} plugins")
+    log.debug(f"Loaded {len(plugin_set)} plugins")
 
     # Load race and headpart data
     races_by_edid = load_races(plugin_set, ctx)
@@ -67,10 +79,10 @@ def main() -> int:
     race_headparts = build_race_headparts(list(plugin_set), headparts)
     race_tints = build_race_tints(list(plugin_set))
 
-    # Create patch
+    # Create patch (masters added lazily as FormIDs are remapped)
     patch_path = data_dir / config.patch_filename
-    masters = [p.file_path.name for p in plugin_set if p.file_path]
-    patch = Plugin.new_plugin(patch_path, masters=masters[:254])
+    patch = Plugin.new_plugin(patch_path)
+    patch.plugin_set = plugin_set
 
     # Build context
     furry = FurryContext(
@@ -111,7 +123,7 @@ def main() -> int:
 
     # Furrify armor
     if config.furrify_armor:
-        log.info("Merging armor overrides (addons + keywords)...")
+        log.info("Merging armor overrides...")
         merge_count = furry.merge_armor_overrides(plugin_set)
         log.info(f"Merged {merge_count} ARMO records")
 
@@ -135,11 +147,46 @@ def main() -> int:
     # Print statistics
     furry.print_statistics()
 
+    # Print warning/error summary
+    _print_log_summary()
+
     # Save
     patch.save()
     log.info(f"Saved patch: {patch_path}")
 
     return 0
+
+
+class _LogCounter(logging.Handler):
+    """Counts warnings and errors for end-of-run summary."""
+
+    def __init__(self):
+        super().__init__()
+        self.warnings: list[str] = []
+        self.errors: list[str] = []
+
+    def emit(self, record):
+        if record.levelno >= logging.ERROR:
+            self.errors.append(self.format(record))
+        elif record.levelno >= logging.WARNING:
+            self.warnings.append(self.format(record))
+
+
+_log_counter = _LogCounter()
+
+
+def _print_log_summary():
+    """Print summary of warnings and errors at end of run."""
+    if _log_counter.warnings:
+        print(f"\n{len(_log_counter.warnings)} warning(s):")
+        for msg in _log_counter.warnings:
+            print(f"  {msg}")
+    if _log_counter.errors:
+        print(f"\n{len(_log_counter.errors)} error(s):")
+        for msg in _log_counter.errors:
+            print(f"  {msg}")
+    if not _log_counter.warnings and not _log_counter.errors:
+        print("\nNo warnings or errors.")
 
 
 if __name__ == '__main__':

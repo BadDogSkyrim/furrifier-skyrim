@@ -8,14 +8,14 @@ furry race template, then verifies the result after save/reload.
 import pytest
 
 from conftest import (
-    requires_gamefiles, find_record, find_by_formid, run_verify_phase,
+    requires_gamefiles, find_by_formid, run_verify_phase,
 )
 
 
 pytestmark = requires_gamefiles
 
 
-def _resolve_formid_edid(form_id, patch_plugin, source_plugins):
+def _resolve_formid_edid(form_id, patch_plugin, plugin_set):
     """Resolve a FormID from a patch plugin to its EditorID.
 
     Uses the patch's master list to determine which source plugin
@@ -27,7 +27,7 @@ def _resolve_formid_edid(form_id, patch_plugin, source_plugins):
 
     master_name = masters[form_id.file_index].lower()
 
-    for plugin in source_plugins:
+    for plugin in plugin_set:
         if plugin.file_path and plugin.file_path.name.lower() == master_name:
             # In this plugin, local records use file_index = len(masters)
             local_idx = len(plugin.header.masters)
@@ -45,14 +45,13 @@ def _resolve_formid_edid(form_id, patch_plugin, source_plugins):
 class TestRaceFurrification:
     """Furrify races and verify results survive save/reload."""
 
-    def test_furrify_nord_race(self, furrify_and_check, all_plugins,
-                               races_by_edid):
+    def test_furrify_nord_race(self, furrify_and_check, plugin_set):
         """Furrify all races; check NordRace skin, armor race, and head parts."""
-        nord = races_by_edid.get('NordRace')
+        nord = plugin_set.get_record_by_edid('RACE', 'NordRace')
         assert nord is not None, "NordRace not found"
         form_id = nord.form_id
 
-        khajiit, _ = find_record(all_plugins, 'RACE', 'KhajiitRace')
+        khajiit = plugin_set.get_record_by_edid('RACE', 'KhajiitRace')
         assert khajiit is not None, "KhajiitRace not found"
 
 
@@ -79,7 +78,7 @@ class TestRaceFurrification:
             wnam = patched.get_subrecord('WNAM')
             assert wnam is not None, "WNAM missing"
             wnam_edid = _resolve_formid_edid(
-                wnam.get_form_id(), reloaded, all_plugins)
+                wnam.get_form_id(), reloaded, plugin_set)
             assert wnam_edid == 'YASLykaiosSkin', \
                 f"WNAM should be YASLykaiosSkin, got {wnam_edid}"
 
@@ -87,7 +86,7 @@ class TestRaceFurrification:
             rnam = patched.get_subrecord('RNAM')
             assert rnam is not None, "RNAM missing on furrified race"
             rnam_edid = _resolve_formid_edid(
-                rnam.get_form_id(), reloaded, all_plugins)
+                rnam.get_form_id(), reloaded, plugin_set)
             assert rnam_edid == 'KhajiitRace', \
                 f"RNAM should be KhajiitRace, got {rnam_edid}"
 
@@ -98,7 +97,7 @@ class TestRaceFurrification:
             head_edids = []
             for h in heads:
                 edid = _resolve_formid_edid(
-                    h.get_form_id(), reloaded, all_plugins)
+                    h.get_form_id(), reloaded, plugin_set)
                 if edid:
                     head_edids.append(edid)
 
