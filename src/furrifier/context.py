@@ -613,11 +613,14 @@ class FurryContext:
                         edid_sr.data = (new_edid + '\x00').encode('cp1252')
                         edid_sr.modified = True
 
-                    # Set RNAM to the furrified race
+                    # Set RNAM to the furrified vanilla race. Use the
+                    # vanilla record's normalized FormID — furrified_rec's
+                    # form_id is in patch master-list space, not load-order.
                     rnam_sr = new_preset.get_subrecord('RNAM')
                     if rnam_sr is not None:
-                        self.patch.write_form_id(
-                            rnam_sr, 0, furrified_rec.form_id)
+                        vanilla_norm = vanilla_rec.normalize_form_id(
+                            vanilla_rec.form_id)
+                        self.patch.write_form_id(rnam_sr, 0, vanilla_norm)
 
                     new_preset_fids.append(new_preset.form_id)
                     count += 1
