@@ -10,6 +10,8 @@ immediately, the verify callback is deferred until test_verify_saved_plugin
 saves, reopens the file, and runs all verify callbacks.
 """
 
+import struct
+
 import pytest
 
 from furrifier.models import HeadpartType, Sex
@@ -344,6 +346,51 @@ class TestNPCFurrification:
             assert patched is not None
             assert _has_headpart_type(patched, all_headparts, HeadpartType.HAIR), \
                 "Ingun should have hair"
+
+        furrify_and_check(write, verify)
+
+
+    def test_ingun_qnam_matches_skin_tone(self, furrify_and_check,
+                                           plugin_set):
+        """Ingun: QNAM is a lerp from neutral gray (127) to the skin tone
+        color, matching CK behavior."""
+        npc = plugin_set.get_record_by_edid('NPC_', 'Ingun')
+        assert npc is not None
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None
+
+            qnam = patched.get_subrecord('QNAM')
+            assert qnam is not None, "Should have QNAM"
+
+            tincs = patched.get_subrecords('TINC')
+            tinvs = patched.get_subrecords('TINV')
+            assert len(tincs) > 0, "Should have tint layers"
+
+            # First tint layer is the skin tone
+            r, g, b, _a = struct.unpack('<BBBB', tincs[0].data)
+            tinv = struct.unpack('<I', tinvs[0].data)[0] / 100.0
+
+            # CK formula: QNAM = lerp(127, color, tinv) / 255
+            expected_r = round(127 + (r - 127) * tinv) / 255.0
+            expected_g = round(127 + (g - 127) * tinv) / 255.0
+            expected_b = round(127 + (b - 127) * tinv) / 255.0
+
+            qr, qg, qb = struct.unpack('<fff', qnam.data)
+            assert abs(qr - expected_r) < 0.01, \
+                f"QNAM R={qr:.4f} != expected {expected_r:.4f}"
+            assert abs(qg - expected_g) < 0.01, \
+                f"QNAM G={qg:.4f} != expected {expected_g:.4f}"
+            assert abs(qb - expected_b) < 0.01, \
+                f"QNAM B={qb:.4f} != expected {expected_b:.4f}"
 
         furrify_and_check(write, verify)
 

@@ -250,7 +250,7 @@ class FurryContext:
             # Track skin tone for QNAM calculation
             if skin_tone_color is None:
                 skin_tone_color = color_rgba
-                skin_tone_intensity = choice.tinv
+                skin_tone_intensity = round(choice.tinv * 100) / 100.0
 
         # Calculate QNAM from skin tone tint
         if skin_tone_color:
@@ -338,11 +338,14 @@ class FurryContext:
                                 intensity: float) -> None:
         """Calculate and apply QNAM from resolved color and intensity.
 
-        QNAM = intensity * component / 255 for each RGB channel.
+        QNAM is a lerp from neutral gray (127) to the skin tone color,
+        with intensity as the interpolation factor. This matches CK
+        behavior: TINV=0 gives neutral gray (no tint effect), TINV=1
+        gives the full color.
         """
-        qr = round(intensity * color[0])
-        qg = round(intensity * color[1])
-        qb = round(intensity * color[2])
+        qr = round(127 + (color[0] - 127) * intensity)
+        qg = round(127 + (color[1] - 127) * intensity)
+        qb = round(127 + (color[2] - 127) * intensity)
 
         record.add_subrecord('QNAM', struct.pack('<fff',
                              qr / 255.0, qg / 255.0, qb / 255.0))
