@@ -107,10 +107,10 @@ def _configure_eye_equivalents(ctx):
 
     # =========== Male human eyes → DayPred ===========
     a('MaleEyesHumanAmber', 'YASDayPredMaleEyesAmber')
-    a('MaleEyesHumanAmberBlindRight', 'YASDayPredMaleEyesAlbino')
+    a('MaleEyesHumanAmberBlindRight', 'YASDayPredMaleEyesAmberBlindR')
     a('MaleEyesHumanBlind', 'YASDayPredMaleEyesBlind')
     a('MaleEyesHumanBrightGreen', 'YASDayPredMaleEyesGreen')
-    a('MaleEyesHumanBrightGreenBlindRight', 'YASDayPredMaleEyesGreen')
+    a('MaleEyesHumanBrightGreenBlindRight', 'YASDayPredMaleEyesGreenBlindR')
     a('MaleEyesHumanBrown', 'YASDayPredMaleEyesBrownDark')
     a('MaleEyesHumanBrownBlindLeft', 'YASDayPredMaleEyesAmberBlindL')
     a('MaleEyesHumanBrownBlindRight', 'YASDayPredMaleEyesAmberBlindR')
@@ -177,7 +177,7 @@ def _configure_eye_equivalents(ctx):
     a('FemaleEyesOrcDarkGrey', 'YASDayPredFemEyesAlbino')
     a('FemaleEyesOrcIceBlue', 'YASDayPredFemEyesBlueDark')
     a('FemaleEyesOrcIceBlueBlindRight', 'YASDayPredFemEyesGreenBlindR')
-    a('FemaleEyesOrcRed', 'YASDayPredFemEyesBlind')
+    a('FemaleEyesOrcRed', 'YASDayPredFemEyesRed')
     a('FemaleEyesOrcRedBlindRight', 'YASDayPredFemEyesRedBlindR')
     a('FemaleEyesOrcVampire', 'YASDayPredFemEyesVampire')
     a('FemaleEyesOrcYellow', 'YASDayPredFemEyesYellow')

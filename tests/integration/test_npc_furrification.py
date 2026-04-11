@@ -119,6 +119,18 @@ def _has_headpart_type(record, all_headparts, hp_type):
     return False
 
 
+def _get_eye_edid(record, all_headparts):
+    """Find the EditorID of the NPC's eye headpart, or None."""
+    for sr in record.get_subrecords('PNAM'):
+        obj_id = sr.get_form_id().object_index
+        for hp in all_headparts.values():
+            if hp.record and hp.record.form_id.object_index == obj_id:
+                if hp.hp_type == HeadpartType.EYES:
+                    return hp.editor_id
+                break
+    return None
+
+
 def _tint_layer_count(record):
     """Count tint layers on the NPC (number of TINI subrecords)."""
     return len(record.get_subrecords('TINI'))
@@ -422,6 +434,50 @@ class TestNPCFurrification:
         furrify_and_check(write, verify)
 
 
+    def test_rune_gets_mustache_layer(self, furrify_and_check, plugin_set,
+                                      race_tints):
+        """Rune (Kettu male) must have the Mustache01 tint layer.
+
+        Mustache01 lives in its own 'Mustache' class with a single asset,
+        so every Kettu male should receive it regardless of hash outcome.
+        """
+        from furrifier.models import Sex as SexEnum
+
+        npc = plugin_set.get_record_by_edid('NPC_', 'Rune')
+        assert npc is not None
+        form_id = npc.form_id
+
+        # Look up the Mustache asset TINI indices for Kettu male via the
+        # loaded race tint data — more robust than hardcoding.
+        key = ('YASKettuRace', SexEnum.MALE_ADULT)
+        assert key in race_tints, "Kettu male tint data not loaded"
+        mustache_assets = race_tints[key].classes.get('Mustache', [])
+        assert mustache_assets, \
+            "YASKettuRace male has no Mustache class — classification bug?"
+        mustache_tinis = {a.index for a in mustache_assets}
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None
+
+            applied_tinis = set()
+            for sr in patched.get_subrecords('TINI'):
+                applied_tinis.add(sr.get_uint16())
+
+            assert mustache_tinis & applied_tinis, \
+                f"Rune (Kettu male) did not get a Mustache tint. " \
+                f"Expected one of {sorted(mustache_tinis)}, " \
+                f"applied TINIs: {sorted(applied_tinis)}"
+
+        furrify_and_check(write, verify)
+
+
     def test_arcadia_imperial_female(self, furrify_and_check, plugin_set,
                                       races_by_obj):
         """Arcadia: Imperial female furrifies to Kettu."""
@@ -443,6 +499,66 @@ class TestNPCFurrification:
                 f"Arcadia race should stay ImperialRace, got {race_edid}"
             assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
             assert _tint_layer_count(patched) > 0, "Should have tint layers"
+
+        furrify_and_check(write, verify)
+
+
+    def test_aerin_not_blind(self, furrify_and_check, plugin_set,
+                             all_headparts):
+        """Aerin: vanilla eye MaleEyesHumanHazelBrown (sighted), so the
+        furry eye must also be sighted. Regression: the fallback used to
+        randomly pick YASNightPredMaleEyesBlind (full blind)."""
+        npc = plugin_set.get_record_by_edid('NPC_', 'Aerin')
+        assert npc is not None
+        form_id = npc.form_id
+
+        vanilla_eye = _get_eye_edid(npc, all_headparts)
+        assert vanilla_eye == 'MaleEyesHumanHazelBrown', \
+            f"Test assumes Aerin has HazelBrown eyes, got {vanilla_eye}"
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None
+            eye_edid = _get_eye_edid(patched, all_headparts)
+            assert eye_edid is not None, "Aerin should have an eye headpart"
+            assert 'Blind' not in eye_edid, \
+                f"Aerin is not blind in vanilla — furry eye should not be blind, got {eye_edid}"
+
+        furrify_and_check(write, verify)
+
+
+    def test_calixto_not_blind(self, furrify_and_check, plugin_set,
+                               all_headparts):
+        """Calixto: vanilla eye MaleEyesHumanBrownBloodShot (sighted), so
+        the furry eye must also be sighted. Regression: fallback used to
+        pick YASNightPredMaleEyesOrangeBlindLeft (half-blind)."""
+        npc = plugin_set.get_record_by_edid('NPC_', 'Calixto')
+        assert npc is not None
+        form_id = npc.form_id
+
+        vanilla_eye = _get_eye_edid(npc, all_headparts)
+        assert vanilla_eye == 'MaleEyesHumanBrownBloodShot', \
+            f"Test assumes Calixto has BrownBloodShot eyes, got {vanilla_eye}"
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None
+            eye_edid = _get_eye_edid(patched, all_headparts)
+            assert eye_edid is not None, "Calixto should have an eye headpart"
+            assert 'Blind' not in eye_edid, \
+                f"Calixto is not blind in vanilla — furry eye should not be blind, got {eye_edid}"
 
         furrify_and_check(write, verify)
 
@@ -571,6 +687,37 @@ class TestNPCFurrification:
                 f"Ancano race should stay HighElfRace, got {race_edid}"
             assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
             assert _tint_layer_count(patched) > 0, "Should have tint layers"
+
+        furrify_and_check(write, verify)
+
+
+    def test_enc_warlock_highelf_stays_blind(self, furrify_and_check,
+                                             plugin_set, all_headparts):
+        """EncWarlockAtro04HighElfM: vanilla eye MaleEyesHighElfYellowBlindRight
+        (half-blind right) — the furry eye must also be blind. Maha has
+        no BlindR variant, so fallback is the Maha BlindL eye per spec
+        (half-blind on the other side is acceptable)."""
+        npc = plugin_set.get_record_by_edid('NPC_', 'EncWarlockAtro04HighElfM')
+        assert npc is not None
+        form_id = npc.form_id
+
+        vanilla_eye = _get_eye_edid(npc, all_headparts)
+        assert vanilla_eye == 'MaleEyesHighElfYellowBlindRight', \
+            f"Test assumes half-blind right vanilla eye, got {vanilla_eye}"
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None
+            eye_edid = _get_eye_edid(patched, all_headparts)
+            assert eye_edid is not None, "NPC should have an eye headpart"
+            assert 'Blind' in eye_edid, \
+                f"Vanilla is half-blind right — furry eye should be blind, got {eye_edid}"
 
         furrify_and_check(write, verify)
 

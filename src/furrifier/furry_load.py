@@ -223,9 +223,12 @@ _TINT_PATH_KEYWORDS = [
     ('Lips', 'Lip Color'),
     ('Neck', 'Neck'),
     ('Nose', 'Nose'),
+    # Mustache/Moustache must come before Muzzle so they don't accidentally
+    # fall into the Muzzle class (they live in their own class because they
+    # are always-applied overlays, not muzzle alternatives).
+    ('Mustache', 'Mustache'),
+    ('Moustache', 'Mustache'),
     ('Muzzle', 'Muzzle'),
-    ('Mustache', 'Muzzle'),
-    ('Moustache', 'Muzzle'),
     ('Stripes', 'Stripes'),
     ('SkinTint', 'Skin Tone'),
     ('Spots', 'Spots'),

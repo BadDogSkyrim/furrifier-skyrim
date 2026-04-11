@@ -39,8 +39,8 @@ class TestTintLayer:
         assert TintLayer.SKIN_TONE == 0
 
     def test_decoration_boundary(self):
-        assert TintLayer.DECORATION_LO == 18
-        assert TintLayer.BLACKBLOOD == 18
+        assert TintLayer.DECORATION_LO == 19
+        assert TintLayer.BLACKBLOOD == 19
 
 
 class TestBodypart:

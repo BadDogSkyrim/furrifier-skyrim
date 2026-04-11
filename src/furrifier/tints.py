@@ -21,7 +21,7 @@ TINT_CLASS_NAMES = [
     'Skin Tone', 'Cheek Color Lower', 'Chin', 'EyeSocket Lower',
     'EyeSocket Upper', 'Eyeliner', 'Forehead', 'Laugh Lines',
     'Lip Color', 'Neck', 'Nose', 'Cheek Color', 'Muzzle',
-    'Stripes', 'Spots', 'Mask', 'Brow', 'Ear',
+    'Mustache', 'Stripes', 'Spots', 'Mask', 'Brow', 'Ear',
     'BlackBlood', 'Bothiah', 'Forsworn', 'Frekles',
     'NordWarPaint', 'DarkElfWarPaint', 'ImperialWarPaint',
     'OrcWarPaint', 'RedguardWarPaint', 'WoodElfWarPaint',

@@ -7,6 +7,7 @@ BDFurrySkyrim_Furrifier.pas (label scoring, best match selection).
 from __future__ import annotations
 
 import logging
+import re
 from typing import Optional
 
 from esplib import Record
@@ -16,6 +17,56 @@ from .race_defs import RaceDefContext
 from .util import hash_string
 
 log = logging.getLogger(__name__)
+
+
+# Eye blindness detection. Headpart EditorIDs encode blindness state in
+# their name: plain 'Blind' = fully blind, 'BlindLeft' / 'BlindL' = half
+# blind on the left eye, 'BlindRight' / 'BlindR' = half blind on the
+# right. The abbreviated forms can appear mid-name in camelCase (e.g.
+# 'YASCatDayMaleEyesBlindLAmber'), so the regex ends each form at
+# end-of-string, a non-letter, or an uppercase letter.
+_BLIND_LEFT_RE = re.compile(r'Blind(Left|L(?=[A-Z]|$|[^a-zA-Z]))')
+_BLIND_RIGHT_RE = re.compile(r'Blind(Right|R(?=[A-Z]|$|[^a-zA-Z]))')
+_BLIND_FULL_RE = re.compile(r'Blind(?![a-zA-Z])')
+
+
+def _blindness_state(edid: Optional[str]) -> str:
+    """Parse an eye headpart EditorID into its blindness state.
+
+    Returns one of: 'none', 'left', 'right', 'full'.
+    """
+    if not edid:
+        return 'none'
+    if _BLIND_LEFT_RE.search(edid):
+        return 'left'
+    if _BLIND_RIGHT_RE.search(edid):
+        return 'right'
+    if _BLIND_FULL_RE.search(edid):
+        return 'full'
+    return 'none'
+
+
+# Priority tiers for matching a vanilla eye's blindness state to furry
+# candidates. Each tier is a set of acceptable states; tiers are tried
+# in order until one produces at least one candidate. Half-blind falls
+# back to the other side, then sighted (NEVER full blind — per spec).
+_BLINDNESS_PRIORITY: dict[str, list[set[str]]] = {
+    'none':  [{'none'}],
+    'left':  [{'left'}, {'right'}, {'none'}],
+    'right': [{'right'}, {'left'}, {'none'}],
+    'full':  [{'full'}, {'left', 'right'}, {'none'}],
+}
+
+
+def _filter_by_blindness(candidates: list[HeadpartInfo],
+                         target_state: str) -> list[HeadpartInfo]:
+    """Return the highest-priority tier of candidates matching target_state."""
+    for tier in _BLINDNESS_PRIORITY[target_state]:
+        matches = [c for c in candidates
+                   if _blindness_state(c.editor_id) in tier]
+        if matches:
+            return matches
+    return []
 
 
 def labels_conflict(label1: str, label2: str, ctx: RaceDefContext) -> bool:
@@ -92,10 +143,16 @@ def find_best_headpart_match(
     """Find the best furry headpart to replace a vanilla headpart.
 
     Uses headpart equivalents (1:1 mappings) if defined, otherwise
-    scores all available headparts by label matching.
+    scores all available headparts by label matching. For eye headparts,
+    candidates are filtered to match the vanilla eye's blindness state.
     """
     hp_type = old_hp.hp_type
     sex_key = int(npc_sex)
+
+    # For eyes, constrain candidates by the vanilla eye's blindness state
+    # so a sighted NPC can't end up with a blind furry eye (and vice versa).
+    target_blind = (_blindness_state(old_hp.editor_id)
+                    if hp_type == HeadpartType.EYES else None)
 
     # Check for explicit headpart equivalents
     if old_hp.equivalents:
@@ -108,6 +165,8 @@ def find_best_headpart_match(
             key = (hp_type, sex_key, furry_race_id)
             if key in race_headparts and equiv_id in race_headparts[key]:
                 candidates.append(equiv)
+        if target_blind is not None:
+            candidates = _filter_by_blindness(candidates, target_blind)
         if candidates:
             idx = hash_string(npc_alias, 317, len(candidates))
             return candidates[idx]
@@ -118,14 +177,17 @@ def find_best_headpart_match(
         log.debug(f"No headparts of type {hp_type.name} for {furry_race_id}/{npc_sex.name}")
         return None
 
-    available = race_headparts[key]  # set of headpart EditorIDs
+    available = [all_headparts[hp_id] for hp_id in race_headparts[key]
+                 if hp_id in all_headparts]
+    if target_blind is not None:
+        available = _filter_by_blindness(available, target_blind)
+    if not available:
+        return None
+
     best_score = -1000
     best_matches: list[HeadpartInfo] = []
 
-    for hp_id in available:
-        hp = all_headparts.get(hp_id)
-        if hp is None:
-            continue
+    for hp in available:
         hp_labels = hp.labels
         if not hp_labels:
             score = 0

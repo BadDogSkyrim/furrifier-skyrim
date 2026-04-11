@@ -61,29 +61,30 @@ class TintLayer(IntEnum):
     NOSE = 10
     CHEEK = 11
     MUZZLE = 12
-    STRIPES = 13
-    SPOTS = 14
-    MASK = 15
-    BROW = 16
-    EAR = 17
+    MUSTACHE = 13
+    STRIPES = 14
+    SPOTS = 15
+    MASK = 16
+    BROW = 17
+    EAR = 18
     # Decoration layers (only applied if the NPC already has them)
-    BLACKBLOOD = 18
-    BOTHIAH = 19
-    FORSWORN = 20
-    FRECKLES = 21
-    NORD = 22
-    DARKELF = 23
-    IMPERIAL = 24
-    ORC = 25
-    REDGUARD = 26
-    WOODELF = 27
-    HAND = 28
-    SKULL = 29
-    PAINT = 30
-    DIRT = 31
+    BLACKBLOOD = 19
+    BOTHIAH = 20
+    FORSWORN = 21
+    FRECKLES = 22
+    NORD = 23
+    DARKELF = 24
+    IMPERIAL = 25
+    ORC = 26
+    REDGUARD = 27
+    WOODELF = 28
+    HAND = 29
+    SKULL = 30
+    PAINT = 31
+    DIRT = 32
 
-    DECORATION_LO = 18  # First decoration layer index
-    COUNT = 32
+    DECORATION_LO = 19  # First decoration layer index
+    COUNT = 33
 
 
 class Bodypart(IntFlag):
