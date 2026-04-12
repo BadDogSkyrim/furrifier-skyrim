@@ -141,6 +141,9 @@ def main() -> int:
         furry_to_vanilla: dict[str, list[str]] = {}
         for a in ctx.assignments.values():
             furry_to_vanilla.setdefault(a.furry_id, []).append(a.vanilla_id)
+        for sub in ctx.subraces.values():
+            race_assignments[sub.name] = sub.furry_id
+            furry_to_vanilla.setdefault(sub.furry_id, []).append(sub.name)
         furrify_all_schlongs(plugin_set, patch, race_assignments,
                              furry_to_vanilla, races)
 

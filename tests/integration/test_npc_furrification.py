@@ -951,6 +951,32 @@ class TestNPCFurrification:
         furrify_and_check(write, verify)
 
 
+    # -- Winterhold subrace --
+
+    def test_dagur_becomes_winterhold(self, furrify_and_check, plugin_set,
+                                      races_by_obj):
+        """Dagur (Frozen Hearth innkeeper, TownWinterholdFaction) should
+        become YASWinterholdRace via faction-based subrace assignment."""
+        npc = plugin_set.get_record_by_edid('NPC_', 'Dagur')
+        assert npc is not None, "Dagur not found in load order"
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None, "Dagur should be furrifiable"
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None, "Dagur not in saved plugin"
+            race_edid = _get_race_edid(patched, races_by_obj, reloaded)
+            assert race_edid == 'YASWinterholdRace', \
+                f"Dagur should be Winterhold Denizen, got {race_edid}"
+
+        furrify_and_check(write, verify)
+
+
 # ===================================================================
 # Pure logic tests (no save/reload needed)
 # ===================================================================
