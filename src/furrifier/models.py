@@ -132,7 +132,6 @@ class RaceAssignment:
     """Maps a vanilla race to its furry replacement."""
     vanilla_id: str         # Vanilla race EditorID (e.g. 'NordRace')
     furry_id: str           # Furry race EditorID (e.g. 'BDLykaiosRace')
-    furry_class: str        # Race class (e.g. 'dog', 'cat')
     labels: list = field(default_factory=list)
 
     # Populated during setup
@@ -147,7 +146,6 @@ class Subrace:
     display_name: str       # e.g. 'Reachman'
     vanilla_basis: str      # Base vanilla race EditorID
     furry_id: str           # Furry race EditorID
-    furry_class: str        # Race class
 
 
 @dataclass

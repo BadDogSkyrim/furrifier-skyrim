@@ -1,0 +1,16 @@
+# Furrifier user race catalog — empty template.
+#
+# Add headpart equivalents and labels here to customize how
+# furrifier handles a furry race mod of your choice. This file
+# is merged alongside yas_races.toml and every other *.toml in
+# this folder at load time, so you can add data without editing
+# the shipped files. See yas_races.toml for a full example.
+#
+# Example:
+#
+# headpart_equivalents = [
+#   {vanilla = "MaleEyesHumanAmber", furry = "MyCustomMaleEyesAmber"},
+# ]
+#
+# [headpart_labels]
+# MyCustomHairLongBraids = "LONG,BRAIDS,NOBLE"

@@ -71,7 +71,7 @@ class TestFurrifyRacePresets:
                                     [lykaios, preset_npc])
 
         ctx = RaceDefContext()
-        ctx.set_race('NordRace', 'YASLykaiosRace', 'DOG')
+        ctx.set_race('NordRace', 'YASLykaiosRace')
 
         races = {
             'NordRace': nord,
@@ -148,7 +148,7 @@ class TestFurrifyRacePresets:
                    if r.editor_id == 'YASLykaiosRace'][0]
 
         ctx = RaceDefContext()
-        ctx.set_race('DLC1NordRace', 'YASLykaiosRace', 'DOG')
+        ctx.set_race('DLC1NordRace', 'YASLykaiosRace')
 
         patch = Plugin.new_plugin(tmp_path / 'TestPatch.esp')
         patch.plugin_set = ps
@@ -193,7 +193,7 @@ class TestFurrifyRacePresets:
         furry_plugin = _make_plugin('FurryMod.esm', [lykaios])
 
         ctx = RaceDefContext()
-        ctx.set_race('NordRace', 'YASLykaiosRace', 'DOG')
+        ctx.set_race('NordRace', 'YASLykaiosRace')
 
         races = {'NordRace': nord, 'YASLykaiosRace': lykaios}
         patch = Plugin.new_plugin(

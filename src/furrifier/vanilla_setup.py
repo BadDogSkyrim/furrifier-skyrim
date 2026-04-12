@@ -323,22 +323,14 @@ def unalias(editor_id: str) -> str:
     return _ALIAS_REVERSE.get(editor_id, editor_id)
 
 
-# NPCs with forced race assignments
+# Vanilla NPC race corrections: NPCs whose in-game race assignment is
+# arguably wrong and should always be overridden to a different vanilla
+# race, regardless of which scheme or furry mod is in use.
+#
+# (Scheme-dependent overrides like the Reachmen list live in the
+# scheme TOML files under [npc_races], not here — they only make
+# sense when a Reachman subrace has been defined.)
 NPC_RACE_OVERRIDES = {
-    'Ainethach': 'YASReachmanRace',
-    'Belchimac': 'YASReachmanRace',
-    'Cosnach': 'YASReachmanRace',
-    'Duach': 'YASReachmanRace',
-    'Enmon': 'YASReachmanRace',
-    'Gralnach': 'YASReachmanRaceChild',
-    'Mena': 'YASReachmanRace',
-    'Rondach': 'YASReachmanRace',
-    'MS01Weylin': 'YASReachmanRace',
-    'Anton': 'YASReachmanRace',
-    'Hathrasil': 'YASReachmanRace',
-    'Omluag': 'YASReachmanRace',
-    'Madanach': 'YASReachmanRace',
-    'NeposTheNose': 'YASReachmanRace',
     'DLC2RRCresciusCaerellius': 'NordRace',
     'SeptimusSignus': 'ImperialRace',
     'BrotherVerulus': 'ImperialRace',

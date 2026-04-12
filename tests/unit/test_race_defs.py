@@ -19,12 +19,11 @@ class TestLoadScheme:
         ctx = load_scheme('all_races')
         assert 'NordRace' in ctx.assignments
         assert ctx.assignments['NordRace'].furry_id == 'YASLykaiosRace'
-        assert ctx.assignments['NordRace'].furry_class == 'DOG'
 
     def test_all_races_has_elves(self):
         ctx = load_scheme('all_races')
         assert 'HighElfRace' in ctx.assignments
-        assert ctx.assignments['HighElfRace'].furry_class == 'CAT'
+        assert ctx.assignments['HighElfRace'].furry_id == 'YASMahaRace'
 
     def test_all_races_has_reachman(self):
         ctx = load_scheme('all_races')
@@ -52,6 +51,24 @@ class TestLoadScheme:
     def test_cats_dogs_no_sailors(self):
         ctx = load_scheme('cats_dogs')
         assert 'YASSailorRace' not in ctx.subraces
+
+    def test_race_catalog_loaded_into_ctx(self):
+        """Regression: every scheme gets headpart equivalents and labels
+        from races/*.toml, not only the scheme file itself. A previous
+        pass had a TOML-scoping bug that silently swallowed headpart_equivalents
+        into [npc_races]; this test would have caught it."""
+        for scheme in SCHEMES:
+            ctx = load_scheme(scheme)
+            assert len(ctx.headpart_equivalents) > 0, (
+                f"scheme {scheme!r} loaded with no headpart_equivalents — "
+                f"races/*.toml catalog data not being merged"
+            )
+            assert len(ctx.headpart_labels) > 0, (
+                f"scheme {scheme!r} loaded with no headpart_labels"
+            )
+            # Spot-check a known entry from races/yas_races.toml.
+            assert 'MaleEyesHumanAmber' in ctx.headpart_equivalents
+            assert 'YASDayPredMaleEyesAmber' in ctx.headpart_equivalents['MaleEyesHumanAmber']
 
 
 class TestRaceDefContext:

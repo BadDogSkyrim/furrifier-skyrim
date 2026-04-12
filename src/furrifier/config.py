@@ -19,7 +19,7 @@ class FurrifierConfig:
     furrify_armor: bool = True
     furrify_npcs_male: bool = True
     furrify_npcs_female: bool = True
-    furrify_schlongs: bool = False
+    furrify_schlongs: bool = True
     max_tint_layers: int = 200
     debug: bool = False
     log_file: Optional[str] = None
@@ -35,7 +35,7 @@ class FurrifierConfig:
             furrify_armor=not args.no_armor,
             furrify_npcs_male=not args.no_male,
             furrify_npcs_female=not args.no_female,
-            furrify_schlongs=args.schlongs,
+            furrify_schlongs=not args.no_schlongs,
             debug=args.debug,
             log_file=args.log_file,
             game_data_dir=args.data_dir,
@@ -48,7 +48,7 @@ from typing import Optional
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog='furrifier',
+        prog='furrify_skyrim',
         description='Batch-convert Skyrim NPCs to furry races using esplib.',
     )
     parser.add_argument('--patch', default='YASNPCPatch.esp',
@@ -62,8 +62,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help='Skip male NPC furrification')
     parser.add_argument('--no-female', action='store_true',
                         help='Skip female NPC furrification')
-    parser.add_argument('--schlongs', action='store_true',
-                        help='Enable SOS compatibility')
+    parser.add_argument('--no-schlongs', action='store_true',
+                        help='Disable SOS (schlong) compatibility')
     parser.add_argument('--data-dir',
                         help='Path to Skyrim Data directory (auto-detected if omitted)')
     parser.add_argument('--debug', action='store_true',

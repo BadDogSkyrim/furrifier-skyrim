@@ -85,9 +85,20 @@ class TestAliases:
 
 
 class TestNPCRaceOverrides:
-    def test_reachmen(self):
-        assert NPC_RACE_OVERRIDES['Madanach'] == 'YASReachmanRace'
-
     def test_correction(self):
         # Septimus is Imperial despite being in Skyrim.esm as Nord
         assert NPC_RACE_OVERRIDES['SeptimusSignus'] == 'ImperialRace'
+
+    def test_reachmen_moved_to_schemes(self):
+        """Reachman NPC overrides no longer live in vanilla_setup —
+        they're scheme-dependent (need a Reachman subrace defined) and
+        now live in schemes/*.toml under [npc_races]. Verify the
+        all_races scheme picks them up via load_scheme."""
+        from furrifier.race_defs import load_scheme
+        ctx = load_scheme('all_races')
+        assert ctx.npc_races.get('Madanach') == 'YASReachmanRace'
+        assert ctx.npc_races.get('Ainethach') == 'YASReachmanRace'
+        assert ctx.npc_races.get('Gralnach') == 'YASReachmanRaceChild'
+        # And they are NOT in the vanilla_setup dict anymore.
+        assert 'Madanach' not in NPC_RACE_OVERRIDES
+        assert 'Gralnach' not in NPC_RACE_OVERRIDES

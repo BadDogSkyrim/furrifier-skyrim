@@ -1,0 +1,379 @@
+# Furrifier race catalog: yas_races
+# Describes the furry headparts available in a furry race mod:
+# which vanilla headparts they're equivalent to, and what
+# labels apply to the furry headparts for label-based matching.
+#
+# This file applies to every scheme. If a race has no catalog
+# entry, furrifier uses ESP fallback paths — races without
+# catalog data still work, they just get generic matching.
+#
+# Drop additional *.toml files into this folder to add or
+# override data. All races/*.toml files are merged at load time.
+
+# Vanilla headpart -> furry equivalent. The same vanilla id may
+# appear multiple times (one entry per target furry race).
+headpart_equivalents = [
+  {vanilla = "MaleEyesHumanAmber"                   , furry = "YASDayPredMaleEyesAmber"},
+  {vanilla = "MaleEyesHumanAmberBlindRight"         , furry = "YASDayPredMaleEyesAmberBlindR"},
+  {vanilla = "MaleEyesHumanBlind"                   , furry = "YASDayPredMaleEyesBlind"},
+  {vanilla = "MaleEyesHumanBrightGreen"             , furry = "YASDayPredMaleEyesGreen"},
+  {vanilla = "MaleEyesHumanBrightGreenBlindRight"   , furry = "YASDayPredMaleEyesGreenBlindR"},
+  {vanilla = "MaleEyesHumanBrown"                   , furry = "YASDayPredMaleEyesBrownDark"},
+  {vanilla = "MaleEyesHumanBrownBlindLeft"          , furry = "YASDayPredMaleEyesAmberBlindL"},
+  {vanilla = "MaleEyesHumanBrownBlindRight"         , furry = "YASDayPredMaleEyesAmberBlindR"},
+  {vanilla = "MaleEyesHumanBrownBloodShot"          , furry = "YASDayPredMaleEyesBrownDark"},
+  {vanilla = "MaleEyesHumanDarkBlue"                , furry = "YASDayPredMaleEyesBlueDark"},
+  {vanilla = "MaleEyesHumanDemon"                   , furry = "YASDayPredMaleEyesRed"},
+  {vanilla = "MaleEyesHumanGreenHazelLeft"          , furry = "YASDayPredMaleEyesMixBlueBrown"},
+  {vanilla = "MaleEyesHumanGrey"                    , furry = "YASDayPredMaleEyesGrey"},
+  {vanilla = "MaleEyesHumanHazel"                   , furry = "YASDayPredMaleEyesYellow"},
+  {vanilla = "MaleEyesHumanHazelBrown"              , furry = "YASDayPredMaleEyesMixYellowGreen"},
+  {vanilla = "MaleEyesHumanIceBlue"                 , furry = "YASDayPredMaleEyesBlue"},
+  {vanilla = "MaleEyesHumanLightBlue"               , furry = "YASDayPredMaleEyesSnow"},
+  {vanilla = "MaleEyesHumanLightBlueBlindLeft"      , furry = "YASDayPredMaleEyesBlueGreyBlindL"},
+  {vanilla = "MaleEyesHumanLightBlueBloodShot"      , furry = "YASDayPredMaleEyesSnow"},
+  {vanilla = "MaleEyesHumanLightGrey"               , furry = "YASDayPredMaleEyesGrey"},
+  {vanilla = "MaleEyesHumanLightIceGreyBlindLeft"   , furry = "YASDayPredMaleEyesGreenBlindL"},
+  {vanilla = "MaleEyesHumanVampire"                 , furry = "YASDayPredMaleEyesVampire"},
+  {vanilla = "FemaleEyesHumanAmber"                 , furry = "YASDayPredFemEyesAmber"},
+  {vanilla = "FemaleEyesHumanAmberBlindLeft"        , furry = "YASDayPredFemEyesBlueBlindL"},
+  {vanilla = "FemaleEyesHumanBlind"                 , furry = "YASDayPredFemEyesBlind"},
+  {vanilla = "FemaleEyesHumanBrightGreen"           , furry = "YASDayPredFemEyesGreen"},
+  {vanilla = "FemaleEyesHumanBrown"                 , furry = "YASDayPredFemEyesBrownDark"},
+  {vanilla = "FemaleEyesHumanBrownBlindRight"       , furry = "YASDayPredMaleEyesAmberBlindR"},
+  {vanilla = "FemaleEyesHumanBrownBloodShot"        , furry = "YASDayPredFemEyesRed"},
+  {vanilla = "FemaleEyesHumanDarkBlue"              , furry = "YASDayPredFemEyesBlue"},
+  {vanilla = "FemaleEyesHumanDarkBlueBlindRight"    , furry = "YASDayPredFemEyesGreenBlindR"},
+  {vanilla = "FemaleEyesHumanDemon"                 , furry = "YASNightPredFemEyesRedNarrow"},
+  {vanilla = "FemaleEyesHumanGreenHazel"            , furry = "YASDayPredFemEyesGreen"},
+  {vanilla = "FemaleEyesHumanGrey"                  , furry = "YASDayPredFemEyesLilac"},
+  {vanilla = "FemaleEyesHumanGreyBlindLeft"         , furry = "YASDayPredFemEyesGreenBlindL"},
+  {vanilla = "FemaleEyesHumanHazel"                 , furry = "YASDayPredFemEyesAmber"},
+  {vanilla = "FemaleEyesHumanHazelBrown"            , furry = "YASDayPredFemEyesAmber"},
+  {vanilla = "FemaleEyesHumanIceBlue"               , furry = "YASDayPredFemEyesAlbino"},
+  {vanilla = "FemaleEyesHumanLightBlue"             , furry = "YASDayPredFemEyesBlueDark"},
+  {vanilla = "FemaleEyesHumanLightBlueBloodShot"    , furry = "YASDayPredFemEyesRed"},
+  {vanilla = "FemaleEyesHumanLightGrey"             , furry = "YASDayPredFemEyesAlbino"},
+  {vanilla = "FemaleEyesHumanVampire"               , furry = "YASDayPredFemEyesVampire"},
+  {vanilla = "FemaleEyesHumanYellow"                , furry = "YASDayPredFemEyesYellow"},
+  {vanilla = "FemaleEyesDarkElfBlind"               , furry = "YASDayPredFemEyesBlind"},
+  {vanilla = "FemaleEyesDarkElfDeepRed"             , furry = "YASNightPredFemEyesRed"},
+  {vanilla = "FemaleEyesDarkElfDeepRed2"            , furry = "YASNightPredFemEyesGreen"},
+  {vanilla = "FemaleEyesDarkElfDeepRed2BlindRight"  , furry = "YASNightPredFemEyesAmberBlindR"},
+  {vanilla = "FemaleEyesDarkElfDeepRedBlindLeft"    , furry = "YASDayPredFemEyesAmberBlindL"},
+  {vanilla = "FemaleEyesDarkElfRed"                 , furry = "YASNightPredFemEyesRed"},
+  {vanilla = "FemaleEyesDarkElfUnique"              , furry = "YASNightPredFemEyesGreen"},
+  {vanilla = "FemaleEyesDremora"                    , furry = "YASNIghtPredFemEyesOrangeNarrow"},
+  {vanilla = "FemaleEyesHighElfDarkYellow"          , furry = "YASDayPredFemEyesGold"},
+  {vanilla = "FemaleEyesHighElfOrange"              , furry = "YASDayPredFemEyesGold"},
+  {vanilla = "FemaleEyesHighElfOrangeBlindRight"    , furry = "YASDayPredFemEyesGreenBlindR"},
+  {vanilla = "FemaleEyesHighElfYellow"              , furry = "YASDayPredFemEyesYellow"},
+  {vanilla = "FemaleEyesHighElfYellowBlindLeft"     , furry = "YASDayPredFemEyesAmberBlindL"},
+  {vanilla = "FemaleEyesElfBlind"                   , furry = "YASDayPredFemEyesBlind"},
+  {vanilla = "FemaleEyesOrcBlind"                   , furry = "YASDayPredFemEyesBlind"},
+  {vanilla = "FemaleEyesOrcDarkGrey"                , furry = "YASDayPredFemEyesAlbino"},
+  {vanilla = "FemaleEyesOrcIceBlue"                 , furry = "YASDayPredFemEyesBlueDark"},
+  {vanilla = "FemaleEyesOrcIceBlueBlindRight"       , furry = "YASDayPredFemEyesGreenBlindR"},
+  {vanilla = "FemaleEyesOrcRed"                     , furry = "YASDayPredFemEyesRed"},
+  {vanilla = "FemaleEyesOrcRedBlindRight"           , furry = "YASDayPredFemEyesRedBlindR"},
+  {vanilla = "FemaleEyesOrcVampire"                 , furry = "YASDayPredFemEyesVampire"},
+  {vanilla = "FemaleEyesOrcYellow"                  , furry = "YASDayPredFemEyesYellow"},
+  {vanilla = "FemaleEyesOrcYellowBlindLeft"         , furry = "YASNightPredFemEyesYellowBlindLeft"},
+  {vanilla = "FemaleEyesWoodElfBlind"               , furry = "YASDayPredFemEyesBlind"},
+  {vanilla = "FemaleEyesWoodElfBrown"               , furry = "YASNightPredFemEyesBrown"},
+  {vanilla = "FemaleEyesWoodElfDeepBrown"           , furry = "YASNightPredFemEyesBrownDark"},
+  {vanilla = "FemaleEyesWoodElfDeepBrownBlindLeft"  , furry = "YASNightPredFemEyesYellowBlindLeft"},
+  {vanilla = "FemaleEyesWoodElfDeepViolet"          , furry = "YASNIghtPredFemEyesIce"},
+  {vanilla = "FemaleEyesWoodElfDeepVioletBlindRight", furry = "YASNightPredFemEyesYellowBlindR"},
+  {vanilla = "FemaleEyesWoodElfLightBrown"          , furry = "YASNIghtPredFemEyesAmberNarrow"},
+  {vanilla = "MarksFemaleHumanoid10RightGashR"      , furry = "YASLykaiosFemScarC01"},
+  {vanilla = "MarksFemaleHumanoid05LeftGash"        , furry = "YASLykaiosFemScarC01"},
+  {vanilla = "MarksFemaleHumanoid11LeftGashR"       , furry = "YASLykaiosFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid12LeftGashR"       , furry = "YASLykaiosFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid06LeftGash"        , furry = "YASLykaiosFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid01LeftGash"        , furry = "YASLykaiosFemScarL01"},
+  {vanilla = "MarksFemaleHumanoid11LeftGash"        , furry = "YASLykaiosFemScarL01"},
+  {vanilla = "MarksFemaleHumanoid02LeftGash"        , furry = "YASLykaiosFemScarL02"},
+  {vanilla = "MarksFemaleHumanoid03LeftGash"        , furry = "YASLykaiosFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid10LeftGash"        , furry = "YASLykaiosFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid12LeftGash"        , furry = "YASLykaiosFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid04LeftGash"        , furry = "YASLykaiosFemScarL04"},
+  {vanilla = "MarksFemaleHumanoid07RightGash"       , furry = "YASLykaiosFemScarR01"},
+  {vanilla = "MarksFemaleHumanoid08RightGash"       , furry = "YASLykaiosFemScarR02"},
+  {vanilla = "MarksFemaleHumanoid09RightGash"       , furry = "YASLykaiosFemScarR03"},
+  {vanilla = "MarksMaleHumanoid12LeftGash"          , furry = "YASLykMaleScarC09"},
+  {vanilla = "MarksMaleHumanoid11RightGashR"        , furry = "YASLykMaleScarC09"},
+  {vanilla = "MarksMaleHumanoid12RightGashR"        , furry = "YASLykMaleScarC10"},
+  {vanilla = "MarksMaleHumanoid03LeftGash"          , furry = "YASLykMaleScarL05LBlindL"},
+  {vanilla = "MarksMaleHumanoid10LeftGash"          , furry = "YASLykMaleScarL05LBlindL"},
+  {vanilla = "MarksMaleHumanoid01LeftGash"          , furry = "YASLykMaleScarL06"},
+  {vanilla = "MarksMaleHumanoid05LeftGash"          , furry = "YASLykMaleScarL06"},
+  {vanilla = "MarksMaleHumanoid02LeftGash"          , furry = "YASLykMaleScarL07"},
+  {vanilla = "MarksMaleHumanoid04LeftGash"          , furry = "YASLykMaleScarL08"},
+  {vanilla = "MarksMaleHumanoid06LeftGash"          , furry = "YASLykMaleScarL08"},
+  {vanilla = "MarksMaleHumanoid11LeftGash"          , furry = "YASLykMaleScarL08"},
+  {vanilla = "MarksMaleHumanoid09RightGash"         , furry = "YASLykMaleScarR01"},
+  {vanilla = "MarksMaleHumanoid04RightGashR"        , furry = "YASLykMaleScarR01"},
+  {vanilla = "MarksMaleHumanoid06RightGashR"        , furry = "YASLykMaleScarR03BlindR"},
+  {vanilla = "MarksMaleHumanoid07RightGash"         , furry = "YASLykMaleScarR04"},
+  {vanilla = "MarksMaleHumanoid08RightGash"         , furry = "YASLykMaleScarR04"},
+  {vanilla = "MarksMaleHumanoid10RightGashR"        , furry = "YASLykMaleScarR04"},
+  {vanilla = "MarksFemaleHumanoid10RightGashR"      , furry = "YASKettuFemScarC01"},
+  {vanilla = "MarksFemaleHumanoid05LeftGash"        , furry = "YASKettuFemScarC01"},
+  {vanilla = "MarksFemaleHumanoid11LeftGashR"       , furry = "YASKettuFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid12LeftGashR"       , furry = "YASKettuFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid06LeftGash"        , furry = "YASKettuFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid01LeftGash"        , furry = "YASKettuFemScarL01"},
+  {vanilla = "MarksFemaleHumanoid11LeftGash"        , furry = "YASKettuFemScarL01"},
+  {vanilla = "MarksFemaleHumanoid02LeftGash"        , furry = "YASKettuFemScarL02"},
+  {vanilla = "MarksFemaleHumanoid03LeftGash"        , furry = "YASKettuFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid10LeftGash"        , furry = "YASKettuFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid12LeftGash"        , furry = "YASKettuFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid04LeftGash"        , furry = "YASKettuFemScarL04"},
+  {vanilla = "MarksFemaleHumanoid07RightGash"       , furry = "YASKettuFemScarR01"},
+  {vanilla = "MarksFemaleHumanoid08RightGash"       , furry = "YASKettuFemScarR02"},
+  {vanilla = "MarksFemaleHumanoid09RightGash"       , furry = "YASKettuFemScarR03"},
+  {vanilla = "MarksMaleHumanoid12LeftGash"          , furry = "YASKettuMaleScarC02"},
+  {vanilla = "MarksMaleHumanoid11RightGashR"        , furry = "YASKettuMaleScarC02"},
+  {vanilla = "MarksMaleHumanoid01LeftGash"          , furry = "YASKettuMaleScarL01"},
+  {vanilla = "MarksMaleHumanoid05LeftGash"          , furry = "YASKettuMaleScarL01"},
+  {vanilla = "MarksMaleHumanoid02LeftGash"          , furry = "YASKettuMaleScarL02"},
+  {vanilla = "MarksMaleHumanoid06LeftGash"          , furry = "YASKettuMaleScarL02"},
+  {vanilla = "MarksMaleHumanoid03LeftGash"          , furry = "YASKettuMaleScarL03BlindL"},
+  {vanilla = "MarksMaleHumanoid10LeftGash"          , furry = "YASKettuMaleScarL03BlindL"},
+  {vanilla = "MarksMaleHumanoid04LeftGash"          , furry = "YASKettuMaleScarL04"},
+  {vanilla = "MarksMaleHumanoid11LeftGash"          , furry = "YASKettuMaleScarL04"},
+  {vanilla = "MarksMaleHumanoid09RightGash"         , furry = "YASKettuMaleScarR01"},
+  {vanilla = "MarksMaleHumanoid04RightGashR"        , furry = "YASKettuMaleScarR01"},
+  {vanilla = "MarksMaleHumanoid06RightGashR"        , furry = "YASKettuMaleScarR02BlindR"},
+  {vanilla = "MarksMaleHumanoid07RightGash"         , furry = "YASKettuMaleScarR03"},
+  {vanilla = "MarksMaleHumanoid10RightGashR"        , furry = "YASKettuMaleScarR03"},
+  {vanilla = "MarksMaleHumanoid08RightGash"         , furry = "YASKettuMaleScarR04"},
+  {vanilla = "MarksFemaleHumanoid10RightGashR"      , furry = "YASKonoiFemScarC01"},
+  {vanilla = "MarksFemaleHumanoid05LeftGash"        , furry = "YASKonoiFemScarC01"},
+  {vanilla = "MarksFemaleHumanoid11LeftGashR"       , furry = "YASKonoiFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid12LeftGashR"       , furry = "YASKonoiFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid06LeftGash"        , furry = "YASKonoiFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid01LeftGash"        , furry = "YASKonoiFemScarL01"},
+  {vanilla = "MarksFemaleHumanoid11LeftGash"        , furry = "YASKonoiFemScarL01"},
+  {vanilla = "MarksFemaleHumanoid02LeftGash"        , furry = "YASKonoiFemScarL02"},
+  {vanilla = "MarksFemaleHumanoid03LeftGash"        , furry = "YASKonoiFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid10LeftGash"        , furry = "YASKonoiFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid12LeftGash"        , furry = "YASKonoiFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid04LeftGash"        , furry = "YASKonoiFemScarL04"},
+  {vanilla = "MarksFemaleHumanoid07RightGash"       , furry = "YASKonoiFemScarR01"},
+  {vanilla = "MarksFemaleHumanoid08RightGash"       , furry = "YASKonoiFemScarR02"},
+  {vanilla = "MarksFemaleHumanoid09RightGash"       , furry = "YASKonoiFemScarR03"},
+  {vanilla = "MarksFemaleHumanoid10RightGashR"      , furry = "YASKygarraFemScarC01"},
+  {vanilla = "MarksFemaleHumanoid05LeftGash"        , furry = "YASKygarraFemScarC01"},
+  {vanilla = "MarksFemaleHumanoid11LeftGashR"       , furry = "YASKygarraFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid12LeftGashR"       , furry = "YASKygarraFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid06LeftGash"        , furry = "YASKygarraFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid01LeftGash"        , furry = "YASKygarraFemScarL01"},
+  {vanilla = "MarksFemaleHumanoid11LeftGash"        , furry = "YASKygarraFemScarL01"},
+  {vanilla = "MarksFemaleHumanoid02LeftGash"        , furry = "YASKygarraFemScarL02"},
+  {vanilla = "MarksFemaleHumanoid03LeftGash"        , furry = "YASKygarraFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid10LeftGash"        , furry = "YASKygarraFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid12LeftGash"        , furry = "YASKygarraFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid04LeftGash"        , furry = "YASKygarraFemScarL04"},
+  {vanilla = "MarksFemaleHumanoid07RightGash"       , furry = "YASKygarraFemScarR01"},
+  {vanilla = "MarksFemaleHumanoid08RightGash"       , furry = "YASKygarraFemScarR02"},
+  {vanilla = "MarksFemaleHumanoid09RightGash"       , furry = "YASKygarraFemScarR03"},
+  {vanilla = "MarksMaleHumanoid12LeftGash"          , furry = "YASKygarraMaleScarC01"},
+  {vanilla = "MarksMaleHumanoid11RightGashR"        , furry = "YASKygarraMaleScarC01"},
+  {vanilla = "MarksMaleHumanoid12RightGashR"        , furry = "YASKygarraMaleScarC02"},
+  {vanilla = "MarksMaleHumanoid01LeftGash"          , furry = "YASKygarraMaleScarL01"},
+  {vanilla = "MarksMaleHumanoid05LeftGash"          , furry = "YASKygarraMaleScarL01"},
+  {vanilla = "MarksMaleHumanoid02LeftGash"          , furry = "YASKygarraMaleScarL02"},
+  {vanilla = "MarksMaleHumanoid06LeftGash"          , furry = "YASKygarraMaleScarL02"},
+  {vanilla = "MarksMaleHumanoid03LeftGash"          , furry = "YASKygarraMaleScarL03"},
+  {vanilla = "MarksMaleHumanoid10LeftGash"          , furry = "YASKygarraMaleScarL03"},
+  {vanilla = "MarksMaleHumanoid04LeftGash"          , furry = "YASKygarraMaleScarL04"},
+  {vanilla = "MarksMaleHumanoid11LeftGash"          , furry = "YASKygarraMaleScarL04"},
+  {vanilla = "MarksMaleHumanoid09RightGash"         , furry = "YASKygarraMaleScarR01"},
+  {vanilla = "MarksMaleHumanoid04RightGashR"        , furry = "YASKygarraMaleScarR01"},
+  {vanilla = "MarksMaleHumanoid06RightGashR"        , furry = "YASKygarraMaleScarR02"},
+  {vanilla = "MarksMaleHumanoid07RightGash"         , furry = "YASKygarraMaleScarR03"},
+  {vanilla = "MarksMaleHumanoid10RightGashR"        , furry = "YASKygarraMaleScarR03"},
+  {vanilla = "MarksMaleHumanoid08RightGash"         , furry = "YASKygarraMaleScarR04"},
+  {vanilla = "MarksFemaleHumanoid10RightGashR"      , furry = "YASVaalsarkFemScarC01"},
+  {vanilla = "MarksFemaleHumanoid05LeftGash"        , furry = "YASVaalsarkFemScarC01"},
+  {vanilla = "MarksFemaleHumanoid11LeftGashR"       , furry = "YASVaalsarkFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid12LeftGashR"       , furry = "YASVaalsarkFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid06LeftGash"        , furry = "YASVaalsarkFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid01LeftGash"        , furry = "YASVaalsarkFemScarL01"},
+  {vanilla = "MarksFemaleHumanoid11LeftGash"        , furry = "YASVaalsarkFemScarL01"},
+  {vanilla = "MarksFemaleHumanoid02LeftGash"        , furry = "YASVaalsarkFemScarL02"},
+  {vanilla = "MarksFemaleHumanoid03LeftGash"        , furry = "YASVaalsarkFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid10LeftGash"        , furry = "YASVaalsarkFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid12LeftGash"        , furry = "YASVaalsarkFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid04LeftGash"        , furry = "YASVaalsarkFemScarL04"},
+  {vanilla = "MarksFemaleHumanoid07RightGash"       , furry = "YASVaalsarkFemScarR01"},
+  {vanilla = "MarksFemaleHumanoid08RightGash"       , furry = "YASVaalsarkFemScarR02"},
+  {vanilla = "MarksFemaleHumanoid09RightGash"       , furry = "YASVaalsarkFemScarR03"},
+  {vanilla = "MarksMaleHumanoid12LeftGash"          , furry = "YASVaalsarkMaleScarC01"},
+  {vanilla = "MarksMaleHumanoid11RightGashR"        , furry = "YASVaalsarkMaleScarC01"},
+  {vanilla = "MarksMaleHumanoid12RightGashR"        , furry = "YASVaalsarkMaleScarC02"},
+  {vanilla = "MarksMaleHumanoid01LeftGash"          , furry = "YASVaalsarkMaleScarL01"},
+  {vanilla = "MarksMaleHumanoid05LeftGash"          , furry = "YASVaalsarkMaleScarL01"},
+  {vanilla = "MarksMaleHumanoid02LeftGash"          , furry = "YASVaalsarkMaleScarL02"},
+  {vanilla = "MarksMaleHumanoid06LeftGash"          , furry = "YASVaalsarkMaleScarL02"},
+  {vanilla = "MarksMaleHumanoid03LeftGash"          , furry = "YASVaalsarkMaleScarL03BlindL"},
+  {vanilla = "MarksMaleHumanoid10LeftGash"          , furry = "YASVaalsarkMaleScarL03BlindL"},
+  {vanilla = "MarksMaleHumanoid04LeftGash"          , furry = "YASVaalsarkMaleScarL04"},
+  {vanilla = "MarksMaleHumanoid11LeftGash"          , furry = "YASVaalsarkMaleScarL04"},
+  {vanilla = "MarksMaleHumanoid09RightGash"         , furry = "YASVaalsarkMaleScarR01"},
+  {vanilla = "MarksMaleHumanoid04RightGashR"        , furry = "YASVaalsarkMaleScarR01"},
+  {vanilla = "MarksMaleHumanoid06RightGashR"        , furry = "YASVaalsarkMaleScarR02"},
+  {vanilla = "MarksMaleHumanoid07RightGash"         , furry = "YASVaalsarkMaleScarR03"},
+  {vanilla = "MarksMaleHumanoid10RightGashR"        , furry = "YASVaalsarkMaleScarR03"},
+  {vanilla = "MarksMaleHumanoid08RightGash"         , furry = "YASVaalsarkMaleScarR04"},
+  {vanilla = "MarksMaleHumanoid08RightGash"         , furry = "YASVaalsarkMaleScarR05BlindR"},
+  {vanilla = "MarksFemaleHumanoid10RightGashR"      , furry = "YASXebaFemScarC01"},
+  {vanilla = "MarksFemaleHumanoid05LeftGash"        , furry = "YASXebaFemScarC01"},
+  {vanilla = "MarksFemaleHumanoid11LeftGashR"       , furry = "YASXebaFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid12LeftGashR"       , furry = "YASXebaFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid06LeftGash"        , furry = "YASXebaFemScarC02"},
+  {vanilla = "MarksFemaleHumanoid01LeftGash"        , furry = "YASXebaFemScarL01"},
+  {vanilla = "MarksFemaleHumanoid11LeftGash"        , furry = "YASXebaFemScarL01"},
+  {vanilla = "MarksFemaleHumanoid02LeftGash"        , furry = "YASXebaFemScarL02"},
+  {vanilla = "MarksFemaleHumanoid03LeftGash"        , furry = "YASXebaFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid10LeftGash"        , furry = "YASXebaFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid12LeftGash"        , furry = "YASXebaFemScarL03"},
+  {vanilla = "MarksFemaleHumanoid04LeftGash"        , furry = "YASXebaFemScarL04"},
+  {vanilla = "MarksFemaleHumanoid07RightGash"       , furry = "YASXebaFemScarR01"},
+  {vanilla = "MarksFemaleHumanoid08RightGash"       , furry = "YASXebaFemScarR02"},
+  {vanilla = "MarksFemaleHumanoid09RightGash"       , furry = "YASXebaFemScarR03"},
+]
+
+# Labels on furry headparts. Comma-separated strings; the
+# loader splits and trims. Used by label-based matching when
+# no direct headpart_equivalent is defined.
+[headpart_labels]
+YASDogMaleHairDreads001               = "DREADS,BOLD,FUNKY,LONG"
+YASDogMaleHairDreads003               = "DREADS,NOBLE,BOLD,FUNKY,LONG"
+YASDogMaleHairDreadsFringe            = "DREADS,NOBLE,BOLD,FUNKY,YOUNG,LONG"
+YASDogMaleHairDreadsHeadband          = "DREADS,NOBLE,BOLD,FUNKY,FEATHERS,LONG"
+YASDogMaleHairFringeFlip001           = "YOUNG,SHORT"
+YASDogMaleHairLionMane001             = "MANE,LONG"
+YASDogMaleHairLionMane002             = "MANE,LONG,YOUNG"
+YASDogMaleHairLionManebraids          = "MANE,LONG,NOBLE,BRAIDS"
+YASDogMaleHairLionManeFringeLeftBraid = "MANE,LONG,NOBLE,BRAIDS"
+YASDogMaleHairLionManeHeadband        = "MANE,LONG,NOBLE,FEATHERS"
+YASDogMaleHairLongBraid001            = "BRAIDS,NEAT,TIEDBACK"
+YASDogMaleHairLongBraid002            = "TIEDBACK,BRAIDS,NOBLE"
+YASDogMaleHairLongBraidleft           = "NEAT,TIEDBACK,BRAIDS,NOBLE"
+YASDogMaleHairMohawk001               = "MOHAWK,BRAIDS,MILITARY,BOLD"
+YASDogMaleHairMohawk003               = "MOHAWK,FEATHERS,BOLD"
+YASDogMaleHairMohawkFringe            = "MOHAWK,YOUNG,BOLD"
+YASDogMaleHairShaggyHair002           = "LONG,MESSY"
+YASDogMaleHairShaggyHair003           = "LONG,MESSY,FEATHERS"
+YASDogMaleHairShorCrop001             = "SHORT,NEAT"
+YASDogMaleHairShorCrop002             = "SHORT,NEAT,YOUNG"
+YASDogMaleHairShorCrop003             = "SHORT,NEAT,NOBLE"
+YASDogMaleHairShorCrop004             = "SHORT,NEAT,NOBLE,FEATHERS"
+YASDogMaleHairTiedStyle001            = "LONG,NOBLE,NEAT"
+YASDogMaleHairTiedStyleFringe         = "LONG,NOBLE,NEAT,YOUNG"
+YASDogMaleHairTiedStyleHeadband       = "LONG,NOBLE,NEAT,YOUNG,FEATHERS"
+YASDogMaleHairVanillaBraid001         = "LONG,NEAT,TIEDBACK"
+YASDogMaleHairVanillaHair001          = "MESSY,LONG"
+YASDogMaleHairSidehawk                = "MOHAWK,FUNKY,BOLD"
+YASDogMaleHairImperial01              = "SHORT,NEAT,MILITARY"
+YASDogFemHair01                       = "NEAT,TIEDBACK,SHORT,BRAIDS"
+YASDogFemHair02                       = "NEAT,TIEDBACK"
+YASDogFemHair03                       = "NEAT,SHORT"
+YASDogFemHair04                       = "NEAT,LONG,TIEDBACK,BRAIDS"
+YASDogFemHair05                       = "SHORT,TIEDBACK,FUNKY"
+YASDogFemHair06                       = "SHORT,TIEDBACK,FUNKY"
+YASDogFemHair07                       = "SHORT,TIEDBACK,FUNKY,BRAIDS"
+YASDogFemHair08                       = "NEAT,LONG,TIEDBACK,BRAIDS,FUNKY"
+YASDogFemHair09                       = "NEAT,TIEDBACK,SHORT,BRAIDS"
+YASDogFemHair10                       = "NEAT,TIEDBACK"
+YASDogFemHairBraid001                 = "NEAT,TIEDBACK,LONG,BRAIDS"
+YASDogFemHairBraid002                 = "NEAT,TIEDBACK,LONG,BRAIDS,NOBLE"
+YASDogFemHairDreads001                = "DREADS,BOLD,FUNKY,LONG"
+YASDogFemHairDreads002                = "DREADS,BOLD,FUNKY,NOBLE,ELABORATE,LONG"
+YASDogFemHairDreads003                = "DREADS,BOLD,FUNKY,LONG"
+YASDogFemHairDreads004                = "DREADS,BOLD,FUNKY,NOBLE,ELABORATE,LONG"
+YASDogFemHairFringeFlip001            = "YOUNG,NEAT,SHORT"
+YASDogFemHairMane001                  = "MANE,LONG,BOLD"
+YASDogFemHairMane002                  = "MANE,LONG,BOLD"
+YASDogFemHairMane003                  = "MANE,LONG,BOLD,NOBLE"
+YASDogFemHairMohawk001                = "MOHAWK,BOLD,FUNKY"
+YASDogFemHairMohawk002                = "MOHAWK,BOLD,FUNKY,FEATHERS"
+YASDogFemHairShaggy001                = "LONG,MESSY"
+YASDogFemHairShaggy002                = "MESSY,BRAIDS"
+YASDogFemHairShortCrop001             = "SHORT,NEAT,MILITARY"
+YASDogFemHairShortCrop002             = "SHORT,NEAT"
+YASDogFemHairShortCrop003             = "SHORT,NEAT,BRAIDS,NOBLE"
+YASDogFemHairTiedStyle001             = "LONG,NOBLE,ELABORATE"
+YASDogFemHairVanillaBraid001          = "TIEDBACK,BRAIDS"
+YASDogFemHairVanillaCrop001           = "SHORT,TIEDBACK"
+YASDogFemHairVanillaHair001           = "SHORT,BRAIDS,FUNKY"
+YASFemHairApachii01                   = "NEAT,YOUNG,BRAIDS"
+YASFemHairApachii02                   = "DREADS,LONG,BOLD,FUNKY"
+YASFemHairApachii03                   = "NEAT,SHORT"
+YASFemHairApachii04                   = "MESSY,LONG"
+YASFemHairApachii05                   = "MESSY,LONG"
+YASCatMaleHairDreads001               = "DREADS,BOLD,FUNKY,LONG"
+YASCatMaleHairDreads003               = "DREADS,NOBLE,BOLD,FUNKY,LONG"
+YASCatMaleHairDreadsFringe            = "DREADS,NOBLE,BOLD,FUNKY,YOUNG,LONG"
+YASCatMaleHairDreadsHeadband          = "DREADS,NOBLE,BOLD,FUNKY,FEATHERS,LONG"
+YASCatMaleHairFringeFlip001           = "YOUNG,SHORT"
+YASCatMaleHairLionMane001             = "MANE,LONG"
+YASCatMaleHairLionMane002             = "MANE,LONG,YOUNG"
+YASCatMaleHairLionManebraids          = "MANE,LONG,NOBLE,BRAIDS"
+YASCatMaleHairLionManeFringeLeftBraid = "MANE,LONG,NOBLE,BRAIDS"
+YASCatMaleHairLionManeHeadband        = "MANE,LONG,NOBLE,FEATHERS"
+YASCatMaleHairLongBraid001            = "BRAIDS,NEAT,TIEDBACK"
+YASCatMaleHairLongBraid002            = "TIEDBACK,BRAIDS,NOBLE"
+YASCatMaleHairLongBraidleft           = "NEAT,TIEDBACK,BRAIDS,NOBLE"
+YASCatMaleHairMohawk001               = "MOHAWK,BRAIDS,MILITARY,BOLD"
+YASCatMaleHairMohawk003               = "MOHAWK,FEATHERS,BOLD"
+YASCatMaleHairMohawkFringe            = "MOHAWK,YOUNG,BOLD"
+YASCatMaleHairShaggyHair002           = "LONG,MESSY"
+YASCatMaleHairShaggyHair003           = "LONG,MESSY,FEATHERS"
+YASCatMaleHairShorCrop001             = "SHORT,NEAT"
+YASCatMaleHairShorCrop002             = "SHORT,NEAT,YOUNG"
+YASCatMaleHairShorCrop003             = "SHORT,NEAT,NOBLE"
+YASCatMaleHairShorCrop004             = "SHORT,NEAT,NOBLE,FEATHERS"
+YASCatMaleHairTiedStyle001            = "LONG,NOBLE,NEAT"
+YASCatMaleHairTiedStyleFringe         = "LONG,NOBLE,NEAT,YOUNG"
+YASCatMaleHairTiedStyleHeadband       = "LONG,NOBLE,NEAT,YOUNG,FEATHERS"
+YASCatMaleHairVanillaBraid001         = "LONG,NEAT,TIEDBACK"
+YASCatMaleHairVanillaHair001          = "MESSY,LONG"
+YASCatMaleHairSidehawk                = "MOHAWK,FUNKY,BOLD"
+YASCatFemHairBraid001                 = "NEAT,TIEDBACK,LONG,BRAIDS"
+YASCatFemHairBraid002                 = "NEAT,TIEDBACK,LONG,BRAIDS,NOBLE"
+YASCatFemHairDreads001                = "DREADS,BOLD,FUNKY,LONG"
+YASCatFemHairDreads002                = "DREADS,BOLD,FUNKY,NOBLE,ELABORATE,LONG"
+YASCatFemHairDreads003                = "DREADS,BOLD,FUNKY,LONG"
+YASCatFemHairDreads004                = "DREADS,BOLD,FUNKY,NOBLE,ELABORATE,LONG"
+YASCatFemHairFringeFlip001            = "YOUNG,NEAT,SHORT"
+YASCatFemHairMane001                  = "MANE,LONG,BOLD"
+YASCatFemHairMane002                  = "MANE,LONG,BOLD"
+YASCatFemHairMane003                  = "MANE,LONG,BOLD,NOBLE"
+YASCatFemHairMohawk001                = "MOHAWK,BOLD,FUNKY"
+YASCatFemHairMohawk002                = "MOHAWK,BOLD,FUNKY,FEATHERS"
+YASCatFemHairShaggy001                = "LONG,MESSY"
+YASCatFemHairShaggy002                = "MESSY,BRAIDS"
+YASCatFemHairShortCrop001             = "SHORT,NEAT,MILITARY"
+YASCatFemHairShortCrop002             = "SHORT,NEAT"
+YASCatFemHairShortCrop003             = "SHORT,NEAT,BRAIDS,NOBLE"
+YASCatFemHairTiedStyle001             = "LONG,NOBLE,ELABORATE"
+YASCatFemHairVanillaBraid001          = "TIEDBACK,BRAIDS"
+YASCatFemHairVanillaCrop001           = "SHORT,TIEDBACK"
+YASCatFemHairVanillaHair001           = "SHORT,BRAIDS,FUNKY"
+YASCatFemHairApachii01                = "NEAT,YOUNG,BRAIDS"
+YASCatFemHairApachii02                = "DREADS,LONG,BOLD,FUNKY"
+YASCatFemHairApachii03                = "NEAT,SHORT"
+YASCatFemHairApachii04                = "MESSY,LONG"
+YASCatFemHairApachii05                = "MESSY,LONG"
+HairCellanMale01                      = "BRAIDS,NEAT"
+HairCellanMale02                      = "BRAIDS,TIEDBACK"
+HairCellanMale03                      = "FUNKY,MOHAWK"
+HairCellanMale04                      = "BRAIDS"
+HairCellanFemale01                    = "BRAIDS"
+HairCellanFemale02                    = "SHORT"
+HairCellanFemale04                    = "LONG,NEAT,BRAIDS"
+

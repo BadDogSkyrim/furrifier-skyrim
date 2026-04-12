@@ -11,7 +11,7 @@ class TestConfig:
         assert config.furrify_armor is True
         assert config.furrify_npcs_male is True
         assert config.furrify_npcs_female is True
-        assert config.furrify_schlongs is False
+        assert config.furrify_schlongs is True
         assert config.debug is False
 
     def test_from_args(self):
@@ -28,4 +28,4 @@ class TestConfig:
         """Parser doesn't crash on --help."""
         parser = build_parser()
         # Just verify it builds without error
-        assert parser.prog == 'furrifier'
+        assert parser.prog == 'furrify_skyrim'

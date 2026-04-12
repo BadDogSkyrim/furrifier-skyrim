@@ -897,6 +897,60 @@ class TestNPCFurrification:
         furrify_and_check(write, verify)
 
 
+    def test_druadach_prisoner_becomes_reachman(self, furrify_and_check,
+                                                 plugin_set, races_by_obj):
+        """Odvan is a Breton Cidhna Mine prisoner in DruadachRedoubtFaction
+        but NOT in ForswornFaction. He should still become a Reachman via
+        the DruadachRedoubtFaction -> YASReachmanRace rule — this test
+        covers the Druadach code path independently of Forsworn."""
+        npc = plugin_set.get_record_by_edid('NPC_', 'Odvan')
+        assert npc is not None
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None
+            race_edid = _get_race_edid(patched, races_by_obj, reloaded)
+            assert race_edid == 'YASReachmanRace', \
+                f"Odvan should be Reachman via DruadachRedoubtFaction, got {race_edid}"
+
+        furrify_and_check(write, verify)
+
+
+    def test_borkul_stays_orc_despite_druadach_faction(self, furrify_and_check,
+                                                       plugin_set, races_by_obj):
+        """Borkul is an Orc in DruadachRedoubtFaction. The faction rule
+        targets YASReachmanRace (basis=BretonRace), but Borkul's OrcRace
+        doesn't match the subrace basis, so determine_npc_race's subrace-
+        basis check at context.py skips the faction override and he
+        furrifies normally via OrcRace. His RNAM should remain OrcRace."""
+        npc = plugin_set.get_record_by_edid('NPC_', 'Borkul')
+        assert npc is not None
+        form_id = npc.form_id
+
+
+        def write(furry_ctx):
+            result = furry_ctx.furrify_npc(npc)
+            assert result is not None, "Borkul should be furrifiable"
+
+
+        def verify(reloaded):
+            patched = find_by_formid(reloaded, form_id)
+            assert patched is not None
+            race_edid = _get_race_edid(patched, races_by_obj, reloaded)
+            assert race_edid == 'OrcRace', \
+                f"Borkul should stay OrcRace (subrace basis mismatch " \
+                f"protects him from DruadachRedoubt->Reachman), got {race_edid}"
+
+        furrify_and_check(write, verify)
+
+
 # ===================================================================
 # Pure logic tests (no save/reload needed)
 # ===================================================================

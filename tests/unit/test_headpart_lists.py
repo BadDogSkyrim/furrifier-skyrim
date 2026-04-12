@@ -94,7 +94,7 @@ class TestFurrifyAllHeadpartLists:
         furry_plugin = _make_plugin('FurryMod.esm', [lykaios])
 
         ctx = RaceDefContext()
-        ctx.set_race('NordRace', 'YASLykaiosRace', 'DOG')
+        ctx.set_race('NordRace', 'YASLykaiosRace')
 
         races = {
             'NordRace': nord,
@@ -131,7 +131,7 @@ class TestFurrifyAllHeadpartLists:
         furry_plugin = _make_plugin('FurryMod.esm', [lykaios, flst, hdpt])
 
         ctx = RaceDefContext()
-        ctx.set_race('NordRace', 'YASLykaiosRace', 'DOG')
+        ctx.set_race('NordRace', 'YASLykaiosRace')
 
         races = {
             'NordRace': nord,
@@ -164,7 +164,7 @@ class TestFurrifyAllHeadpartLists:
         plugin = _make_plugin('Skyrim.esm', [argonian, khajiit, flst, hdpt])
 
         ctx = RaceDefContext()
-        ctx.set_race('NordRace', 'YASLykaiosRace', 'DOG')
+        ctx.set_race('NordRace', 'YASLykaiosRace')
 
         nord = _make_race(0x00013746, 'NordRace')
         lykaios = _make_race(0x01000800, 'YASLykaiosRace')
@@ -193,7 +193,7 @@ class TestFurrifyAllHeadpartLists:
         furry_plugin = _make_plugin('FurryMod.esm', [lykaios])
 
         ctx = RaceDefContext()
-        ctx.set_race('NordRace', 'YASLykaiosRace', 'DOG')
+        ctx.set_race('NordRace', 'YASLykaiosRace')
 
         races = {'NordRace': nord, 'YASLykaiosRace': lykaios}
         furry = self._build_context([plugin, furry_plugin], ctx, races)
