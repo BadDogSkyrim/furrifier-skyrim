@@ -58,9 +58,7 @@ class FurryContext:
 
     def _copy_record(self, record, source_plugin=None):
         """Copy a record into the patch, with string fallback resolution."""
-        return self.patch.copy_record(
-            record, source_plugin,
-            plugin_set=self.plugin_set)
+        return self.patch.copy_record(record, source_plugin)
 
     # -- NPC furrification --
 
