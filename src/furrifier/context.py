@@ -509,7 +509,7 @@ class FurryContext:
             patched = self.furrify_race(vanilla_rec, furry_rec)
             count += 1
 
-            # Snow Elves are Falmer in vanilla; restore the pre-corruption name
+            # Snow Elves show "High Elf" name in vanilla. Rename to prevent confusion.
             if assignment.vanilla_id == 'SnowElfRace':
                 full_sr = patched.get_subrecord('FULL')
                 if full_sr is not None:
