@@ -506,8 +506,15 @@ class FurryContext:
             furry_rec = self.races.get(assignment.furry_id)
             if vanilla_rec is None or furry_rec is None:
                 continue
-            self.furrify_race(vanilla_rec, furry_rec)
+            patched = self.furrify_race(vanilla_rec, furry_rec)
             count += 1
+
+            # Snow Elves show "High Elf" name in vanilla. Rename to prevent confusion.
+            if assignment.vanilla_id == 'SnowElfRace':
+                full_sr = patched.get_subrecord('FULL')
+                if full_sr is not None:
+                    full_sr.data = bytearray(b'Snow Elf\x00')
+                    full_sr.modified = True
 
         # Create and furrify subrace records
         # (e.g. copy BretonRace -> YASReachmanRace, furrify with YASKonoiRace)
