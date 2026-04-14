@@ -175,8 +175,14 @@ def build_race_headparts(plugins,
 
     race_headparts: dict[tuple, set[str]] = {}
 
+    excluded = 0
     for hp in all_headparts.values():
         if hp.record is None:
+            continue
+
+        # EXCLUDE label means "never use this headpart on anything"
+        if 'EXCLUDE' in hp.labels:
+            excluded += 1
             continue
 
         # Get DATA flags for sex filtering
@@ -223,7 +229,8 @@ def build_race_headparts(plugins,
                     race_headparts[key] = set()
                 race_headparts[key].add(hp.editor_id)
 
-    log.info(f"Built race_headparts index: {len(race_headparts)} entries")
+    log.info(f"Built race_headparts index: {len(race_headparts)} entries"
+             f" ({excluded} EXCLUDE-tagged headparts skipped)")
     return race_headparts
 
 
