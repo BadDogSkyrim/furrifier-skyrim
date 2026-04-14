@@ -251,8 +251,7 @@ def run_verify_phase(patch):
     patch.save()
     patch.file_path = original_path
 
-    reloaded = Plugin()
-    reloaded.load(save_path)
+    reloaded = Plugin(save_path)
 
     failures = []
     for test_name, verify_fn in registry:
