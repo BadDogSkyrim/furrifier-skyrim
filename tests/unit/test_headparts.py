@@ -1,6 +1,7 @@
 """Tests for headpart matching and label logic."""
 
 import pytest
+from furrifier.furry_load import build_race_headparts
 from furrifier.headparts import (
     labels_conflict, add_label_no_conflict, calculate_label_match_score,
     find_best_headpart_match, _blindness_state,
@@ -161,6 +162,27 @@ class TestFindBestHeadpartMatch:
             old_hp, 'Lydia', Sex.FEMALE_ADULT, [],
             'FurryRace', race_hps, hps, ctx)
         assert r1 is r2
+
+
+class _StubRecord:
+    """Minimal Record stub — get_subrecord returns None so the loop
+    exits after the EXCLUDE check without needing real DATA/RNAM."""
+    def get_subrecord(self, sig):
+        return None
+
+
+class TestBuildRaceHeadpartsExclude:
+    """EXCLUDE label filters headparts out of the candidate index."""
+
+
+    def test_exclude_headpart_is_skipped(self):
+        excluded = HeadpartInfo(
+            record=_StubRecord(), editor_id='BDDeerFemMane',
+            hp_type=HeadpartType.HAIR, labels=['EXCLUDE'],
+        )
+        all_headparts = {'BDDeerFemMane': excluded}
+        result = build_race_headparts([], all_headparts)
+        assert result == {}
 
 
 class TestBlindnessState:
