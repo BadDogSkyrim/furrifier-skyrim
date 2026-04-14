@@ -139,7 +139,7 @@ class FurryContext:
         """
         # Skip chargen presets
         acbs = npc['ACBS']
-        if acbs and acbs['flags'].Is_CharGen_Face_Preset:
+        if acbs and acbs['flags'].IsCharGenFacePreset:
             return None
 
         race_result = self.determine_npc_race(npc)
