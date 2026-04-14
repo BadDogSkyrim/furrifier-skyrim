@@ -991,7 +991,10 @@ class FurryContext:
             if not adds and not removes:
                 continue
 
-            patched = self._copy_record(arma_rec)
+            if arma_rec.plugin is self.patch:
+                patched = arma_rec
+            else:
+                patched = self._copy_record(arma_rec)
 
             if removes:
                 to_remove = []
@@ -1163,7 +1166,10 @@ class FurryContext:
             if not need_modl and not need_kwda:
                 continue
 
-            patched = self._copy_record(winner)
+            if winner.plugin is self.patch:
+                patched = winner
+            else:
+                patched = self._copy_record(winner)
 
             # Replace MODL list with sorted merged set
             if need_modl:

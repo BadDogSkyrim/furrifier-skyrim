@@ -82,14 +82,39 @@ def load_races(plugins, ctx: RaceDefContext) -> dict[str, RaceInfo]:
 
     log.info(f"Loaded {len(races)} race records")
 
-    # Link assignments to their RaceInfo
-    for assignment in ctx.assignments.values():
+    # Link assignments to their RaceInfo and warn about missing races
+    skip_assignments = []
+    for key, assignment in ctx.assignments.items():
         assignment.vanilla = races.get(assignment.vanilla_id)
         assignment.furry = races.get(assignment.furry_id)
         if assignment.vanilla is None:
-            log.warning(f"Vanilla race not found: {assignment.vanilla_id}")
-        if assignment.furry is None:
-            log.warning(f"Furry race not found: {assignment.furry_id}")
+            log.warning(
+                f"Vanilla race not found: {assignment.vanilla_id}"
+                f" — skipping assignment")
+            skip_assignments.append(key)
+        elif assignment.furry is None:
+            log.warning(
+                f"Furry race not found: {assignment.furry_id}"
+                f" — skipping assignment {assignment.vanilla_id}"
+                f" -> {assignment.furry_id}")
+            skip_assignments.append(key)
+    for key in skip_assignments:
+        del ctx.assignments[key]
+
+    skip_subraces = []
+    for key, subrace in ctx.subraces.items():
+        if subrace.vanilla_basis not in races:
+            log.warning(
+                f"Vanilla basis race not found: {subrace.vanilla_basis}"
+                f" — skipping subrace {subrace.name}")
+            skip_subraces.append(key)
+        elif subrace.furry_id not in races:
+            log.warning(
+                f"Furry race not found: {subrace.furry_id}"
+                f" — skipping subrace {subrace.name}")
+            skip_subraces.append(key)
+    for key in skip_subraces:
+        del ctx.subraces[key]
 
     return races
 
