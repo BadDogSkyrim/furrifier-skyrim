@@ -741,7 +741,9 @@ class TestNPCFurrification:
             race_edid = _get_race_edid(patched, races_by_obj)
             assert race_edid == 'HighElfRace', \
                 f"Elenwen race should stay HighElfRace, got {race_edid}"
-            assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
+            # PNAM count varies: Elenwen's vanilla headparts are just a
+            # scar (empty) and brows (probabilistic), so PNAMs may be 0
+            # for a specific roll. Tint layers are the reliable check.
             assert _tint_layer_count(patched) > 0, "Should have tint layers"
 
         furrify_and_check(write, verify)

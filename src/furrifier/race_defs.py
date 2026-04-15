@@ -137,13 +137,24 @@ class RaceDefContext:
 
     def get_headpart_probability(self, furry_race_id: str, sex: str,
                                  hp_type_name: str) -> float:
-        """Look up probability for a (race, sex, type), falling back to
-        the sex-agnostic entry if no sex-specific one exists.
-        Default 1.0 (always assign)."""
-        p = self.headpart_probability.get((furry_race_id, sex, hp_type_name))
-        if p is None:
-            p = self.headpart_probability.get((furry_race_id, None, hp_type_name))
-        return 1.0 if p is None else p
+        """Look up probability for a (race, sex, type) with fallback chain:
+
+        1. (race, sex, type)   — most specific
+        2. (race, None, type)  — race-specific, any sex
+        3. ('*', sex, type)    — wildcard race, sex-specific
+        4. ('*', None, type)   — wildcard race, any sex
+        5. 1.0                 — always assign
+
+        Use race='*' in the TOML to set a default that applies to every
+        furry race unless overridden.
+        """
+        for race_key in (furry_race_id, '*'):
+            for sex_key in (sex, None):
+                p = self.headpart_probability.get(
+                    (race_key, sex_key, hp_type_name))
+                if p is not None:
+                    return p
+        return 1.0
 
 
 def _find_resource_dir(name: str) -> Optional[Path]:

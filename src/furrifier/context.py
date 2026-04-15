@@ -200,18 +200,6 @@ class FurryContext:
             if old_hp is None:
                 continue
 
-            # Skip beards — furry races don't use them
-            if old_hp.hp_type == HeadpartType.FACIAL_HAIR:
-                continue
-
-            # Eyebrows slot is used for earrings on furry races.
-            # Give NPCs a 30% chance of earrings. TODO: more
-            # controllable mechanism for earring assignment.
-            if old_hp.hp_type == HeadpartType.EYEBROWS:
-                from .util import hash_string
-                if hash_string(npc_alias, 9999, 100) >= 30:
-                    continue
-
             new_hp = find_similar_headpart(
                 old_hp, npc_alias, npc_sex, labels,
                 furry_race_id, self.race_headparts, self.all_headparts,
@@ -219,8 +207,6 @@ class FurryContext:
             )
             if new_hp and new_hp.record:
                 self._add_headpart_pnam(patched, new_hp)
-
-        # TODO: beard matching — for now beards are skipped entirely
 
         # Extract vanilla NPC tint classes for decoration layer preservation
         npc_tint_classes = self._extract_npc_tint_classes(

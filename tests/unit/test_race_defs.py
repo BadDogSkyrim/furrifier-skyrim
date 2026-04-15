@@ -120,6 +120,28 @@ class TestRaceDefContext:
             'BDDeerRace', 'Female', 'FACIAL_HAIR') == 0.2
 
 
+    def test_headpart_probability_wildcard_race(self):
+        ctx = RaceDefContext()
+        ctx.set_headpart_probability('*', None, 'EYEBROWS', 0.3)
+        # Any unlisted race picks up the wildcard default.
+        assert ctx.get_headpart_probability(
+            'YASRandomRace', 'Male', 'EYEBROWS') == 0.3
+        assert ctx.get_headpart_probability(
+            'SomeOtherRace', 'Female', 'EYEBROWS') == 0.3
+
+
+    def test_headpart_probability_specific_overrides_wildcard(self):
+        ctx = RaceDefContext()
+        ctx.set_headpart_probability('*', None, 'EYEBROWS', 0.3)
+        ctx.set_headpart_probability('YASMinoRace', 'Male', 'EYEBROWS', 1.0)
+        # Mino male gets the specific entry, not the wildcard.
+        assert ctx.get_headpart_probability(
+            'YASMinoRace', 'Male', 'EYEBROWS') == 1.0
+        # Mino female still falls through to wildcard (no specific entry).
+        assert ctx.get_headpart_probability(
+            'YASMinoRace', 'Female', 'EYEBROWS') == 0.3
+
+
     def test_yas_races_probability_loaded(self):
         """yas_races.toml headpart_probability entries land in every
         scheme's context (catalog is scheme-independent)."""
