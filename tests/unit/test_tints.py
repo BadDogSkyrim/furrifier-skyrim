@@ -84,25 +84,23 @@ class TestChooseTintPreset:
 
 
 class TestRandomizeIndexList:
-    def test_length(self):
+    def test_is_full_permutation(self):
+        """Every input index appears exactly once."""
         result = _randomize_index_list('test', 0, 5)
-        # May be shorter than 5 if hash collisions occur
-        assert len(result) <= 5
-        assert len(result) > 0
+        assert sorted(result) == [0, 1, 2, 3, 4]
 
     def test_deterministic(self):
         r1 = _randomize_index_list('Lydia', 5345, 10)
         r2 = _randomize_index_list('Lydia', 5345, 10)
         assert r1 == r2
 
-    def test_contains_valid_indices(self):
-        result = _randomize_index_list('test', 0, 5)
-        for idx in result:
-            assert 0 <= idx < 5
+    def test_different_inputs_differ(self):
+        r1 = _randomize_index_list('Lydia', 5345, 10)
+        r2 = _randomize_index_list('Ulfric', 5345, 10)
+        assert r1 != r2
 
     def test_empty(self):
         assert _randomize_index_list('test', 0, 0) == []
 
     def test_single(self):
-        result = _randomize_index_list('test', 0, 1)
-        assert result == [0]
+        assert _randomize_index_list('test', 0, 1) == [0]

@@ -8,6 +8,7 @@ Ported from BDFurrySkyrim_Furrifier.pas tint functions.
 from __future__ import annotations
 
 import logging
+import random
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -178,28 +179,9 @@ def choose_furry_tints(npc_alias: str, npc_sex: Sex,
 
 
 def _randomize_index_list(hash_str: str, seed: int, list_len: int) -> list[int]:
-    """Create a pseudo-random ordering of indices [0..list_len-1].
-
-    Exact port of Pascal RandomizeIndexList — uses sorted insert with
-    hash-based keys to produce a deterministic permutation.
-    """
-    if list_len <= 0:
-        return []
-
-    # Build (hash_key, original_index) pairs and sort by hash_key
-    entries: list[tuple[int, int]] = []
-    for i in range(list_len):
-        hs = hash_str + format(i * 1000, '08X')
-        hv = hash_string(hs, seed, 1000)
-        entries.append((hv, i))
-
-    # The Pascal code uses a sorted TStringList with dupIgnore,
-    # which means duplicate hash values are dropped. We replicate
-    # that by using a dict keyed on hash value.
-    seen: dict[int, int] = {}
-    for hv, idx in entries:
-        if hv not in seen:
-            seen[hv] = idx
-
-    # Sort by hash value and return the indices
-    return [idx for _, idx in sorted(seen.items())]
+    """Deterministic permutation of [0..list_len-1], keyed on the
+    (hash_str, seed) pair."""
+    rng = random.Random(f"{hash_str}:{seed}")
+    indices = list(range(list_len))
+    rng.shuffle(indices)
+    return indices
