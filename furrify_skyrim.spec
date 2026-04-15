@@ -87,11 +87,21 @@ from pathlib import Path
 _spec_dir = Path(SPECPATH)
 _dist_dir = Path(DISTPATH) / coll.name
 
+# Test-only scheme files — frozen fixtures for the test suite, not
+# shipped in the kit.
+_TEST_ONLY = {'all_races_test.toml'}
+
+
+def _ignore_test_files(dirname, names):
+    return [n for n in names if n in _TEST_ONLY]
+
+
 for _folder_name in ('schemes', 'races'):
     _src = _spec_dir / _folder_name
     _dst = _dist_dir / _folder_name
     if _src.is_dir():
-        shutil.copytree(_src, _dst, dirs_exist_ok=True)
+        shutil.copytree(_src, _dst, dirs_exist_ok=True,
+                        ignore=_ignore_test_files)
         print(f"Copied {_src} -> {_dst}")
     else:
         print(f"WARNING: {_folder_name}/ directory not found at {_src}")

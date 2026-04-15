@@ -62,7 +62,7 @@ def data_dir():
 
 @pytest.fixture(scope="module")
 def ctx():
-    c = load_scheme('all_races')
+    c = load_scheme('all_races_test')
     setup_vanilla(c)
     return c
 

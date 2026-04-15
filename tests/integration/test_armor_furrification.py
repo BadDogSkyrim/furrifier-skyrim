@@ -145,6 +145,10 @@ class TestArmorFurrification:
         assert high_elf is not None, "HighElfRace not loaded"
         high_elf_obj = high_elf.form_id.object_index
 
+        orc = plugin_set.get_record_by_edid('RACE', 'OrcRace')
+        assert orc is not None, "OrcRace not loaded"
+        orc_obj = orc.form_id.object_index
+
 
         def write(_furry_ctx):
             pass  # armor already furrified by test_chefhat_vanilla_races_removed
@@ -160,6 +164,9 @@ class TestArmorFurrification:
             assert high_elf_obj in modl_objs, \
                 f"HighElfRace ({hex(high_elf_obj)}) should be ADDED to " \
                 f"BDStormcloakHelm_CAT (cat mesh, fits furrified High Elves)"
+            assert orc_obj in modl_objs, \
+                f"OrcRace ({hex(orc_obj)}) should be ADDED to " \
+                f"BDStormcloakHelm_CAT (cat mesh, fits furrified Orcs)"
 
         furrify_and_check(write, verify)
 
@@ -358,10 +365,12 @@ class TestDaedricHelmet:
                     f"Race {edid} ({hex(obj)}) from {pname} -- " \
                     f"not a valid source plugin"
 
-            # Must have furrified elf races
+            # Must have furrified elf/orc races
             cat_edids = {edid for _, edid, _ in cat_races}
             assert 'HighElfRace' in cat_edids, \
                 "HighElfRace missing from YAS_DaedricHelmetAA_CAT"
+            assert 'OrcRace' in cat_edids, \
+                "OrcRace missing from YAS_DaedricHelmetAA_CAT"
             assert 'DarkElfRace' in cat_edids, \
                 "DarkElfRace missing from YAS_DaedricHelmetAA_CAT"
 

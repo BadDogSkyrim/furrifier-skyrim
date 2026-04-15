@@ -71,8 +71,11 @@ def data_dir():
 
 @pytest.fixture(scope="session")
 def ctx():
-    """Fully configured RaceDefContext with all_races scheme + vanilla setup."""
-    c = load_scheme('all_races')
+    """Fully configured RaceDefContext with all_races_test scheme + vanilla setup.
+
+    Tests use the frozen all_races_test scheme so changes to the shipping
+    all_races.toml don't break test assertions."""
+    c = load_scheme('all_races_test')
     setup_vanilla(c)
     return c
 
