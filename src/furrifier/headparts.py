@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+from functools import lru_cache
 from typing import Optional
 
 from esplib import Record
@@ -109,6 +110,21 @@ def load_npc_labels(npc: Record, ctx: RaceDefContext) -> list[str]:
     return labels
 
 
+@lru_cache(maxsize=None)
+def _score_cached(npc_labels: tuple, hp_labels: tuple,
+                  conflicts: frozenset) -> int:
+    score = 0
+    for npc_label in npc_labels:
+        if npc_label in hp_labels:
+            score += 1
+        else:
+            score -= 1
+        for hp_label in hp_labels:
+            if frozenset({npc_label, hp_label}) in conflicts:
+                score = -1000
+    return score
+
+
 def calculate_label_match_score(npc_labels: list[str],
                                 hp_labels: list[str],
                                 ctx: RaceDefContext) -> int:
@@ -118,16 +134,11 @@ def calculate_label_match_score(npc_labels: list[str],
     Every NPC label that doesn't match: -1
     Any conflicting labels: -1000
     """
-    score = 0
-    for npc_label in npc_labels:
-        if npc_label in hp_labels:
-            score += 1
-        else:
-            score -= 1
-        for hp_label in hp_labels:
-            if labels_conflict(npc_label, hp_label, ctx):
-                score = -1000
-    return score
+    return _score_cached(
+        tuple(npc_labels),
+        tuple(hp_labels),
+        frozenset(ctx.label_conflicts),
+    )
 
 
 def find_best_headpart_match(
