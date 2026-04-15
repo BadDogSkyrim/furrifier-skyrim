@@ -258,10 +258,10 @@ headpart_probability = [
   # Default for every furry race: earring slot is a 30% roll, no beards.
   {race = "*"                                  , EYEBROWS = 0.3, FACIAL_HAIR = 0.0},
   # Ungulates: eyebrows are horns/antlers, facial hair is a feature.
-  {race = "YASMinoRace"        , sex = "Male"  , EYEBROWS = 1.0, FACIAL_HAIR = 0.5},
-  {race = "YASMinoRace"        , sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
-  {race = "YASMinoRaceVampire" , sex = "Male"  , EYEBROWS = 1.0, FACIAL_HAIR = 0.3},
-  {race = "YASMinoRaceVampire" , sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
+  {race = "BDMinoRace"         , sex = "Male"  , EYEBROWS = 1.0, FACIAL_HAIR = 0.5},
+  {race = "BDMinoRace"         , sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
+  {race = "BDMinoRaceVampire"  , sex = "Male"  , EYEBROWS = 1.0, FACIAL_HAIR = 0.3},
+  {race = "BDMinoRaceVampire"  , sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
   {race = "BDDeerRace"         , sex = "Male"  , EYEBROWS = 1.0, FACIAL_HAIR = 0.2},
   {race = "BDDeerRace"         , sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
 ]

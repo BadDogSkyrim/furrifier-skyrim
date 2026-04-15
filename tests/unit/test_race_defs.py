@@ -148,9 +148,9 @@ class TestRaceDefContext:
         ctx = load_scheme('all_races_test')
         # Mino male brows = 1.0, Mino female brows = 0.5 per yas_races.toml.
         assert ctx.get_headpart_probability(
-            'YASMinoRace', 'Male', 'EYEBROWS') == 1.0
+            'BDMinoRace', 'Male', 'EYEBROWS') == 1.0
         assert ctx.get_headpart_probability(
-            'YASMinoRace', 'Female', 'EYEBROWS') == 0.5
+            'BDMinoRace', 'Female', 'EYEBROWS') == 0.5
         # Deer male facial hair = 0.2.
         assert ctx.get_headpart_probability(
             'BDDeerRace', 'Male', 'FACIAL_HAIR') == 0.2
