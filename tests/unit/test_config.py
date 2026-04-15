@@ -1,6 +1,6 @@
 """Tests for configuration."""
 
-from furrifier.config import FurrifierConfig, build_parser
+from furrifier.config import FurrifierConfig, build_parser, normalize_argv
 
 
 class TestConfig:
@@ -50,3 +50,29 @@ class TestConfig:
         args = parser.parse_args(['--patch', 'MyPatch.esl'])
         config = FurrifierConfig.from_args(args)
         assert config.patch_filename == 'MyPatch.esl'
+
+
+    def test_scheme_case_insensitive(self):
+        parser = build_parser()
+        args = parser.parse_args(['--scheme', 'LEGACY'])
+        assert args.scheme == 'legacy'
+
+
+    def test_switch_names_case_insensitive(self):
+        parser = build_parser()
+        args = parser.parse_args(normalize_argv(
+            ['--DEBUG', '--Scheme', 'legacy', '--PATCH', 'MyPatch.esp']))
+        assert args.debug is True
+        assert args.scheme == 'legacy'
+        assert args.patch == 'MyPatch.esp'
+
+
+    def test_normalize_argv_preserves_values(self):
+        """Values (paths, filenames) must not be lowercased."""
+        out = normalize_argv(['--Patch', 'MyPatch.ESP', '--Data-Dir', 'C:/Skyrim/Data'])
+        assert out == ['--patch', 'MyPatch.ESP', '--data-dir', 'C:/Skyrim/Data']
+
+
+    def test_normalize_argv_equals_form(self):
+        out = normalize_argv(['--SCHEME=Legacy'])
+        assert out == ['--scheme=Legacy']

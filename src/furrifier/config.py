@@ -49,6 +49,22 @@ class FurrifierConfig:
 from typing import Optional
 
 
+def normalize_argv(argv: list[str]) -> list[str]:
+    """Lowercase switch names (but not their values) so --DEBUG, --Debug,
+    --debug all work. Values attached via = preserve case on the RHS."""
+    out = []
+    for tok in argv:
+        if tok.startswith('-') and len(tok) > 1:
+            if '=' in tok:
+                flag, _, val = tok.partition('=')
+                out.append(f"{flag.lower()}={val}")
+            else:
+                out.append(tok.lower())
+        else:
+            out.append(tok)
+    return out
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='furrify_skyrim',
@@ -57,6 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--patch', default='YASNPCPatch.esp',
                         help='Output patch filename (default: YASNPCPatch.esp)')
     parser.add_argument('--scheme', default='all_races',
+                        type=str.lower,
                         choices=['all_races', 'cats_dogs', 'legacy', 'user'],
                         help='Race assignment scheme (default: all_races)')
     parser.add_argument('--no-armor', action='store_true',

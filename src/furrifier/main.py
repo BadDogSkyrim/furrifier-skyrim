@@ -12,7 +12,7 @@ from pathlib import Path
 
 from esplib import Plugin, PluginSet, LoadOrder, find_game_data, find_strings_dir
 
-from .config import FurrifierConfig, build_parser, setup_logging
+from .config import FurrifierConfig, build_parser, normalize_argv, setup_logging
 from .context import FurryContext
 from .race_defs import load_scheme
 from .vanilla_setup import setup_vanilla
@@ -22,8 +22,9 @@ log = logging.getLogger(__name__)
 
 
 def main() -> int:
+    import sys
     parser = build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(normalize_argv(sys.argv[1:]))
     config = FurrifierConfig.from_args(args)
     setup_logging(config)
     logging.getLogger().addHandler(_log_counter)
