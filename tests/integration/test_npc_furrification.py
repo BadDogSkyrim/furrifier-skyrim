@@ -741,7 +741,11 @@ class TestNPCFurrification:
             race_edid = _get_race_edid(patched, races_by_obj)
             assert race_edid == 'HighElfRace', \
                 f"Elenwen race should stay HighElfRace, got {race_edid}"
-            assert len(patched.get_subrecords('PNAM')) > 0, "Should have headparts"
+            # Elenwen's only vanilla headparts are an empty scar and a
+            # brow. EYEBROWS roll for 'Elenwen' at p=0.3 misses, so she
+            # ends up with no PNAMs. Deterministic — asserted exactly.
+            assert len(patched.get_subrecords('PNAM')) == 0, \
+                "Elenwen should have 0 PNAMs given her EYEBROWS roll"
             assert _tint_layer_count(patched) > 0, "Should have tint layers"
 
         furrify_and_check(write, verify)

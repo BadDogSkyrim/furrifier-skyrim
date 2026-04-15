@@ -4,7 +4,8 @@ import pytest
 from furrifier.furry_load import build_race_headparts
 from furrifier.headparts import (
     labels_conflict, add_label_no_conflict, calculate_label_match_score,
-    find_best_headpart_match, _blindness_state,
+    find_best_headpart_match, _blindness_state, _should_assign,
+    find_similar_headpart,
 )
 from furrifier.models import Sex, HeadpartType, HeadpartInfo
 from furrifier.race_defs import RaceDefContext
@@ -162,6 +163,117 @@ class TestFindBestHeadpartMatch:
             old_hp, 'Lydia', Sex.FEMALE_ADULT, [],
             'FurryRace', race_hps, hps, ctx)
         assert r1 is r2
+
+
+class TestHeadpartProbability:
+    """Probability gate on EYEBROWS and FACIAL_HAIR assignment."""
+
+
+    def test_default_always_assigns(self, ctx):
+        # No probability entries -> always assign.
+        assert _should_assign('AnyNPC', 'YASMinoRace', Sex.MALE_ADULT,
+                              HeadpartType.EYEBROWS, ctx)
+
+
+    def test_zero_never_assigns(self, ctx):
+        ctx.set_headpart_probability('YASMinoRace', 'Female',
+                                     'FACIAL_HAIR', 0.0)
+        assert not _should_assign('AnyNPC', 'YASMinoRace',
+                                  Sex.FEMALE_ADULT,
+                                  HeadpartType.FACIAL_HAIR, ctx)
+
+
+    def test_one_always_assigns(self, ctx):
+        ctx.set_headpart_probability('YASMinoRace', 'Male',
+                                     'EYEBROWS', 1.0)
+        assert _should_assign('AnyNPC', 'YASMinoRace', Sex.MALE_ADULT,
+                              HeadpartType.EYEBROWS, ctx)
+
+
+    def test_deterministic_for_same_npc(self, ctx):
+        ctx.set_headpart_probability('YASMinoRace', 'Male',
+                                     'FACIAL_HAIR', 0.3)
+        r1 = _should_assign('Bolar', 'YASMinoRace', Sex.MALE_ADULT,
+                            HeadpartType.FACIAL_HAIR, ctx)
+        r2 = _should_assign('Bolar', 'YASMinoRace', Sex.MALE_ADULT,
+                            HeadpartType.FACIAL_HAIR, ctx)
+        assert r1 == r2
+
+
+    def test_sex_specific_lookup(self, ctx):
+        ctx.set_headpart_probability('YASMinoRace', 'Male',
+                                     'EYEBROWS', 1.0)
+        ctx.set_headpart_probability('YASMinoRace', 'Female',
+                                     'EYEBROWS', 0.0)
+        assert _should_assign('X', 'YASMinoRace', Sex.MALE_ADULT,
+                              HeadpartType.EYEBROWS, ctx)
+        assert not _should_assign('X', 'YASMinoRace', Sex.FEMALE_ADULT,
+                                  HeadpartType.EYEBROWS, ctx)
+
+
+    def test_sex_agnostic_fallback(self, ctx):
+        # Single entry with sex=None applies to both sexes.
+        ctx.set_headpart_probability('BDDeerRace', None,
+                                     'EYEBROWS', 0.0)
+        assert not _should_assign('X', 'BDDeerRace', Sex.MALE_ADULT,
+                                  HeadpartType.EYEBROWS, ctx)
+        assert not _should_assign('X', 'BDDeerRace', Sex.FEMALE_ADULT,
+                                  HeadpartType.EYEBROWS, ctx)
+
+
+    def test_only_gates_eyebrows_and_facial_hair(self, ctx):
+        # Set probability 0 on HAIR — should still assign because
+        # HAIR isn't in the gated types.
+        ctx.set_headpart_probability('YASMinoRace', 'Male',
+                                     'HAIR', 0.0)
+        assert _should_assign('X', 'YASMinoRace', Sex.MALE_ADULT,
+                              HeadpartType.HAIR, ctx)
+
+
+    def test_independent_rolls_per_type(self, ctx):
+        """Different hp_types have different salts, so results aren't
+        correlated for the same NPC at a given probability."""
+        ctx.set_headpart_probability('YASMinoRace', 'Male',
+                                     'EYEBROWS', 0.5)
+        ctx.set_headpart_probability('YASMinoRace', 'Male',
+                                     'FACIAL_HAIR', 0.5)
+        # Over 50 NPC aliases, brow-only and beard-only counts should
+        # differ (not lock-stepped).
+        brow_count = sum(
+            _should_assign(f'NPC{i}', 'YASMinoRace', Sex.MALE_ADULT,
+                           HeadpartType.EYEBROWS, ctx)
+            for i in range(50))
+        beard_count = sum(
+            _should_assign(f'NPC{i}', 'YASMinoRace', Sex.MALE_ADULT,
+                           HeadpartType.FACIAL_HAIR, ctx)
+            for i in range(50))
+        # Both should assign somewhere between 20% and 80% — not locked
+        # to 0 or 50, and independent enough not to produce identical
+        # counts. The point is ensuring different salts.
+        assert 10 <= brow_count <= 40
+        assert 10 <= beard_count <= 40
+        # hash_string(NPC0..NPC49, salt_brow) == hash_string(..., salt_beard)
+        # is astronomically unlikely if salts differ; trivially equal if not.
+        pairs_agree = sum(
+            _should_assign(f'NPC{i}', 'YASMinoRace', Sex.MALE_ADULT,
+                           HeadpartType.EYEBROWS, ctx)
+            == _should_assign(f'NPC{i}', 'YASMinoRace', Sex.MALE_ADULT,
+                              HeadpartType.FACIAL_HAIR, ctx)
+            for i in range(50))
+        assert pairs_agree != 50, \
+            "Brow and beard rolls fully correlated — salt not working"
+
+
+    def test_probability_skip_returns_none(self, ctx):
+        """find_similar_headpart returns None when probability roll fails."""
+        ctx.set_headpart_probability('YASMinoRace', 'Male',
+                                     'EYEBROWS', 0.0)
+        old = HeadpartInfo(record=None, editor_id='VanillaBrow',
+                           hp_type=HeadpartType.EYEBROWS)
+        result = find_similar_headpart(
+            old, 'NPC1', Sex.MALE_ADULT, [],
+            'YASMinoRace', {}, {}, ctx)
+        assert result is None
 
 
 class _StubRecord:

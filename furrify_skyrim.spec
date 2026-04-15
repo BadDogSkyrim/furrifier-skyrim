@@ -89,7 +89,7 @@ _dist_dir = Path(DISTPATH) / coll.name
 
 # Test-only scheme files — frozen fixtures for the test suite, not
 # shipped in the kit.
-_TEST_ONLY = {'all_races_test.toml'}
+_TEST_ONLY = {'all_races_test.toml', 'ungulate_test.toml'}
 
 
 def _ignore_test_files(dirname, names):

@@ -92,3 +92,65 @@ class TestRaceDefContext:
         ctx = RaceDefContext()
         ctx.set_empty_headpart('EmptyHair')
         assert 'EmptyHair' in ctx.empty_headparts
+
+
+    def test_headpart_probability_sex_specific(self):
+        ctx = RaceDefContext()
+        ctx.set_headpart_probability('YASMinoRace', 'Male', 'EYEBROWS', 1.0)
+        ctx.set_headpart_probability('YASMinoRace', 'Female', 'EYEBROWS', 0.5)
+        assert ctx.get_headpart_probability(
+            'YASMinoRace', 'Male', 'EYEBROWS') == 1.0
+        assert ctx.get_headpart_probability(
+            'YASMinoRace', 'Female', 'EYEBROWS') == 0.5
+
+
+    def test_headpart_probability_default_one(self):
+        ctx = RaceDefContext()
+        assert ctx.get_headpart_probability(
+            'YASMinoRace', 'Male', 'EYEBROWS') == 1.0
+
+
+    def test_headpart_probability_sex_agnostic_fallback(self):
+        ctx = RaceDefContext()
+        ctx.set_headpart_probability('BDDeerRace', None, 'FACIAL_HAIR', 0.2)
+        # Both sexes fall through to the None entry.
+        assert ctx.get_headpart_probability(
+            'BDDeerRace', 'Male', 'FACIAL_HAIR') == 0.2
+        assert ctx.get_headpart_probability(
+            'BDDeerRace', 'Female', 'FACIAL_HAIR') == 0.2
+
+
+    def test_headpart_probability_wildcard_race(self):
+        ctx = RaceDefContext()
+        ctx.set_headpart_probability('*', None, 'EYEBROWS', 0.3)
+        # Any unlisted race picks up the wildcard default.
+        assert ctx.get_headpart_probability(
+            'YASRandomRace', 'Male', 'EYEBROWS') == 0.3
+        assert ctx.get_headpart_probability(
+            'SomeOtherRace', 'Female', 'EYEBROWS') == 0.3
+
+
+    def test_headpart_probability_specific_overrides_wildcard(self):
+        ctx = RaceDefContext()
+        ctx.set_headpart_probability('*', None, 'EYEBROWS', 0.3)
+        ctx.set_headpart_probability('YASMinoRace', 'Male', 'EYEBROWS', 1.0)
+        # Mino male gets the specific entry, not the wildcard.
+        assert ctx.get_headpart_probability(
+            'YASMinoRace', 'Male', 'EYEBROWS') == 1.0
+        # Mino female still falls through to wildcard (no specific entry).
+        assert ctx.get_headpart_probability(
+            'YASMinoRace', 'Female', 'EYEBROWS') == 0.3
+
+
+    def test_yas_races_probability_loaded(self):
+        """yas_races.toml headpart_probability entries land in every
+        scheme's context (catalog is scheme-independent)."""
+        ctx = load_scheme('all_races_test')
+        # Mino male brows = 1.0, Mino female brows = 0.5 per yas_races.toml.
+        assert ctx.get_headpart_probability(
+            'YASMinoRace', 'Male', 'EYEBROWS') == 1.0
+        assert ctx.get_headpart_probability(
+            'YASMinoRace', 'Female', 'EYEBROWS') == 0.5
+        # Deer male facial hair = 0.2.
+        assert ctx.get_headpart_probability(
+            'BDDeerRace', 'Male', 'FACIAL_HAIR') == 0.2

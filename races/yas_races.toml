@@ -246,6 +246,26 @@ headpart_equivalents = [
   {vanilla = "MarksFemaleHumanoid09RightGash"       , furry = "YASXebaFemScarR03"},
 ]
 
+# Probability of assigning EYEBROWS / FACIAL_HAIR per furry race.
+# For most furry races the EYEBROWS slot is repurposed as earrings —
+# only a fraction of NPCs get them. For ungulates, EYEBROWS = antlers/
+# horns and FACIAL_HAIR is a distinctive feature. Rolls are
+# deterministic per NPC. Use race = "*" to set a default that applies
+# to every furry race unless overridden by a more specific entry.
+# Lookup order: (race, sex, type) > (race, *, type) > ("*", sex, type)
+# > ("*", *, type) > 1.0.
+headpart_probability = [
+  # Default for every furry race: earring slot is a 30% roll, no beards.
+  {race = "*"                                  , EYEBROWS = 0.3, FACIAL_HAIR = 0.0},
+  # Ungulates: eyebrows are horns/antlers, facial hair is a feature.
+  {race = "YASMinoRace"        , sex = "Male"  , EYEBROWS = 1.0, FACIAL_HAIR = 0.5},
+  {race = "YASMinoRace"        , sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
+  {race = "YASMinoRaceVampire" , sex = "Male"  , EYEBROWS = 1.0, FACIAL_HAIR = 0.3},
+  {race = "YASMinoRaceVampire" , sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
+  {race = "BDDeerRace"         , sex = "Male"  , EYEBROWS = 1.0, FACIAL_HAIR = 0.2},
+  {race = "BDDeerRace"         , sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
+]
+
 # Labels on furry headparts. Comma-separated strings; the
 # loader splits and trims. Used by label-based matching when
 # no direct headpart_equivalent is defined.

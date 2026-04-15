@@ -1,0 +1,94 @@
+# Furrifier race scheme: ungulate_test
+# Test-only scheme that assigns ungulate (Mino, Deer) races so the
+# EYEBROWS/FACIAL_HAIR probability gate can be exercised. Not shipped
+# in the kit; excluded via furrify_skyrim.spec _TEST_ONLY.
+#
+# Derived from all_races_test with:
+#   - OrcRace -> YASMinoRace (exercises Mino probability entries)
+#   - WoodElfRace -> BDDeerRace (exercises Deer probability entries)
+
+# Vanilla race -> furry race.
+races = [
+  {vanilla = "NordRace"              , furry = "YASLykaiosRace"},
+  {vanilla = "NordRaceVampire"       , furry = "YASLykaiosRaceVampire"},
+  {vanilla = "NordRaceChild"         , furry = "YASLykaiosRaceChild"},
+  {vanilla = "DLC1NordRace"          , furry = "YASLykaiosRace"},
+  {vanilla = "NordRaceAstrid"        , furry = "YASLykaiosRace"},
+  {vanilla = "ElderRace"             , furry = "YASLykaiosRace"},
+  {vanilla = "ElderRaceVampire"      , furry = "YASLykaiosRaceVampire"},
+  {vanilla = "ImperialRace"          , furry = "YASKettuRace"},
+  {vanilla = "ImperialRaceChild"     , furry = "YASKettuRaceChild"},
+  {vanilla = "ImperialRaceVampire"   , furry = "YASKettuRaceVampire"},
+  {vanilla = "BretonRace"            , furry = "YASKygarraRace"},
+  {vanilla = "BretonRaceChild"       , furry = "YASKygarraRaceChild"},
+  {vanilla = "BretonRaceVampire"     , furry = "YASKygarraRaceVampire"},
+  {vanilla = "BretonRaceChildVampire", furry = "YASKettuRaceChildVampire"},
+  {vanilla = "RedguardRace"          , furry = "YASXebaRace"},
+  {vanilla = "RedguardRaceChild"     , furry = "YASXebaRaceChild"},
+  {vanilla = "RedguardRaceVampire"   , furry = "YASXebaRaceVampire"},
+  {vanilla = "HighElfRace"           , furry = "YASMahaRace"},
+  {vanilla = "HighElfRaceVampire"    , furry = "YASMahaRaceVampire"},
+  {vanilla = "WoodElfRace"           , furry = "BDDeerRace"},
+  {vanilla = "WoodElfRaceVampire"    , furry = "BDDeerRace"},
+  {vanilla = "DarkElfRace"           , furry = "YASKaloRace"},
+  {vanilla = "DarkElfRaceVampire"    , furry = "YASKaloRaceVampire"},
+  {vanilla = "OrcRace"               , furry = "YASMinoRace"},
+  {vanilla = "OrcRaceVampire"        , furry = "YASMinoRaceVampire"},
+  {vanilla = "SnowElfRace"           , furry = "YASShanRace"},
+]
+
+# Subraces: derived races that apply to a subset of a vanilla race
+# (a faction, specific NPCs, etc.). basis = the vanilla race they derive from.
+subraces = [
+  {id = "YASReachmanRace"       , name = "Reachmen"          , basis = "BretonRace"       , furry = "YASKonoiRace"},
+  {id = "YASReachmanRaceVampire", name = "Reachmen"          , basis = "BretonRaceVampire", furry = "YASKonoiRaceVampire"},
+  {id = "YASReachmanRaceChild"  , name = "Reachmen"          , basis = "BretonRaceChild"  , furry = "YASKonoiRaceChild"},
+  {id = "YASSkaalRace"          , name = "Skaal"             , basis = "NordRace"         , furry = "YASVaalsarkRace"},
+  {id = "YASSkaalRaceChild"     , name = "Skaal"             , basis = "NordRaceChild"    , furry = "YASVaalsarkRaceChild"},
+  {id = "YASSkaalRaceVampire"   , name = "Skaal"             , basis = "NordRaceVampire"  , furry = "YASVaalsarkRaceVampire"},
+  {id = "YASWinterholdRace"     , name = "Winterhold Denizen", basis = "NordRace"         , furry = "YASShanRace"},
+  {id = "YASFalkreathRace"      , name = "Falkreath Denizen" , basis = "NordRace"         , furry = "BDDeerRace"},
+  {id = "YASSailorRace"         , name = "Sailor"            , basis = "NordRace"         , furry = "CellanRace"},
+]
+
+# Faction-wide race overrides: all members become the listed race.
+[faction_races]
+ForswornFaction                = "YASReachmanRace"
+MS01TreasuryHouseForsworn      = "YASReachmanRace"
+DruadachRedoubtFaction         = "YASReachmanRace"
+DLC2SkaalVillageCitizenFaction = "YASSkaalRace"
+TownWinterholdFaction          = "YASWinterholdRace"
+CrimeFactionWinterhold         = "YASWinterholdRace"
+DawnstarFishingShipFaction     = "YASSailorRace"
+DawnstarImperialShipFaction    = "YASSailorRace"
+DawnstarSmallShipFaction       = "YASSailorRace"
+DLC2WaterStoneSailors          = "YASSailorRace"
+SailorFaction                  = "YASSailorRace"
+ShipsNorthwindFaction          = "YASSailorRace"
+ShipsRedWaveFaction            = "YASSailorRace"
+ShipsSeaSquallFaction          = "YASSailorRace"
+CrimeFactionFalkreath          = "YASFalkreathRace"
+BYOHHousecarlFalkreathCrimeFaction = "YASFalkreathRace"
+
+
+# Per-NPC race overrides (by NPC EditorID).
+[npc_races]
+Jolf         = "YASSailorRace"
+
+# Reachmen (Forsworn) — forced to the Reachman subrace regardless of their
+# vanilla tag. Requires that this scheme defines the Reachman subrace above.
+Ainethach    = "YASReachmanRace"
+Anton        = "YASReachmanRace" # "Anton sure *looks* like a Reachman"
+Belchimac    = "YASReachmanRace"
+Cosnach      = "YASReachmanRace"
+Duach        = "YASReachmanRace"
+Enmon        = "YASReachmanRace"
+Hathrasil    = "YASReachmanRace"
+Madanach     = "YASReachmanRace"
+Mena         = "YASReachmanRace"
+MS01Weylin   = "YASReachmanRace"
+NeposTheNose = "YASReachmanRace"
+Omluag       = "YASReachmanRace"
+Rondach      = "YASReachmanRace"
+Gralnach     = "YASReachmanRaceChild"
+
