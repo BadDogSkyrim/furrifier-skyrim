@@ -29,3 +29,24 @@ class TestConfig:
         parser = build_parser()
         # Just verify it builds without error
         assert parser.prog == 'furrify_skyrim'
+
+
+    def test_patch_gets_esp_extension_if_missing(self):
+        parser = build_parser()
+        args = parser.parse_args(['--patch', 'MyPatch'])
+        config = FurrifierConfig.from_args(args)
+        assert config.patch_filename == 'MyPatch.esp'
+
+
+    def test_patch_keeps_esm_extension(self):
+        parser = build_parser()
+        args = parser.parse_args(['--patch', 'MyPatch.esm'])
+        config = FurrifierConfig.from_args(args)
+        assert config.patch_filename == 'MyPatch.esm'
+
+
+    def test_patch_keeps_esl_extension(self):
+        parser = build_parser()
+        args = parser.parse_args(['--patch', 'MyPatch.esl'])
+        config = FurrifierConfig.from_args(args)
+        assert config.patch_filename == 'MyPatch.esl'

@@ -29,8 +29,11 @@ class FurrifierConfig:
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> FurrifierConfig:
+        patch = args.patch or cls.patch_filename
+        if Path(patch).suffix.lower() not in ('.esp', '.esm', '.esl'):
+            patch += '.esp'
         return cls(
-            patch_filename=args.patch or cls.patch_filename,
+            patch_filename=patch,
             race_scheme=args.scheme or cls.race_scheme,
             furrify_armor=not args.no_armor,
             furrify_npcs_male=not args.no_male,
