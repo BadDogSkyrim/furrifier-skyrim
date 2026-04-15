@@ -27,8 +27,8 @@ races = [
   {vanilla = "WoodElfRaceVampire"    , furry = "YASDumaRaceVampire"},
   {vanilla = "DarkElfRace"           , furry = "YASKaloRace"},
   {vanilla = "DarkElfRaceVampire"    , furry = "YASKaloRaceVampire"},
-  {vanilla = "OrcRace"               , furry = "YASMinoRace"},
-  {vanilla = "OrcRaceVampire"        , furry = "YASMinoRaceVampire"},
+  {vanilla = "OrcRace"               , furry = "BDMinoRace"},
+  {vanilla = "OrcRaceVampire"        , furry = "BDMinoRaceVampire"},
   {vanilla = "SnowElfRace"           , furry = "YASShanRace"},
 ]
 
