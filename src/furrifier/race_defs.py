@@ -58,6 +58,10 @@ class RaceDefContext:
         self.label_conflicts: set[frozenset] = set()
         # empty headparts: set of EditorIDs that represent "no headpart"
         self.empty_headparts: set[str] = set()
+        # headpart assignment probability: (furry_race_edid, sex_name_or_None,
+        # HeadpartType.name) -> float in [0.0, 1.0]. Missing key = 1.0.
+        # sex_name is 'Male', 'Female', or None (applies to both).
+        self.headpart_probability: dict[tuple, float] = {}
 
 
     def set_race(self, vanilla_id: str, furry_id: str) -> None:
@@ -120,6 +124,28 @@ class RaceDefContext:
         self.empty_headparts.add(headpart_id)
 
 
+    def set_headpart_probability(self, furry_race_id: str,
+                                 sex: Optional[str],
+                                 hp_type_name: str, probability: float) -> None:
+        """Register assignment probability for a (race, sex, headpart type).
+
+        sex is 'Male', 'Female', or None (applies to both).
+        hp_type_name is a HeadpartType enum name, e.g. 'EYEBROWS'.
+        """
+        self.headpart_probability[(furry_race_id, sex, hp_type_name)] = probability
+
+
+    def get_headpart_probability(self, furry_race_id: str, sex: str,
+                                 hp_type_name: str) -> float:
+        """Look up probability for a (race, sex, type), falling back to
+        the sex-agnostic entry if no sex-specific one exists.
+        Default 1.0 (always assign)."""
+        p = self.headpart_probability.get((furry_race_id, sex, hp_type_name))
+        if p is None:
+            p = self.headpart_probability.get((furry_race_id, None, hp_type_name))
+        return 1.0 if p is None else p
+
+
 def _find_resource_dir(name: str) -> Optional[Path]:
     """Locate a top-level resource directory (schemes/ or races/) in
     frozen or dev mode.
@@ -151,6 +177,13 @@ def _apply_race_catalog(ctx: RaceDefContext, data: dict) -> None:
         ctx.assign_headpart(h['vanilla'], h['furry'])
     for hp_id, labels in data.get('headpart_labels', {}).items():
         ctx.label_headpart_list(hp_id, labels)
+    for entry in data.get('headpart_probability', []):
+        race = entry['race']
+        sex = entry.get('sex')  # 'Male', 'Female', or absent
+        for hp_type_name, probability in entry.items():
+            if hp_type_name in ('race', 'sex'):
+                continue
+            ctx.set_headpart_probability(race, sex, hp_type_name, probability)
 
 
 def _load_race_catalogs(ctx: RaceDefContext) -> None:

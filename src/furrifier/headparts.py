@@ -218,6 +218,26 @@ def find_best_headpart_match(
     return None
 
 
+_PROBABILITY_GATED_TYPES = (HeadpartType.EYEBROWS, HeadpartType.FACIAL_HAIR)
+
+
+def _should_assign(npc_alias: str, furry_race_id: str, npc_sex: Sex,
+                   hp_type: HeadpartType, ctx: RaceDefContext) -> bool:
+    """Probability gate for EYEBROWS and FACIAL_HAIR. Deterministic
+    per (NPC, hp_type). Other types always assign."""
+    if hp_type not in _PROBABILITY_GATED_TYPES:
+        return True
+    sex_name = 'Female' if npc_sex.is_female else 'Male'
+    p = ctx.get_headpart_probability(furry_race_id, sex_name, hp_type.name)
+    if p >= 1.0:
+        return True
+    if p <= 0.0:
+        return False
+    # Salt unique per hp_type so eyebrows and facial hair roll independently.
+    salt = 491 + int(hp_type)
+    return hash_string(npc_alias, salt, 1000) < int(p * 1000)
+
+
 def find_similar_headpart(
     old_hp: HeadpartInfo,
     npc_alias: str,
@@ -236,6 +256,13 @@ def find_similar_headpart(
     """
     if old_hp.editor_id in ctx.empty_headparts:
         log.debug(f"Headpart {old_hp.editor_id} is empty, skipping")
+        return None
+
+    if not _should_assign(npc_alias, furry_race_id, npc_sex,
+                          old_hp.hp_type, ctx):
+        log.debug(
+            f"Probability skip: {npc_alias} {furry_race_id} "
+            f"{old_hp.hp_type.name}")
         return None
 
     # Add the old headpart's labels to the NPC label context
