@@ -27,43 +27,57 @@ races = [
   {vanilla = "WoodElfRaceVampire"    , furry = "YASDumaRaceVampire"},
   {vanilla = "DarkElfRace"           , furry = "YASKaloRace"},
   {vanilla = "DarkElfRaceVampire"    , furry = "YASKaloRaceVampire"},
-  {vanilla = "OrcRace"               , furry = "YASBaghaRace"},
-  {vanilla = "OrcRaceVampire"        , furry = "YASBaghaRaceVampire"},
+  {vanilla = "OrcRace"               , furry = "YASMinoRace"},
+  {vanilla = "OrcRaceVampire"        , furry = "YASMinoRaceVampire"},
   {vanilla = "SnowElfRace"           , furry = "YASShanRace"},
 ]
 
 # Subraces: derived races that apply to a subset of a vanilla race
 # (a faction, specific NPCs, etc.). basis = the vanilla race they derive from.
 subraces = [
-  {id = "YASReachmanRace"       , name = "Reachmen"          , basis = "BretonRace"       , furry = "YASKonoiRace"},
-  {id = "YASReachmanRaceVampire", name = "Reachmen"          , basis = "BretonRaceVampire", furry = "YASKonoiRaceVampire"},
-  {id = "YASReachmanRaceChild"  , name = "Reachmen"          , basis = "BretonRaceChild"  , furry = "YASKonoiRaceChild"},
-  {id = "YASSkaalRace"          , name = "Skaal"             , basis = "NordRace"         , furry = "YASVaalsarkRace"},
-  {id = "YASSkaalRaceChild"     , name = "Skaal"             , basis = "NordRaceChild"    , furry = "YASVaalsarkRaceChild"},
-  {id = "YASSkaalRaceVampire"   , name = "Skaal"             , basis = "NordRaceVampire"  , furry = "YASVaalsarkRaceVampire"},
-  {id = "YASWinterholdRace"     , name = "Winterhold Denizen", basis = "NordRace"         , furry = "YASShanRace"},
-  {id = "YASFalkreathRace"      , name = "Falkreath Denizen" , basis = "NordRace"         , furry = "BDDeerRace"},
-  {id = "YASSailorRace"         , name = "Sailor"            , basis = "NordRace"         , furry = "CellanRace"},
+  {id = "YASReachmanRace"        , name = "Reachmen"             , basis = "BretonRace"       , furry = "YASKonoiRace"},
+  {id = "YASReachmanRaceVampire" , name = "Reachmen"             , basis = "BretonRaceVampire", furry = "YASKonoiRaceVampire"},
+  {id = "YASReachmanRaceChild"   , name = "Reachmen"             , basis = "BretonRaceChild"  , furry = "YASKonoiRaceChild"},
+  {id = "YASSkaalRace"           , name = "Skaal"                , basis = "NordRace"         , furry = "YASVaalsarkRace"},
+  {id = "YASSkaalRaceChild"      , name = "Skaal"                , basis = "NordRaceChild"    , furry = "YASVaalsarkRaceChild"},
+  {id = "YASSkaalRaceVampire"    , name = "Skaal"                , basis = "NordRaceVampire"  , furry = "YASVaalsarkRaceVampire"},
+  {id = "YASWinterholdRace"      , name = "Winterhold Denizen"   , basis = "NordRace"         , furry = "YASShanRace"},
+  {id = "YASFalkreathRace"       , name = "Falkreath Denizen"    , basis = "NordRace"         , furry = "BDDeerRace"},
+  {id = "YASSailorRace"          , name = "Sailor"               , basis = "NordRace"         , furry = "CellanRace"},
+  {id = "YASMoragTongRace"       , name = "Morag Tong"           , basis = "DarkElfRace"      , furry = "YASBaghaRace"},
+  {id = "YASDragonBridgeRace"    , name = "Dragon Bridge Denizen", basis = "NordRace"         , furry = "YASBaghaRace"},
+  {id = "YASRoriksteadRace"      , name = "Rorikstead Denizen"   , basis = "NordRace"         , furry = "BDHorseRace"},
 ]
 
 # Faction-wide race overrides: all members become the listed race.
 [faction_races]
-ForswornFaction                = "YASReachmanRace"
-MS01TreasuryHouseForsworn      = "YASReachmanRace"
-DruadachRedoubtFaction         = "YASReachmanRace"
-DLC2SkaalVillageCitizenFaction = "YASSkaalRace"
-TownWinterholdFaction          = "YASWinterholdRace"
-CrimeFactionWinterhold         = "YASWinterholdRace"
-DawnstarFishingShipFaction     = "YASSailorRace"
-DawnstarImperialShipFaction    = "YASSailorRace"
-DawnstarSmallShipFaction       = "YASSailorRace"
-DLC2WaterStoneSailors          = "YASSailorRace"
-SailorFaction                  = "YASSailorRace"
-ShipsNorthwindFaction          = "YASSailorRace"
-ShipsRedWaveFaction            = "YASSailorRace"
-ShipsSeaSquallFaction          = "YASSailorRace"
-CrimeFactionFalkreath          = "YASFalkreathRace"
+ForswornFaction                    = "YASReachmanRace"
+MS01TreasuryHouseForsworn          = "YASReachmanRace"
+DruadachRedoubtFaction             = "YASReachmanRace"
+DLC2SkaalVillageCitizenFaction     = "YASSkaalRace"
+TownWinterholdFaction              = "YASWinterholdRace"
+CrimeFactionWinterhold             = "YASWinterholdRace"
+DawnstarFishingShipFaction         = "YASSailorRace"
+DawnstarImperialShipFaction        = "YASSailorRace"
+DawnstarSmallShipFaction           = "YASSailorRace"
+DLC2WaterStoneSailors              = "YASSailorRace"
+SailorFaction                      = "YASSailorRace"
+ShipsNorthwindFaction              = "YASSailorRace"
+ShipsRedWaveFaction                = "YASSailorRace"
+ShipsSeaSquallFaction              = "YASSailorRace"
+CrimeFactionFalkreath              = "YASFalkreathRace"
 BYOHHousecarlFalkreathCrimeFaction = "YASFalkreathRace"
+DragonBridgeFourShieldsInnFaction  = "YASDragonBridgeRace"
+DragonBridgeHorgeirHouse           = "YASDragonBridgeRace"
+DragonBridgeLumberCampFaction      = "YASDragonBridgeRace"
+DLC2MoragTongFaction               = "YASMoragTongRace" # Probably doesn't work--based on leveled lists
+TownRoriksteadFaction              = "YASRoriksteadRace"
+RoriksteadManorFaction             = "YASRoriksteadRace"
+RoriksteadLemkilsFarmFaction       = "YASRoriksteadRace"
+RoriksteadCowflopFarmFaction       = "YASRoriksteadRace"
+ServicesRoriksteadMralkiFaction    = "YASRoriksteadRace"
+RoriksteadFrostfruitInnFaction     = "YASRoriksteadRace"
+
 
 
 # Per-NPC race overrides (by NPC EditorID).

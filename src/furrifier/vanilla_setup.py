@@ -24,12 +24,12 @@ def define_vanilla_hair_labels(ctx: RaceDefContext) -> None:
     lbl = ctx.label_headpart_list
 
     # Elder
-    lbl('HairMaleElder1', 'SHORT,NEAT,BALDING,MATURE,MILITARY')
-    lbl('HairMaleElder2', 'SHORT,NEAT,BALDING,MATURE,MILITARY')
-    lbl('HairMaleElder3', 'SHORT,NEAT,BALDING,MATURE,MILITARY')
-    lbl('HairMaleElder4', 'SHORT,BALDING,MATURE')
-    lbl('HairMaleElder5', 'SHORT,NEAT,BALDING,MATURE,MILITARY')
-    lbl('HairMaleElder6', 'LONG,NEAT,BALDING,MATURE,TIEDBACK')
+    lbl('HairMaleElder1', 'SHORT,NEAT,BALD,MATURE,MILITARY')
+    lbl('HairMaleElder2', 'SHORT,NEAT,BALD,MATURE,MILITARY')
+    lbl('HairMaleElder3', 'SHORT,NEAT,BALD,MATURE,MILITARY')
+    lbl('HairMaleElder4', 'SHORT,BALD,MATURE')
+    lbl('HairMaleElder5', 'SHORT,NEAT,BALD,MATURE,MILITARY')
+    lbl('HairMaleElder6', 'LONG,NEAT,BALD,MATURE,TIEDBACK')
 
     # Imperial
     lbl('HairMaleImperial1', 'SHORT,NEAT,MILITARY,IMPERIAL')
