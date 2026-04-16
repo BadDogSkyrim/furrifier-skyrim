@@ -4,7 +4,7 @@
 # in the kit; excluded via furrify_skyrim.spec _TEST_ONLY.
 #
 # Derived from all_races_test with:
-#   - OrcRace -> YASMinoRace (exercises Mino probability entries)
+#   - OrcRace -> BDMinoRace (exercises Mino probability entries)
 #   - WoodElfRace -> BDDeerRace (exercises Deer probability entries)
 
 # Vanilla race -> furry race.
@@ -32,8 +32,8 @@ races = [
   {vanilla = "WoodElfRaceVampire"    , furry = "BDDeerRace"},
   {vanilla = "DarkElfRace"           , furry = "YASKaloRace"},
   {vanilla = "DarkElfRaceVampire"    , furry = "YASKaloRaceVampire"},
-  {vanilla = "OrcRace"               , furry = "YASMinoRace"},
-  {vanilla = "OrcRaceVampire"        , furry = "YASMinoRaceVampire"},
+  {vanilla = "OrcRace"               , furry = "BDMinoRace"},
+  {vanilla = "OrcRaceVampire"        , furry = "BDMinoRaceVampire"},
   {vanilla = "SnowElfRace"           , furry = "YASShanRace"},
 ]
 

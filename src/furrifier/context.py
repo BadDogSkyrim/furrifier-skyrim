@@ -18,7 +18,11 @@ from .models import Sex, HeadpartType, HeadpartInfo, Bodypart
 from .race_defs import RaceDefContext
 from .vanilla_setup import unalias
 from .furry_load import is_npc_female, is_child_race
-from .headparts import load_npc_labels, find_similar_headpart
+from .headparts import (
+    load_npc_labels, find_similar_headpart, _should_assign,
+    _PROBABILITY_GATED_TYPES,
+)
+from .util import hash_string
 from .tints import choose_furry_tints
 
 log = logging.getLogger(__name__)
@@ -189,6 +193,7 @@ class FurryContext:
         old_headpart_srs = npc.get_subrecords('PNAM')
         patched.remove_subrecords('PNAM')
 
+        assigned_types: set[HeadpartType] = set()
         for old_sr in old_headpart_srs:
             old_fid = old_sr.get_uint32()
             old_obj_id = old_fid & 0x00FFFFFF
@@ -207,6 +212,30 @@ class FurryContext:
             )
             if new_hp and new_hp.record:
                 self._add_headpart_pnam(patched, new_hp)
+                assigned_types.add(new_hp.hp_type)
+
+        # Add probability-gated headparts that the vanilla record didn't
+        # include. Needed for ungulates — most vanilla NPCs don't carry
+        # an EYEBROWS PNAM, so without this step minos/deer fall back to
+        # the race's default headpart (a single "steer horns") for every
+        # NPC that wasn't already given a brow.
+        sex_key = int(npc_sex)
+        for hp_type in _PROBABILITY_GATED_TYPES:
+            if hp_type in assigned_types:
+                continue
+            if not _should_assign(npc_alias, furry_race_id, npc_sex,
+                                  hp_type, self.ctx):
+                continue
+            candidates = self.race_headparts.get(
+                (hp_type, sex_key, furry_race_id), set())
+            if not candidates:
+                continue
+            candidate_list = sorted(candidates)
+            idx = hash_string(npc_alias, 619 + int(hp_type),
+                              len(candidate_list))
+            hp = self.all_headparts.get(candidate_list[idx])
+            if hp and hp.record:
+                self._add_headpart_pnam(patched, hp)
 
         # Extract vanilla NPC tint classes for decoration layer preservation
         npc_tint_classes = self._extract_npc_tint_classes(
