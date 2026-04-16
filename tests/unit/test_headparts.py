@@ -297,6 +297,68 @@ class TestBuildRaceHeadpartsExclude:
         assert result == {}
 
 
+class TestBuildRaceHeadpartsSexFlags:
+    """Sex flag handling in build_race_headparts.
+
+    xEdit's HDPT DATA byte: bit 1 = Male, bit 2 = Female. Some mods
+    (e.g. BDUngulates horn HDPTs) leave both bits off to mean 'unisex'.
+    """
+
+
+    def _build(self, data_flags: int):
+        """Construct a RACE + FLST + HDPT trio and return the
+        race_headparts index that build_race_headparts produces."""
+        import struct
+        from esplib import Plugin, Record, FormID
+
+        race = Record('RACE', FormID(0x01000001), 0)
+        race.add_subrecord('EDID', b'TestMinoRace\x00')
+        race.add_subrecord('DATA', b'\x00' * 136)
+
+        flst = Record('FLST', FormID(0x01000002), 0)
+        flst.add_subrecord('EDID', b'TestHornFLST\x00')
+        flst.add_subrecord('LNAM', struct.pack('<I', 0x01000001))
+
+        hdpt = Record('HDPT', FormID(0x01000003), 0)
+        hdpt.add_subrecord('EDID', b'TestMinoHorns\x00')
+        hdpt.add_subrecord('PNAM',
+                           struct.pack('<I', HeadpartType.EYEBROWS.value))
+        hdpt.add_subrecord('RNAM', struct.pack('<I', 0x01000002))
+        hdpt.add_subrecord('DATA', struct.pack('<B', data_flags))
+
+        plugin = Plugin.new_plugin('Test.esp')
+        for rec in (race, flst, hdpt):
+            rec.plugin = plugin
+            plugin.add_record(rec)
+
+        hp = HeadpartInfo(record=hdpt, editor_id='TestMinoHorns',
+                          hp_type=HeadpartType.EYEBROWS)
+        return build_race_headparts([plugin], {'TestMinoHorns': hp})
+
+
+    def test_male_flag_indexes_male_only(self):
+        result = self._build(0x02)  # Male only
+        assert ('TestMinoHorns'
+                in result.get((HeadpartType.EYEBROWS, int(Sex.MALE_ADULT),
+                               'TestMinoRace'), set()))
+        assert (HeadpartType.EYEBROWS, int(Sex.FEMALE_ADULT),
+                'TestMinoRace') not in result
+
+
+    def test_unisex_flag_indexes_both_sexes(self):
+        """Regression: mino horn HDPTs have flags=0x01 (Playable only).
+        If we dropped them, minos got no horns and fell back to the race
+        default (a single 'steer horn' for every NPC)."""
+        result = self._build(0x01)  # Playable only, no sex bits
+        male_key = (HeadpartType.EYEBROWS, int(Sex.MALE_ADULT), 'TestMinoRace')
+        female_key = (HeadpartType.EYEBROWS, int(Sex.FEMALE_ADULT),
+                      'TestMinoRace')
+        assert 'TestMinoHorns' in result.get(male_key, set()), \
+            "Unisex horn should be available for male minos"
+        assert 'TestMinoHorns' in result.get(female_key, set()), \
+            "Unisex horn should be available for female minos"
+
+
 class TestBlindnessState:
     """_blindness_state parses headpart EditorIDs."""
 

@@ -192,6 +192,11 @@ def build_race_headparts(plugins,
         flags = data_sr.data[0]
         is_male = bool(flags & 0x02)    # bit 1
         is_female = bool(flags & 0x04)  # bit 2
+        # Some mods (e.g. BDUngulates horn HDPTs) leave both sex bits
+        # off to mean "unisex". Treat no-bit-set as both sexes so those
+        # records aren't silently dropped from the index.
+        if not is_male and not is_female:
+            is_male = is_female = True
 
         # Get RNAM → FormList (normalize through the HDPT's plugin)
         rnam = hp.record.get_subrecord('RNAM')
