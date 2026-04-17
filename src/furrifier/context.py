@@ -22,7 +22,7 @@ from .headparts import (
     load_npc_labels, find_similar_headpart, _should_assign,
     _PROBABILITY_GATED_TYPES,
 )
-from .util import hash_string
+from .util import hash_string, short_race_name
 from .tints import choose_furry_tints
 
 log = logging.getLogger(__name__)
@@ -32,6 +32,33 @@ FURRIFIABLE_BODYPARTS = (
     Bodypart.HEAD | Bodypart.HAIR | Bodypart.HANDS |
     Bodypart.LONGHAIR | Bodypart.CIRCLET | Bodypart.SCHLONG
 )
+
+# Race EditorID variant suffixes, longest-match first.
+_RACE_VARIANT_SUFFIXES = ('ChildVampire', 'Vampire', 'Child')
+
+
+def _variant_suffix(race_edid: str) -> str:
+    """Return the variant suffix on a race EditorID, or '' for adults.
+
+    Used to keep vampire/child NPCs in their own family when extending
+    leveled lists: a vampire source NPC must spawn a vampire furry
+    duplicate, not an adult one.
+    """
+    for suffix in _RACE_VARIANT_SUFFIXES:
+        if race_edid.endswith(suffix):
+            return suffix
+    return ''
+
+
+def _strip_variant_suffix(race_edid: str) -> str:
+    """Return the base (adult) race EditorID."""
+    suffix = _variant_suffix(race_edid)
+    return race_edid[:-len(suffix)] if suffix else race_edid
+
+
+def _variant_names(base_race: str) -> tuple[str, ...]:
+    return (base_race,) + tuple(
+        base_race + s for s in _RACE_VARIANT_SUFFIXES)
 
 
 class FurryContext:
@@ -135,22 +162,45 @@ class FurryContext:
 
         return (original_race_id, assigned_race_id, furry_race_id)
 
-    def furrify_npc(self, npc: Record) -> Optional[Record]:
+    def furrify_npc(self, npc: Record,
+                    override_furry_race: Optional[str] = None,
+                    ) -> Optional[Record]:
         """Furrify a single NPC.
 
         Creates an override in the patch plugin with furry race, headparts,
         and tint layers. Returns the patched record, or None if skipped.
+
+        If ``override_furry_race`` is set, the NPC is forced to that furry
+        race (RNAM is rewritten to point at it) regardless of normal
+        scheme assignments. Used by the leveled-list extension to assign
+        a specific furry race to a duplicated NPC.
         """
         # Skip chargen presets
         acbs = npc['ACBS']
         if acbs and acbs['flags'].IsCharGenFacePreset:
             return None
 
-        race_result = self.determine_npc_race(npc)
-        if race_result is None:
-            return None
-
-        original_race_id, assigned_race_id, furry_race_id = race_result
+        if override_furry_race is not None:
+            rnam = npc.get_subrecord('RNAM')
+            if rnam is None:
+                return None
+            race_fid = npc.normalize_form_id(rnam.get_form_id()).value
+            original_race_id = None
+            for edid, rec in self.races.items():
+                if rec.normalize_form_id(rec.form_id).value == race_fid:
+                    original_race_id = edid
+                    break
+            if original_race_id is None:
+                return None
+            # Treat the override race as both the assigned race (so RNAM
+            # gets rewritten) and the visual furry race.
+            assigned_race_id = override_furry_race
+            furry_race_id = override_furry_race
+        else:
+            race_result = self.determine_npc_race(npc)
+            if race_result is None:
+                return None
+            original_race_id, assigned_race_id, furry_race_id = race_result
         race_record = self.races.get(original_race_id)
         npc_sex = self.determine_npc_sex(npc, race_record)
         npc_alias = unalias(npc.editor_id or str(npc.form_id))
@@ -167,8 +217,14 @@ class FurryContext:
             subrace_rec = self.races.get(assigned_race_id)
             if subrace_rec is not None:
                 rnam_sr = patched.get_subrecord('RNAM')
-                self.patch.write_form_id(
-                    rnam_sr, 0, subrace_rec.form_id)
+                # Normalize to load-order space first. Patch-created
+                # subrace records carry the local sentinel and round-trip
+                # safely; loaded race records (used by leveled-list
+                # extension) need real normalization to avoid having
+                # their master-list index misread as a load-order index.
+                norm_fid = subrace_rec.normalize_form_id(
+                    subrace_rec.form_id)
+                self.patch.write_form_id(rnam_sr, 0, norm_fid)
 
         # Remove vanilla character customization
         patched.remove_subrecords('FTST')
@@ -399,6 +455,179 @@ class FurryContext:
 
         log.debug(f"Total NPCs furrified: {count}")
         return count
+
+    # -- Leveled NPC list extension --
+
+    def extend_leveled_npcs(self, plugins) -> tuple[int, int]:
+        """Extend humanoid LVLN records with furry NPC duplicates.
+
+        For each LVLO entry whose source NPC has a furrifiable race
+        (i.e. would be processed by furrify_npc), roll once per
+        configured target furry race. On hit, duplicate the source NPC,
+        assign it to the target race, run furrification, and append a
+        new LVLO entry to the LVLN preserving the source entry's level
+        and count. The same (source NPC, target race) pair generates a
+        single shared duplicate even if it hits in multiple lists.
+
+        Returns (npcs_created, lists_extended).
+        """
+        groups = list(self.ctx.leveled_npc_groups)
+        if not groups:
+            return (0, 0)
+
+        # Strip vampire/child suffixes from each rule's target so we can
+        # re-append the suffix that matches the source NPC's variant.
+        # User-facing convention: specify the BASE adult race name.
+        # Pre-compute (rule, base_race) for each group, dropping rules
+        # whose target race isn't loaded.
+        active_by_group: list[list[tuple]] = []
+        for group in groups:
+            active_rules: list[tuple] = []
+            for rule in group.races:
+                base = _strip_variant_suffix(rule.race)
+                if any(v in self.races for v in _variant_names(base)):
+                    active_rules.append((rule, base))
+                else:
+                    log.warning(
+                        f"Leveled NPC race {rule.race!r} is not loaded; "
+                        f"skipping rule")
+            active_by_group.append(active_rules)
+        if not any(active_by_group):
+            return (0, 0)
+
+        # Cache of created duplicates: (src_obj_id, furry_race) -> Record
+        duplicates: dict[tuple[int, str], Record] = {}
+        lists_extended = 0
+
+        # Build NPC obj_id -> winning record lookup once
+        npc_by_obj: dict[int, Record] = {}
+        for plugin in plugins:
+            for npc in plugin.get_records_by_signature('NPC_'):
+                npc_by_obj[npc.form_id.value & 0x00FFFFFF] = npc
+
+        # Walk LVLN winning overrides
+        winning_lvln: dict[int, Record] = {}
+        for plugin in plugins:
+            for lvln in plugin.get_records_by_signature('LVLN'):
+                winning_lvln[lvln.form_id.value & 0x00FFFFFF] = lvln
+
+        exclusions = tuple(self.ctx.leveled_npc_exclusions)
+
+        for lvln in winning_lvln.values():
+            lvln_eid = lvln.editor_id or ''
+            if any(s in lvln_eid for s in exclusions):
+                continue
+
+            # First-match-wins: pick the first group whose match_substrings
+            # (case-insensitive substring) hits the LVLN editor_id, or a
+            # group with no match_substrings (catch-all).
+            active_rules = []
+            for group, rules in zip(groups, active_by_group):
+                if group.matches(lvln_eid):
+                    active_rules = rules
+                    break
+            if not active_rules:
+                continue
+
+            new_entries: list[tuple[int, int, FormID]] = []
+            # Dedupe: a single source NPC may appear multiple times in
+            # one LVLN (at different levels); add at most one furry
+            # duplicate per (src, target_race) pair per list.
+            added_in_this_list: set[tuple[int, str]] = set()
+            for sr in lvln.get_subrecords('LVLO'):
+                if sr.size < 12:
+                    continue
+                level = struct.unpack_from('<H', sr.data, 0)[0]
+                count = struct.unpack_from('<H', sr.data, 8)[0]
+                ref_norm = lvln.normalize_form_id(
+                    sr.get_form_id(4)).value
+                ref_obj = ref_norm & 0x00FFFFFF
+                src_npc = npc_by_obj.get(ref_obj)
+                if src_npc is None:
+                    continue
+                src_race = self.determine_npc_race(src_npc)
+                if src_race is None:
+                    continue
+                source_race_id = src_race[0]
+                variant_suffix = _variant_suffix(source_race_id)
+
+                src_alias = unalias(
+                    src_npc.editor_id or str(src_npc.form_id))
+                for rule, base_race in active_rules:
+                    target_race = base_race + variant_suffix
+                    if target_race not in self.races:
+                        continue  # variant not defined for this family
+
+                    if (ref_obj, target_race) in added_in_this_list:
+                        continue
+
+                    decision_key = (
+                        f"{lvln.editor_id or ''}:{src_alias}:{base_race}")
+                    threshold = int(rule.probability * 1000)
+                    if hash_string(decision_key, 7831, 1000) >= threshold:
+                        continue
+
+                    cache_key = (ref_obj, target_race)
+                    dup = duplicates.get(cache_key)
+                    if dup is None:
+                        dup = self._create_leveled_duplicate(
+                            src_npc, target_race)
+                        if dup is None:
+                            continue
+                        duplicates[cache_key] = dup
+
+                    dup_norm = dup.normalize_form_id(dup.form_id)
+                    new_entries.append((level, count, dup_norm))
+                    added_in_this_list.add((ref_obj, target_race))
+
+            if not new_entries:
+                continue
+
+            patched = self._copy_record(lvln)
+            for level, count, ref_fid in new_entries:
+                entry_data = struct.pack(
+                    '<HHIHH', level, 0, 0, count, 0)
+                sr = patched.add_subrecord('LVLO', entry_data)
+                self.patch.write_form_id(sr, 4, ref_fid)
+
+            llct = patched.get_subrecord('LLCT')
+            if llct is not None and llct.size >= 1:
+                new_count = sum(
+                    1 for s in patched.subrecords if s.signature == 'LVLO')
+                llct.data = bytearray([min(new_count, 255)])
+                llct.modified = True
+
+            lists_extended += 1
+
+        log.debug(
+            f"Leveled list extension: {len(duplicates)} NPCs, "
+            f"{lists_extended} lists")
+        return (len(duplicates), lists_extended)
+
+
+    def _create_leveled_duplicate(self, src_npc: Record,
+                                  furry_race: str) -> Optional[Record]:
+        """Create a furrified duplicate of an NPC for leveled-list use.
+
+        Furrifies src_npc — which copies it into the patch as an override
+        — then promotes that override into a brand-new NPC by giving it a
+        fresh FormID and renaming it to ``YAS_<src_edid>_<furry_race>``.
+        """
+        patched = self.furrify_npc(src_npc, override_furry_race=furry_race)
+        if patched is None:
+            return None
+
+        patched.form_id = self.patch.get_next_form_id()
+        self.patch._new_records.append(patched)
+
+        src_edid = src_npc.editor_id or f"NPC{src_npc.form_id.value:08X}"
+        new_edid = f"YAS_{src_edid}_{short_race_name(furry_race)}"
+        edid_sr = patched.get_subrecord('EDID')
+        if edid_sr is not None:
+            edid_sr.data = bytearray((new_edid + '\x00').encode('cp1252'))
+            edid_sr.modified = True
+
+        return patched
 
     # -- Race furrification --
 

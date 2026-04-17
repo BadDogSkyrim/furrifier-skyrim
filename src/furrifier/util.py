@@ -4,6 +4,22 @@ Hash functions, color helpers, and bodypart flag operations.
 """
 
 
+def short_race_name(edid: str) -> str:
+    """Shorten a race EditorID for use in composed identifiers.
+
+    Strips a leading 'YAS' prefix; replaces the 'RaceVampire' suffix
+    with 'V'; otherwise strips a trailing 'Race'.
+    """
+    name = edid
+    if name.startswith('YAS'):
+        name = name[3:]
+    if name.endswith('RaceVampire'):
+        name = name[:-len('RaceVampire')] + 'V'
+    elif name.endswith('Race'):
+        name = name[:-4]
+    return name
+
+
 def hash_string(s: str, seed: int, m: int) -> int:
     """Hash a string with seed, return result modulo m.
 

@@ -1,7 +1,11 @@
 """Tests for race definitions and preference schemes."""
 
+from pathlib import Path
+
 import pytest
-from furrifier.race_defs import load_scheme, RaceDefContext, SCHEMES
+from furrifier.race_defs import (
+    _parse_leveled_npcs, load_scheme, RaceDefContext, SCHEMES,
+)
 
 
 class TestLoadScheme:
@@ -154,3 +158,68 @@ class TestRaceDefContext:
         # Deer male facial hair = 0.2.
         assert ctx.get_headpart_probability(
             'BDDeerRace', 'Male', 'FACIAL_HAIR') == 0.2
+
+
+class TestLeveledNpcsParsing:
+    """Validation warnings for the [leveled_npcs] scheme section."""
+
+    PATH = Path('test.toml')
+
+    def _parse(self, section):
+        ctx = RaceDefContext()
+        _parse_leveled_npcs({'leveled_npcs': section}, ctx, self.PATH)
+        return ctx
+
+    def test_obsolete_top_level_races_warns(self, caplog):
+        """Old format with ``races =`` at the leveled_npcs root must
+        produce a warning, not silent zero overrides."""
+        with caplog.at_level('WARNING'):
+            ctx = self._parse({
+                'races': [{'race': 'YASLykaiosRace', 'probability': 0.1}],
+            })
+        assert ctx.leveled_npc_groups == []
+        assert any('obsolete' in r.message.lower() for r in caplog.records)
+
+    def test_unknown_top_level_key_warns(self, caplog):
+        with caplog.at_level('WARNING'):
+            self._parse({'bogus': 1, 'groups': []})
+        assert any("'bogus'" in r.message for r in caplog.records)
+
+    def test_unknown_group_key_warns(self, caplog):
+        with caplog.at_level('WARNING'):
+            self._parse({
+                'groups': [
+                    {'match_substring': ['bandit'], 'races': []},  # typo
+                ],
+            })
+        assert any("'match_substring'" in r.message for r in caplog.records)
+
+    def test_missing_race_key_warns_and_skips(self, caplog):
+        with caplog.at_level('WARNING'):
+            ctx = self._parse({
+                'groups': [
+                    {'races': [
+                        {'probability': 0.1},
+                        {'race': 'YASLykaiosRace', 'probability': 0.1},
+                    ]},
+                ],
+            })
+        assert any("missing required 'race'" in r.message
+                   for r in caplog.records)
+        # Second rule still parsed.
+        assert len(ctx.leveled_npc_groups[0].races) == 1
+
+    def test_clean_config_no_warnings(self, caplog):
+        with caplog.at_level('WARNING'):
+            ctx = self._parse({
+                'exclude_substrings': ['Thalmor'],
+                'groups': [
+                    {'match_substrings': ['bandit'], 'races': [
+                        {'race': 'YASLykaiosRace', 'probability': 0.1},
+                    ]},
+                ],
+            })
+        assert not [r for r in caplog.records
+                    if r.name.startswith('furrifier')]
+        assert len(ctx.leveled_npc_groups) == 1
+        assert ctx.leveled_npc_groups[0].races[0].race == 'YASLykaiosRace'

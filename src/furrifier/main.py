@@ -122,6 +122,13 @@ def main() -> int:
         )
         log.info(f"Furrified {npc_count} NPCs")
 
+    # Extend leveled NPC lists with furry duplicates
+    if ctx.leveled_npc_groups:
+        log.info("Extending leveled NPC lists...")
+        new_count, list_count = furry.extend_leveled_npcs(plugin_set)
+        log.info(
+            f"Created {new_count} leveled-list NPCs across {list_count} lists")
+
     # Furrify armor
     if config.furrify_armor:
         log.info("Merging armor overrides...")

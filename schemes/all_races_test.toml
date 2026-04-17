@@ -87,3 +87,38 @@ Omluag       = "YASReachmanRace"
 Rondach      = "YASReachmanRace"
 Gralnach     = "YASReachmanRaceChild"
 
+
+# Leveled NPC list extension. For every existing LVLO entry whose source
+# NPC has a furrifiable race, roll random() < probability per target race;
+# on hit, duplicate the source NPC, assign it to the target race, and
+# append a new LVLO entry to the list (preserving level/count).
+[leveled_npcs]
+# Skip LVLNs whose editor IDs contain any of these substrings.
+# Use for lore-bound factions (Thalmor, Forsworn) and explicitly
+# race-coded lists (LCharOrc) where furry duplicates would clash.
+exclude_substrings = ["LCharOrc", "Thalmor", "Alikir", "Forsworn"]
+
+# Groups are tried in order; first match wins (the first group whose
+# match_substrings is a case-insensitive substring of the LVLN editor_id
+# supplies the rules for that list). Omit match_substrings for a
+# catch-all — keep it last.
+[[leveled_npcs.groups]]
+match_substrings = ["bandit"]
+races = [
+  {race = "YASLykaiosRace", probability = 0.10},
+  {race = "YASKonoiRace"  , probability = 0.10},
+]
+
+[[leveled_npcs.groups]]
+match_substrings = ["warlock", "necromancer", "vampire"]
+races = [
+  {race = "YASVaalsarkRace", probability = 0.10},
+  {race = "YASKonoiRace"   , probability = 0.10},
+]
+
+[[leveled_npcs.groups]]
+# Catch-all (no match_substrings)
+races = [
+  {race = "CellanRace", probability = 0.05},
+]
+

@@ -149,6 +149,38 @@ class Subrace:
 
 
 @dataclass
+class LeveledNpcEntry:
+    """Per-race rule inside a leveled-list group.
+
+    For every existing LVLO entry whose source NPC's race is in
+    ``race_assignments``, roll ``random() < probability``. On hit,
+    duplicate the source NPC and assign it to ``race``.
+    """
+    race: str               # Furry race EditorID (e.g. 'YASKonoiRace')
+    probability: float      # Per-(entry, race) duplicate probability
+
+
+@dataclass
+class LeveledNpcGroup:
+    """A group of leveled-list extension rules with a match filter.
+
+    First-match-wins: groups are tried in order against each LVLN's
+    editor_id. The first group whose ``match_substrings`` matches (case-
+    insensitive substring) supplies the race rules for that list. An
+    empty/missing ``match_substrings`` matches any list, so place a
+    catch-all group last if you want one.
+    """
+    match_substrings: list[str]
+    races: list[LeveledNpcEntry]
+
+    def matches(self, lvln_editor_id: str) -> bool:
+        if not self.match_substrings:
+            return True
+        eid_lower = lvln_editor_id.lower()
+        return any(s.lower() in eid_lower for s in self.match_substrings)
+
+
+@dataclass
 class HeadpartInfo:
     """Metadata about a headpart record."""
     record: Record

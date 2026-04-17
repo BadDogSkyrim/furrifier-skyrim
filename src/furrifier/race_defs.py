@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from .models import RaceAssignment, Subrace
+from .models import LeveledNpcEntry, LeveledNpcGroup, RaceAssignment, Subrace
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +62,13 @@ class RaceDefContext:
         # HeadpartType.name) -> float in [0.0, 1.0]. Missing key = 1.0.
         # sex_name is 'Male', 'Female', or None (applies to both).
         self.headpart_probability: dict[tuple, float] = {}
+        # leveled-list extension groups: ordered list, first-match wins
+        # against the LVLN editor_id
+        self.leveled_npc_groups: list[LeveledNpcGroup] = []
+        # leveled-list editor-id substrings to skip entirely (e.g. faction-
+        # specific lists like Thalmor where lore-bound races shouldn't
+        # gain furry duplicates)
+        self.leveled_npc_exclusions: list[str] = []
 
 
     def set_race(self, vanilla_id: str, furry_id: str) -> None:
@@ -155,6 +162,92 @@ class RaceDefContext:
                 if p is not None:
                     return p
         return 1.0
+
+
+_LEVELED_NPCS_KEYS = frozenset({'exclude_substrings', 'groups'})
+_GROUP_KEYS = frozenset({'match_substrings', 'races'})
+_RACE_RULE_KEYS = frozenset({'race', 'probability'})
+
+
+def _parse_leveled_npcs(data: dict, ctx: 'RaceDefContext',
+                        scheme_path: Path) -> None:
+    """Parse the [leveled_npcs] section of a scheme.
+
+    Emits warnings (via log.warning, surfaced in the run summary) for
+    unknown keys, missing required fields, and the obsolete top-level
+    ``races = [...]`` shape — common authoring mistakes that would
+    otherwise silently produce zero leveled-list overrides.
+    """
+    section = data.get('leveled_npcs')
+    if section is None:
+        return
+    if not isinstance(section, dict):
+        log.warning(
+            f"{scheme_path.name}: [leveled_npcs] is not a table; "
+            f"ignoring leveled-NPC config")
+        return
+
+    for key in section:
+        if key not in _LEVELED_NPCS_KEYS:
+            if key == 'races':
+                log.warning(
+                    f"{scheme_path.name}: [leveled_npcs] uses obsolete "
+                    f"top-level 'races =' — wrap in '[[leveled_npcs."
+                    f"groups]]' (with optional match_substrings) to "
+                    f"enable leveled-list extension")
+            else:
+                log.warning(
+                    f"{scheme_path.name}: [leveled_npcs] has unknown "
+                    f"key {key!r} (expected one of "
+                    f"{sorted(_LEVELED_NPCS_KEYS)})")
+
+    ctx.leveled_npc_exclusions = list(
+        section.get('exclude_substrings', []))
+
+    for i, group in enumerate(section.get('groups', [])):
+        label = f"[leveled_npcs.groups][{i}]"
+        if not isinstance(group, dict):
+            log.warning(
+                f"{scheme_path.name}: {label} is not a table; skipping")
+            continue
+        for key in group:
+            if key not in _GROUP_KEYS:
+                log.warning(
+                    f"{scheme_path.name}: {label} has unknown key "
+                    f"{key!r} (expected one of {sorted(_GROUP_KEYS)})")
+
+        races: list[LeveledNpcEntry] = []
+        for j, rule in enumerate(group.get('races', [])):
+            rule_label = f"{label}.races[{j}]"
+            if not isinstance(rule, dict):
+                log.warning(
+                    f"{scheme_path.name}: {rule_label} is not a "
+                    f"table; skipping")
+                continue
+            for key in rule:
+                if key not in _RACE_RULE_KEYS:
+                    log.warning(
+                        f"{scheme_path.name}: {rule_label} has unknown "
+                        f"key {key!r} (expected one of "
+                        f"{sorted(_RACE_RULE_KEYS)})")
+            if 'race' not in rule:
+                log.warning(
+                    f"{scheme_path.name}: {rule_label} missing required "
+                    f"'race' key; skipping")
+                continue
+            if 'probability' not in rule:
+                log.warning(
+                    f"{scheme_path.name}: {rule_label} missing required "
+                    f"'probability' key; skipping")
+                continue
+            races.append(LeveledNpcEntry(
+                race=str(rule['race']),
+                probability=float(rule['probability'])))
+
+        ctx.leveled_npc_groups.append(LeveledNpcGroup(
+            match_substrings=list(group.get('match_substrings', [])),
+            races=races,
+        ))
 
 
 def _find_resource_dir(name: str) -> Optional[Path]:
@@ -265,6 +358,8 @@ def load_scheme(scheme_name: str) -> RaceDefContext:
 
     for npc_edid, race_id in data.get('npc_races', {}).items():
         ctx.set_npc_race(npc_edid, race_id)
+
+    _parse_leveled_npcs(data, ctx, scheme_path)
 
     # Merge race catalog data from races/*.toml. This is scheme-
     # independent — every scheme picks up the same catalog data.
