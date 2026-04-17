@@ -159,6 +159,44 @@ def _flst_len(patch, editor_id):
     return -1
 
 
+def _arma_race_edids(plugin_set, patch, races, arma_edid):
+    """Get the set of race EditorIDs an ARMA accepts (RNAM + MODL).
+
+    Prefers the patch override if present, otherwise reads the highest-
+    priority ARMA from the load order. Resolves race FormIDs by matching
+    against load-order-normalized race FormIDs.
+    """
+    arma = None
+    for rec in patch.get_records_by_signature('ARMA'):
+        if rec.editor_id == arma_edid:
+            arma = rec
+            break
+    if arma is None:
+        for plugin in plugin_set:
+            for rec in plugin.get_records_by_signature('ARMA'):
+                if rec.editor_id == arma_edid:
+                    arma = rec
+    if arma is None:
+        return set()
+
+    norm_to_edid: dict[int, str] = {}
+    for edid, rec in races.items():
+        norm_to_edid[rec.normalize_form_id(rec.form_id).value] = edid
+
+    out: set[str] = set()
+    rnam = arma.get_subrecord('RNAM')
+    if rnam and rnam.size >= 4:
+        norm = arma.normalize_form_id(rnam.get_form_id()).value
+        if norm in norm_to_edid:
+            out.add(norm_to_edid[norm])
+    for sr in arma.get_subrecords('MODL'):
+        if sr.size >= 4:
+            norm = arma.normalize_form_id(sr.get_form_id()).value
+            if norm in norm_to_edid:
+                out.add(norm_to_edid[norm])
+    return out
+
+
 # -- Tests --
 
 
@@ -244,3 +282,44 @@ class TestCanineSchlongs:
             f"canine compat({compat_len}) != prob({prob_len})"
         assert compat_len == size_len, \
             f"canine compat({compat_len}) != size({size_len})"
+
+
+class TestSubraceSheathARMAs:
+    """Sheath ARMAs whose RNAM is a furry race used only by a subrace
+    (Konoi/Reachman, Vaalsark/Skaal) must add the subrace to their
+    Additional Races list. Otherwise, when SOS equips the sheath ARMO
+    on a subrace NPC, no ARMA matches and the mesh fails to render."""
+
+    def test_konoi_sheath_includes_reachman(self, schlong_result, plugin_set):
+        """YASKonoiSheathMale00BP RNAM is YASKonoiRace; its only vanilla
+        mapping is the YASReachmanRace subrace, which must be added."""
+        patch, races = schlong_result
+        edids = _arma_race_edids(
+            plugin_set, patch, races, 'YASKonoiSheathMale00BP')
+        assert 'YASReachmanRace' in edids, \
+            f"YASReachmanRace missing from YASKonoiSheathMale00BP races: {edids}"
+
+    def test_konoi_sheath_includes_reachman_vampire(
+            self, schlong_result, plugin_set):
+        patch, races = schlong_result
+        edids = _arma_race_edids(
+            plugin_set, patch, races, 'YASKonoiSheathMale00BP')
+        assert 'YASReachmanRaceVampire' in edids, \
+            f"YASReachmanRaceVampire missing from YASKonoiSheathMale00BP races: {edids}"
+
+    def test_vaalsark_sheath_includes_skaal(self, schlong_result, plugin_set):
+        """YASVaalsarkSheathMale00BP RNAM is YASVaalsarkRace; its only
+        vanilla mapping is the YASSkaalRace subrace, which must be added."""
+        patch, races = schlong_result
+        edids = _arma_race_edids(
+            plugin_set, patch, races, 'YASVaalsarkSheathMale00BP')
+        assert 'YASSkaalRace' in edids, \
+            f"YASSkaalRace missing from YASVaalsarkSheathMale00BP races: {edids}"
+
+    def test_vaalsark_sheath_includes_skaal_vampire(
+            self, schlong_result, plugin_set):
+        patch, races = schlong_result
+        edids = _arma_race_edids(
+            plugin_set, patch, races, 'YASVaalsarkSheathMale00BP')
+        assert 'YASSkaalRaceVampire' in edids, \
+            f"YASSkaalRaceVampire missing from YASVaalsarkSheathMale00BP races: {edids}"

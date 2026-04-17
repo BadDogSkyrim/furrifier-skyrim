@@ -25,6 +25,9 @@ from esplib import flst_add, flst_contains, flst_forms, flst_remove
 from esplib import glob_copy_as
 from esplib.vmad import VmadData, PROP_OBJECT
 
+from .armor import get_bodypart_flags
+from .models import Bodypart
+
 log = logging.getLogger(__name__)
 
 
@@ -120,6 +123,80 @@ def furrify_all_schlongs(plugins,
                 count += 1
 
     log.info(f"Furrified {count} SOS quests")
+
+    arma_count = _furrify_schlong_armas(
+        plugins, patch, race_fid_by_edid, race_edid_by_fid, furry_races)
+    if arma_count:
+        log.info(f"Added subrace support to {arma_count} SOS sheath ARMAs")
+
+    return count
+
+
+def _furrify_schlong_armas(plugins, patch: Plugin,
+                           race_fid_by_edid: dict[str, 'FormID'],
+                           race_edid_by_fid: dict[int, str],
+                           furry_races: dict[str, list[str]],
+                           ) -> int:
+    """Add subrace support to SOS sheath ARMAs.
+
+    For each ARMA with the SCHLONG bodypart flag, look at every race it
+    already accepts (RNAM + MODL). If any of those is a furry race that
+    has vanilla races mapped to it (e.g. Konoi mapped from Reachmen,
+    KonoiVampire mapped from ReachmenVampire), add the missing vanilla
+    races to the Additional Races list. Without this, the SOS framework
+    can equip the sheath ARMO on a subrace NPC but no ARMA matches the
+    NPC's race, so the mesh fails to render.
+    """
+    count = 0
+    seen_armas: set[int] = set()
+
+    for plugin in plugins:
+        for arma in plugin.get_records_by_signature('ARMA'):
+            if not (get_bodypart_flags(arma) & Bodypart.SCHLONG):
+                continue
+
+            arma_obj = arma.form_id.value & 0x00FFFFFF
+            if arma_obj in seen_armas:
+                continue
+            seen_armas.add(arma_obj)
+
+            existing: set[int] = set()
+            current_edids: list[str] = []
+            rnam = arma.get_subrecord('RNAM')
+            if rnam and rnam.size >= 4:
+                fid = arma.normalize_form_id(rnam.get_form_id()).value
+                existing.add(fid)
+                edid = race_edid_by_fid.get(fid)
+                if edid:
+                    current_edids.append(edid)
+            for sr in arma.get_subrecords('MODL'):
+                if sr.size >= 4:
+                    fid = arma.normalize_form_id(sr.get_form_id()).value
+                    existing.add(fid)
+                    edid = race_edid_by_fid.get(fid)
+                    if edid:
+                        current_edids.append(edid)
+
+            to_add: list[tuple[str, 'FormID']] = []
+            for race_edid in current_edids:
+                for vanilla_edid in furry_races.get(race_edid, []):
+                    vanilla_fid = race_fid_by_edid.get(vanilla_edid)
+                    if vanilla_fid is None or vanilla_fid.value in existing:
+                        continue
+                    to_add.append((vanilla_edid, vanilla_fid))
+                    existing.add(vanilla_fid.value)
+
+            if not to_add:
+                continue
+
+            patched = patch.copy_record(arma)
+            for vanilla_edid, vanilla_fid in to_add:
+                sr = patched.add_subrecord('MODL', b'\x00\x00\x00\x00')
+                patch.write_form_id(sr, 0, vanilla_fid)
+                log.debug(
+                    f"  Added {vanilla_edid} to {arma.editor_id} races")
+            count += 1
+
     return count
 
 
