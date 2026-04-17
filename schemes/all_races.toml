@@ -101,3 +101,41 @@ Omluag       = "YASReachmanRace"
 Rondach      = "YASReachmanRace"
 Gralnach     = "YASReachmanRaceChild"
 
+# Leveled NPC list extension. Get more NPCs of races that don't have a vanilla couterpart in game.
+[leveled_npcs]
+exclude_substrings = ["LCharOrc", "Thalmor", "Alikir", "Forsworn"]
+
+[[leveled_npcs.groups]]
+match_substrings = ["bandit"]
+races = [
+  {race = "BDMinoRace", probability = 0.10},
+  {race = "BDDeerRace"  , probability = 0.01},
+  {race = "BDHorseRace"  , probability = 0.10},
+  {race = "YASVaalsarkRace"  , probability = 0.10},
+  {race = "CellanRace"  , probability = 0.01},
+  {race = "YASBaghaRace"  , probability = 0.10},
+  {race = "YASShanRace"  , probability = 0.05},
+]
+
+[[leveled_npcs.groups]]
+match_substrings = ["warlock", "necromancer"]
+races = [
+  {race = "BDMinoRace", probability = 0.01},
+  {race = "BDDeerRace"  , probability = 0.20},
+  {race = "BDHorseRace"  , probability = 0.10},
+  {race = "YASVaalsarkRace"  , probability = 0.20},
+  {race = "CellanRace"  , probability = 0.01},
+  {race = "YASBaghaRace"  , probability = 0.10},
+  {race = "YASShanRace"  , probability = 0.05},
+]
+
+[[leveled_npcs.groups]]
+races = [
+  {race = "BDMinoRace", probability = 0.10},
+  {race = "BDDeerRace"  , probability = 0.10},
+  {race = "BDHorseRace"  , probability = 0.10},
+  {race = "YASVaalsarkRace"  , probability = 0.10},
+  {race = "CellanRace"  , probability = 0.05},
+  {race = "YASBaghaRace"  , probability = 0.10},
+  {race = "YASShanRace"  , probability = 0.05},
+]

@@ -27,6 +27,7 @@ from esplib.vmad import VmadData, PROP_OBJECT
 
 from .armor import get_bodypart_flags
 from .models import Bodypart
+from .util import short_race_name as _short_race_name
 
 log = logging.getLogger(__name__)
 
@@ -198,22 +199,6 @@ def _furrify_schlong_armas(plugins, patch: Plugin,
             count += 1
 
     return count
-
-
-def _short_race_name(edid: str) -> str:
-    """Shorten a race editor ID for GLOB naming.
-
-    Strip 'YAS' prefix, replace 'RaceVampire' suffix with 'V',
-    strip 'Race' suffix.
-    """
-    name = edid
-    if name.startswith('YAS'):
-        name = name[3:]
-    if name.endswith('RaceVampire'):
-        name = name[:-len('RaceVampire')] + 'V'
-    elif name.endswith('Race'):
-        name = name[:-4]
-    return name
 
 
 def _quest_stem(quest_edid: str) -> str:
