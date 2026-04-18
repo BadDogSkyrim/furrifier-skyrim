@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
+from typing import Callable, Optional
 
 from esplib import Plugin, PluginSet, LoadOrder, find_game_data, find_strings_dir
 
@@ -21,13 +22,53 @@ from .furry_load import load_races, load_headparts, build_race_headparts, build_
 log = logging.getLogger(__name__)
 
 
-def main() -> int:
-    import sys
-    parser = build_parser()
-    args = parser.parse_args(normalize_argv(sys.argv[1:]))
-    config = FurrifierConfig.from_args(args)
-    setup_logging(config)
-    logging.getLogger().addHandler(_log_counter)
+ProgressCallback = Callable[[str], None]
+
+
+def run_furrification(
+    config: FurrifierConfig,
+    load_order: Optional[LoadOrder] = None,
+    progress: Optional[ProgressCallback] = None,
+) -> int:
+    """Run the full furrification pipeline.
+
+    Parameters
+    ----------
+    config : FurrifierConfig
+        All settings for this run.
+    load_order : LoadOrder, optional
+        If given, use this load order. Otherwise build one from the game's
+        active plugins (excluding the patch itself).
+    progress : callable, optional
+        Called with a short phase label at each pipeline milestone
+        (e.g. "Loading plugins", "Furrifying NPCs"). Use to drive a GUI
+        status line. Logging to the module logger still happens either way.
+
+    Returns
+    -------
+    int
+        0 on success, non-zero on failure.
+    """
+
+    # Fresh warning/error counter per run (GUI may invoke this many times).
+    log_counter = _LogCounter()
+    root_logger = logging.getLogger()
+    root_logger.addHandler(log_counter)
+    try:
+        return _run_furrification_body(config, load_order, progress, log_counter)
+    finally:
+        root_logger.removeHandler(log_counter)
+
+
+def _run_furrification_body(
+    config: FurrifierConfig,
+    load_order: Optional[LoadOrder],
+    progress: Optional[ProgressCallback],
+    log_counter: "_LogCounter",
+) -> int:
+    def emit(phase: str) -> None:
+        if progress is not None:
+            progress(phase)
 
     log.info("Skyrim Furrifier v0.1.0")
     log.info(f"  Scheme: {config.race_scheme}")
@@ -49,13 +90,16 @@ def main() -> int:
     log.debug(f"Data directory: {data_dir}")
 
     # Load preference scheme
+    emit("Loading scheme")
     ctx = load_scheme(config.race_scheme)
     setup_vanilla(ctx)
 
-    # Load active plugins from plugins.txt (exclude the patch itself)
+    # Build load order (exclude the patch itself) unless caller supplied one
+    emit("Loading plugins")
     log.debug("Loading plugins...")
     patch_name = config.patch_filename.lower()
-    load_order = LoadOrder.from_game('tes5', active_only=True)
+    if load_order is None:
+        load_order = LoadOrder.from_game('tes5', active_only=True)
     load_order.plugins = [p for p in load_order.plugins
                           if p.lower() != patch_name]
     plugin_set = PluginSet(load_order)
@@ -72,6 +116,7 @@ def main() -> int:
     log.debug(f"Loaded {len(plugin_set)} plugins")
 
     # Load race and headpart data
+    emit("Loading races and headparts")
     races_by_edid = load_races(plugin_set, ctx)
     races = {edid: info.record for edid, info in races_by_edid.items()}
     headparts = load_headparts(plugin_set, ctx)
@@ -98,22 +143,26 @@ def main() -> int:
     )
 
     # Furrify races
+    emit("Furrifying races")
     log.info("Furrifying races...")
     race_count = furry.furrify_all_races()
     log.info(f"Furrified {race_count} races")
 
     # Furrify headpart FormLists (must be after race furrification)
+    emit("Furrifying headpart lists")
     log.info("Furrifying headpart lists...")
     flst_count = furry.furrify_all_headpart_lists(plugin_set)
     log.info(f"Modified {flst_count} headpart FormLists")
 
     # Furrify race presets (must be after race furrification)
+    emit("Furrifying race presets")
     log.info("Furrifying race presets...")
     preset_count = furry.furrify_race_presets(plugin_set)
     log.info(f"Created {preset_count} race preset NPCs")
 
     # Furrify NPCs
     if config.furrify_npcs_male or config.furrify_npcs_female:
+        emit("Furrifying NPCs")
         log.info("Furrifying NPCs...")
         npc_count = furry.furrify_all_npcs(
             plugin_set,
@@ -131,10 +180,12 @@ def main() -> int:
 
     # Furrify armor
     if config.furrify_armor:
+        emit("Merging armor overrides")
         log.info("Merging armor overrides...")
         merge_count = furry.merge_armor_overrides(plugin_set)
         log.info(f"Merged {merge_count} ARMO records")
 
+        emit("Furrifying armor")
         log.info("Furrifying armor...")
         armor_count = furry.furrify_all_armor(plugin_set)
         log.info(f"Modified {armor_count} armor records")
@@ -142,6 +193,7 @@ def main() -> int:
     # Furrify schlongs
     if config.furrify_schlongs:
         from .schlongs import furrify_all_schlongs
+        emit("Furrifying schlongs")
         log.info("Furrifying schlongs...")
         # Build maps needed by schlong furrification
         race_assignments = {a.vanilla_id: a.furry_id
@@ -159,13 +211,23 @@ def main() -> int:
     furry.print_statistics()
 
     # Print warning/error summary
-    _print_log_summary()
+    _print_log_summary(log_counter)
 
     # Save
+    emit("Saving patch")
     patch.save()
     log.info(f"Saved patch: {patch_path}")
 
+    emit("Done")
     return 0
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args(normalize_argv(sys.argv[1:]))
+    config = FurrifierConfig.from_args(args)
+    setup_logging(config)
+    return run_furrification(config)
 
 
 class _LogCounter(logging.Handler):
@@ -183,20 +245,17 @@ class _LogCounter(logging.Handler):
             self.warnings.append(self.format(record))
 
 
-_log_counter = _LogCounter()
-
-
-def _print_log_summary():
+def _print_log_summary(counter: "_LogCounter") -> None:
     """Print summary of warnings and errors at end of run."""
-    if _log_counter.warnings:
-        print(f"\n{len(_log_counter.warnings)} warning(s):")
-        for msg in _log_counter.warnings:
+    if counter.warnings:
+        print(f"\n{len(counter.warnings)} warning(s):")
+        for msg in counter.warnings:
             print(f"  {msg}")
-    if _log_counter.errors:
-        print(f"\n{len(_log_counter.errors)} error(s):")
-        for msg in _log_counter.errors:
+    if counter.errors:
+        print(f"\n{len(counter.errors)} error(s):")
+        for msg in counter.errors:
             print(f"  {msg}")
-    if not _log_counter.warnings and not _log_counter.errors:
+    if not counter.warnings and not counter.errors:
         print("\nNo warnings or errors.")
 
 
