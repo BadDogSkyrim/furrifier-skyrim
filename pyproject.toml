@@ -7,10 +7,13 @@ name = "furrifier-skyrim"
 version = "0.1.0"
 description = "Batch-convert Skyrim NPCs to furry races"
 requires-python = ">=3.11"
-dependencies = ["esplib"]
+dependencies = ["esplib", "customtkinter>=5.2"]
 
 [project.scripts]
 furrifier = "furrifier.main:main"
+
+[project.gui-scripts]
+furrifier-gui = "furrifier.gui:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/integration"]
