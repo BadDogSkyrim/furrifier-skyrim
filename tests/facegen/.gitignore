@@ -1,0 +1,22 @@
+# Test fixtures — copies of Bethesda vanilla assets + mod assets from the
+# user's game install. Not in the repo; regenerable via build_fixtures.py
+# against Skyrim.esm + YASNPCPatchUng.esp + associated masters.
+Data_vanilla/
+Data_furry/
+
+# Backups of files we swapped into the game folder during iteration
+game_originals/
+staging_originals/
+
+# Generated pipeline output (regenerated on every test run)
+out/
+out_headparts/
+out_tints/
+
+# Pytest / Python caches
+__pycache__/
+*.pyc
+
+# Misc test artifacts
+phase2a_test.dds
+_texconv_smoke.*
