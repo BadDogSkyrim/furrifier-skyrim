@@ -28,19 +28,31 @@ HERE = Path(__file__).parent
 OUT_DIR = HERE / "out_tints"
 
 
-def load_mask_rgba(path: Path) -> np.ndarray:
-    """Load a DDS/PNG/JPG as RGBA float32 in [0, 1]."""
+def load_mask_rgba(path: Path, target_size: int | None = None) -> np.ndarray:
+    """Load a DDS/PNG/JPG as RGBA float32 in [0, 1], optionally resampled
+    to target_size x target_size via Lanczos. Vanilla masks are 512x512;
+    pass a bigger target_size to upscale for higher-resolution output."""
     im = Image.open(path).convert("RGBA")
+    if target_size is not None and im.size != (target_size, target_size):
+        im = im.resize((target_size, target_size), Image.Resampling.LANCZOS)
     return np.asarray(im, dtype=np.float32) / 255.0
 
 
 # RACE's TINP (Tint Mask Type) code for the SkinTone layer.
 TINP_SKIN_TONE = 6
 
+# Power-of-2 output sizes the compositor supports.
+VALID_OUTPUT_SIZES = (256, 512, 1024, 2048, 4096)
+
 
 def composite_layers(data_root: Path, tints: list[dict],
-                     base_color: list | None = None) -> np.ndarray:
+                     base_color: list | None = None,
+                     output_size: int | None = None) -> np.ndarray:
     """Alpha-composite each tint layer onto an RGBA accumulator.
+
+    If output_size is given, all masks are resampled to that size via
+    Lanczos. Otherwise the first mask's native size is used (vanilla
+    Skyrim = 512x512).
 
     Skin-tone handling (first):
       - If the NPC has a tint layer whose race-level TINP=6 (Skin Tone),
@@ -60,9 +72,12 @@ def composite_layers(data_root: Path, tints: list[dict],
     if not tints:
         raise ValueError("no tint layers")
 
-    # Use first mask's resolution as the canvas size
-    first_mask = load_mask_rgba(data_root / tints[0]["mask"])
-    h, w = first_mask.shape[:2]
+    # Determine canvas size: output_size if supplied, else first mask's native
+    if output_size is None:
+        first_mask = load_mask_rgba(data_root / tints[0]["mask"])
+        h, w = first_mask.shape[:2]
+    else:
+        h = w = output_size
     acc = np.zeros((h, w, 4), dtype=np.float32)
 
     # Find the NPC's skin-tone layer (TINP=6) if present
@@ -75,10 +90,7 @@ def composite_layers(data_root: Path, tints: list[dict],
 
     if skin_layer is not None:
         # Apply QNAM color through the skin-tone layer's mask
-        skin_mask = load_mask_rgba(data_root / skin_layer["mask"])
-        if skin_mask.shape[:2] != (h, w):
-            im = Image.open(data_root / skin_layer["mask"]).convert("RGBA").resize((w, h))
-            skin_mask = np.asarray(im, dtype=np.float32) / 255.0
+        skin_mask = load_mask_rgba(data_root / skin_layer["mask"], target_size=w)
         cov = skin_mask[..., 0] * 0.299 + skin_mask[..., 1] * 0.587 + skin_mask[..., 2] * 0.114
         acc[..., :3] = base_rgb[None, None, :] * cov[..., None]
         acc[..., 3] = cov
@@ -93,12 +105,7 @@ def composite_layers(data_root: Path, tints: list[dict],
         # Skip the skin-tone layer — already handled above via QNAM.
         if layer.get("tinp") == TINP_SKIN_TONE:
             continue
-        mask = load_mask_rgba(data_root / layer["mask"])
-        if mask.shape[:2] != (h, w):
-            # Resize to canvas size if a mask differs (shouldn't happen for
-            # vanilla; uniform 2048x2048 everywhere).
-            im = Image.open(data_root / layer["mask"]).convert("RGBA").resize((w, h))
-            mask = np.asarray(im, dtype=np.float32) / 255.0
+        mask = load_mask_rgba(data_root / layer["mask"], target_size=w)
 
         # Per-pixel coverage from the mask. Vanilla Skyrim tint masks ship
         # as RGB (no alpha variation — alpha is always 255); the actual
@@ -120,7 +127,8 @@ def composite_layers(data_root: Path, tints: list[dict],
 
 
 def composite_to_png_and_dds(data_root: Path, form_id: str,
-                             out_dir: Path) -> tuple[Path, Path]:
+                             out_dir: Path,
+                             output_size: int | None = None) -> tuple[Path, Path]:
     manifest = json.loads((data_root / "manifest.json").read_text())
     entry = next((n for n in manifest["npcs"] if n["form_id"] == form_id), None)
     if entry is None:
@@ -135,8 +143,14 @@ def composite_to_png_and_dds(data_root: Path, form_id: str,
         print(f"       tini={t['tini']:3d} color={tuple(t['color'])} "
               f"v={t['intensity']:.2f}  {name}")
 
+    if output_size is not None and output_size not in VALID_OUTPUT_SIZES:
+        raise ValueError(
+            f"output_size {output_size} not in {VALID_OUTPUT_SIZES}"
+        )
+
     acc = composite_layers(data_root, entry["tints"],
-                           base_color=entry.get("qnam_color"))
+                           base_color=entry.get("qnam_color"),
+                           output_size=output_size)
     as_u8 = np.clip(acc * 255.0, 0, 255).astype(np.uint8)
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -150,9 +164,13 @@ def composite_to_png_and_dds(data_root: Path, form_id: str,
 
 
 if __name__ == "__main__":
+    # Usage: composite_tint.py [data_root_name] [form_id] [output_size]
     data_root_name = sys.argv[1] if len(sys.argv) > 1 else "Data_vanilla"
     form_id = sys.argv[2] if len(sys.argv) > 2 else "0001327C"
+    output_size = int(sys.argv[3]) if len(sys.argv) > 3 else None
+    suffix = f"_size{output_size}" if output_size else ""
     composite_to_png_and_dds(
         HERE / data_root_name, form_id,
-        OUT_DIR / data_root_name,
+        OUT_DIR / f"{data_root_name}{suffix}",
+        output_size=output_size,
     )

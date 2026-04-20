@@ -371,6 +371,51 @@ def test_dds_mean_pixel_diff_within_tolerance(npc_output):
         assert mean < tol, f"{name} mean {mean:.2f} exceeds {tol}"
 
 
+# ---------------------------------------------- CONFIGURABLE OUTPUT SIZE --
+
+
+@pytest.mark.parametrize("output_size", [256, 512, 1024, 2048, 4096])
+def test_compositor_honors_output_size_param(output_size):
+    """The compositor must accept an `output_size` (power of 2, 256..4096)
+    and produce a DDS at that resolution, resampling the input masks to
+    match. Vanilla masks are 512; bigger output sizes exercise the
+    Lanczos upscale path."""
+    _ensure_paths()
+    from composite_tint import composite_to_png_and_dds
+    OUT_UPSCALE = OUT_DDS.parent / f"Data_vanilla_size{output_size}"
+    _, dds = composite_to_png_and_dds(
+        DATA_VANILLA, "0001414D",
+        OUT_UPSCALE,
+        output_size=output_size,
+    )
+    img = Image.open(dds)
+    assert img.size == (output_size, output_size), (
+        f"output size {img.size} != requested {output_size}"
+    )
+
+
+def test_compositor_native_size_matches_ck_reference():
+    """Sanity: at 512x512 (native mask size) the Lanczos resample path
+    should be identity, so output must stay within the existing CK-match
+    tolerance for Ulfric."""
+    _ensure_paths()
+    from composite_tint import composite_to_png_and_dds
+    _, dds = composite_to_png_and_dds(
+        DATA_VANILLA, "0001414D",
+        OUT_DDS.parent / "Data_vanilla_size512",
+        output_size=512,
+    )
+    ours = np.asarray(Image.open(dds).convert("RGBA"), dtype=np.int16)
+    ref = np.asarray(
+        Image.open(REF_FACETINT / "0001414D.dds").convert("RGBA"),
+        dtype=np.int16,
+    )
+    diff = np.abs(ours - ref)
+    assert diff[..., 0].mean() < 5.0, "R drifted at native size"
+    assert diff[..., 1].mean() < 5.0, "G drifted at native size"
+    assert diff[..., 2].mean() < 5.0, "B drifted at native size"
+
+
 def test_dds_max_pixel_diff_bounded(npc_output, request):
     """Worst single-pixel diff. Deeja has a localized ~120-unit B
     outlier — xfailed for her."""
