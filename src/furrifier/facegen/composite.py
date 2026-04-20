@@ -10,9 +10,13 @@ composite. CK's actual blend stack may differ per layer-class (warpaint,
 dirt, skin tone, etc.). We'll validate against the CK-baked reference
 FaceTint dds and iterate blend modes if the numerical diff is too large.
 
-Usage:
-    python composite_tint.py                       # Dervenin (default)
-    python composite_tint.py Data_vanilla 0001414D # Ulfric
+Usage (CLI; intended for test-harness use):
+    python -m furrifier.facegen.composite Data_vanilla 0001414D [OUTPUT_SIZE]
+
+When invoked from the test harness the `data_root` arg is typically the
+fixture tree at `furrifier/tests/facegen/Data_vanilla/`; integration
+with the live furrifier skips the manifest indirection and calls
+`composite_layers` directly with the in-memory NPC data.
 """
 import json
 import sys
@@ -21,11 +25,13 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from texconv_wrapper import encode_bc7
+from .texconv import encode_bc7
 
 
 HERE = Path(__file__).parent
-OUT_DIR = HERE / "out_tints"
+# CLI mode resolves data_root relative to the tests fixture tree.
+_TEST_FACEGEN_ROOT = Path(__file__).resolve().parents[3] / "tests" / "facegen"
+OUT_DIR = _TEST_FACEGEN_ROOT / "out_tints"
 
 
 def load_mask_rgba(path: Path, target_size: int | None = None) -> np.ndarray:
@@ -170,7 +176,7 @@ if __name__ == "__main__":
     output_size = int(sys.argv[3]) if len(sys.argv) > 3 else None
     suffix = f"_size{output_size}" if output_size else ""
     composite_to_png_and_dds(
-        HERE / data_root_name, form_id,
+        _TEST_FACEGEN_ROOT / data_root_name, form_id,
         OUT_DIR / f"{data_root_name}{suffix}",
         output_size=output_size,
     )

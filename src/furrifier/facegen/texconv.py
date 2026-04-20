@@ -21,7 +21,9 @@ from pathlib import Path
 from typing import Iterable
 
 
-TEXCONV_EXE = Path(__file__).resolve().parents[2] / "tools" / "texconv.exe"
+# __file__ = .../furrifier/src/furrifier/facegen/texconv.py
+# parents[0]=facegen  [1]=furrifier(inner)  [2]=src  [3]=furrifier(outer)
+TEXCONV_EXE = Path(__file__).resolve().parents[3] / "tools" / "texconv.exe"
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:

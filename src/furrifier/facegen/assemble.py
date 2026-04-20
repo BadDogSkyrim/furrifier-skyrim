@@ -29,7 +29,9 @@ from pyn.niflydll import nifly
 
 
 HERE = Path(__file__).parent
-OUT_DIR = HERE / "out_headparts"
+# CLI mode resolves paths relative to the tests fixture tree.
+_TEST_FACEGEN_ROOT = Path(__file__).resolve().parents[3] / "tests" / "facegen"
+OUT_DIR = _TEST_FACEGEN_ROOT / "out_headparts"
 
 
 def identity_xform():
@@ -230,6 +232,6 @@ if __name__ == "__main__":
     data_root_name = sys.argv[1] if len(sys.argv) > 1 else "Data_vanilla"
     form_id = sys.argv[2] if len(sys.argv) > 2 else "0001414D"
 
-    data_root = HERE / data_root_name
+    data_root = _TEST_FACEGEN_ROOT / data_root_name
     dst = OUT_DIR / data_root_name / f"{form_id}.nif"
     assemble_from_manifest(data_root, form_id, dst)

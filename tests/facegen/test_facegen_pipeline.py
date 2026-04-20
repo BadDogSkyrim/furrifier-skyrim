@@ -50,13 +50,9 @@ NPC_CASES = [
 
 
 def _ensure_paths():
-    """Put the spike script directory and PyNifly on sys.path for import.
-
-    Called inside fixtures so the path tweak doesn't happen at module-top
-    (it would shadow the integration conftest in sys.modules)."""
-    here = str(HERE)
-    if here not in sys.path:
-        sys.path.insert(0, here)
+    """PyNifly isn't pip-installed; put its source on sys.path so the
+    facegen submodules can `from pyn.pynifly import ...`. Called inside
+    fixtures so this path tweak is lazy."""
     pynifly = r"C:\Modding\PyNifly\io_scene_nifly"
     if pynifly not in sys.path:
         sys.path.insert(0, pynifly)
@@ -64,8 +60,8 @@ def _ensure_paths():
 
 def regenerate(form_id: str) -> dict:
     _ensure_paths()
-    from assemble_from_headparts import assemble_from_manifest
-    from composite_tint import composite_to_png_and_dds
+    from furrifier.facegen.assemble import assemble_from_manifest
+    from furrifier.facegen.composite import composite_to_png_and_dds
 
     assemble_from_manifest(
         DATA_VANILLA, form_id, OUT_NIFS / f"{form_id}.nif")
@@ -324,7 +320,7 @@ def test_manifest_tint_entries_carry_tinp():
 
 def test_texconv_wrapper_produces_bc7():
     _ensure_paths()
-    from texconv_wrapper import encode_bc7, TEXCONV_EXE
+    from furrifier.facegen.texconv import encode_bc7, TEXCONV_EXE
     assert TEXCONV_EXE.is_file()
     tmp_dir = HERE / "out_tints"
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -381,7 +377,7 @@ def test_compositor_honors_output_size_param(output_size):
     match. Vanilla masks are 512; bigger output sizes exercise the
     Lanczos upscale path."""
     _ensure_paths()
-    from composite_tint import composite_to_png_and_dds
+    from furrifier.facegen.composite import composite_to_png_and_dds
     OUT_UPSCALE = OUT_DDS.parent / f"Data_vanilla_size{output_size}"
     _, dds = composite_to_png_and_dds(
         DATA_VANILLA, "0001414D",
@@ -399,7 +395,7 @@ def test_compositor_native_size_matches_ck_reference():
     should be identity, so output must stay within the existing CK-match
     tolerance for Ulfric."""
     _ensure_paths()
-    from composite_tint import composite_to_png_and_dds
+    from furrifier.facegen.composite import composite_to_png_and_dds
     _, dds = composite_to_png_and_dds(
         DATA_VANILLA, "0001414D",
         OUT_DDS.parent / "Data_vanilla_size512",
