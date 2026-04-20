@@ -211,12 +211,87 @@ def stage_npc(plugin_set, form_id, label, source_data_dir, dest_tree):
         pnam = hdpt.get_subrecord("PNAM")
         hdpt_type = (int.from_bytes(pnam.data[:4], "little")
                      if pnam and len(pnam.data) >= 4 else None)
+        # Walk the HDPT Part subgroups to find tri file paths:
+        #   NAM0 type 0 = Races tri (per-race variant morph)
+        #   NAM0 type 1 = behavior tri (runtime expressions +
+        #                 SkinnyMorph, which CK bakes per weight)
+        #   NAM0 type 2 = chargen tri (NAM9-driven morphs)
+        race_tri = None
+        chargen_tri = None
+        behavior_tri = None
+        current_type = None
+        for sr in hdpt.subrecords:
+            if sr.signature == "NAM0":
+                current_type = struct.unpack("<I", sr.data[:4])[0]
+            elif sr.signature == "NAM1" and current_type is not None:
+                tri_path = sr.data.decode("cp1252", errors="replace").rstrip("\x00")
+                if current_type == 0:
+                    race_tri = tri_path
+                elif current_type == 1:
+                    behavior_tri = tri_path
+                elif current_type == 2:
+                    chargen_tri = tri_path
+                current_type = None
+
+        # HDPT.TNAM → TXST → texture paths. CK overrides the source
+        # headpart nif's shader with these, which is how eye-color /
+        # skin-variant HDPTs (EyeDemon, SkinEyesFemaleArgonianOlive)
+        # land in the facegen nif. TXST slot → nif shader slot name:
+        #   TX00→Diffuse, TX01→Normal, TX02→EnvMask, TX03→SoftLighting,
+        #   TX04→HeightMap, TX05→EnvMap, TX06→FacegenDetail, TX07→Specular.
+        # TX02/TX05 are "swapped" relative to raw shader indices — the
+        # TXST record's column order differs from NIF texture-slot order.
+        textures: dict[str, str] = {}
+        tnam = hdpt.get_subrecord("TNAM")
+        if tnam is not None:
+            try:
+                txst_fid = tnam.get_form_id()
+                txst = plugin_set.resolve_form_id(txst_fid, hdpt.plugin)
+            except Exception as e:
+                print(f"    [warn] {edid} TXST resolve failed: {e}")
+                txst = None
+            if txst is not None:
+                slot_map = {
+                    "TX00": "Diffuse",  "TX01": "Normal",
+                    "TX02": "EnvMask",  "TX03": "SoftLighting",
+                    "TX04": "HeightMap","TX05": "EnvMap",
+                    "TX06": "FacegenDetail", "TX07": "Specular",
+                }
+                for sr in txst.subrecords:
+                    sig = sr.signature
+                    if sig in slot_map:
+                        path = sr.data.decode("cp1252", errors="replace").rstrip("\x00")
+                        if path:
+                            textures[slot_map[sig]] = path
         if copy_file(source_data_dir / rel_path, dest_tree / rel_path, f"headpart {edid}"):
             print(f"    [copy] {edid}: {model_rel_str}")
+            # Copy tri files; record relpath only if copy succeeded.
+            # A missing tri on disk is different from "no tri referenced":
+            # if referenced but not on disk, record the relpath anyway so
+            # the morph pipeline can warn-and-skip consistently.
+            race_tri_rel = None
+            chargen_tri_rel = None
+            behavior_tri_rel = None
+            if race_tri:
+                rel = Path("meshes") / Path(race_tri.replace("\\", "/"))
+                copy_file(source_data_dir / rel, dest_tree / rel, f"  race_tri {edid}")
+                race_tri_rel = rel.as_posix()
+            if chargen_tri:
+                rel = Path("meshes") / Path(chargen_tri.replace("\\", "/"))
+                copy_file(source_data_dir / rel, dest_tree / rel, f"  chargen_tri {edid}")
+                chargen_tri_rel = rel.as_posix()
+            if behavior_tri:
+                rel = Path("meshes") / Path(behavior_tri.replace("\\", "/"))
+                copy_file(source_data_dir / rel, dest_tree / rel, f"  behavior_tri {edid}")
+                behavior_tri_rel = rel.as_posix()
             headparts.append({
                 "hdpt_edid": edid,
                 "hdpt_type": hdpt_type,
                 "source_nif": rel_path.as_posix(),
+                "race_tri": race_tri_rel,
+                "chargen_tri": chargen_tri_rel,
+                "behavior_tri": behavior_tri_rel,
+                "textures": textures,
             })
 
     # Tint layers — read NPC's TINI/TINC/TINV/TIAS, resolve each to a mask
@@ -235,6 +310,28 @@ def stage_npc(plugin_set, form_id, label, source_data_dir, dest_tree):
     if qnam is not None and qnam.size >= 12:
         r, g, b = struct.unpack("<3f", qnam.data[:12])
         qnam_color = [max(0, min(255, int(round(v * 255)))) for v in (r, g, b)]
+
+    # NAM9: 19 floats, slots 0-17 are chargen slider values in [-1, +1],
+    # slot 18 is Vampiremorph (FLT_MAX = "not set" for non-vampires).
+    nam9_floats = None
+    nam9 = npc.get_subrecord("NAM9")
+    if nam9 is not None and nam9.size >= 76:
+        nam9_floats = list(struct.unpack("<19f", nam9.data[:76]))
+
+    # NAM7 weight: 0-100 float. CK bakes SkinnyMorph at facegen time
+    # with coefficient (100 - weight) / 100.
+    weight = None
+    nam7 = npc.get_subrecord("NAM7")
+    if nam7 is not None and nam7.size >= 4:
+        weight = struct.unpack("<f", nam7.data[:4])[0]
+
+    # NAMA: 4 int32 preset indices (nose, unknown, eyes, lips). Each
+    # non-(-1) index N selects `{Nose,Eyes,Lip}Type{N}` from the chargen
+    # tri and applies it at coefficient 1.0.
+    nama = None
+    nama_sr = npc.get_subrecord("NAMA")
+    if nama_sr is not None and nama_sr.size >= 16:
+        nama = list(struct.unpack("<4i", nama_sr.data[:16]))
     if rnam is not None:
         race = plugin_set.resolve_form_id(rnam.get_form_id(), npc.plugin)
     if race is not None:
@@ -275,6 +372,9 @@ def stage_npc(plugin_set, form_id, label, source_data_dir, dest_tree):
         "facegen_nif": fg_rel.as_posix(),
         "facetint_dds": tint_rel.as_posix() if tint_copied else None,
         "qnam_color": qnam_color,  # [R, G, B] 0-255, NPC's base skin tone
+        "nam9": nam9_floats,       # 19 floats: slots 0-17 sliders, slot 18 vampire
+        "weight": weight,          # 0-100 float; drives SkinnyMorph coefficient
+        "nama": nama,              # 4 int32 preset indices: (nose, ?, eyes, lips)
         "headparts": headparts,
         "tints": tint_entries,
     }

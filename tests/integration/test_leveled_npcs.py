@@ -38,8 +38,12 @@ PLUGINS = [
     "CellanRace.esp",
 ]
 
+from conftest import plugins_available
+
 requires_files = pytest.mark.skipif(
-    _find_data_dir() is None, reason="Skyrim data files not found")
+    not plugins_available(PLUGINS),
+    reason=f"required plugins missing: {PLUGINS}",
+)
 pytestmark = requires_files
 
 

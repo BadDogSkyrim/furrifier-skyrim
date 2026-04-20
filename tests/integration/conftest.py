@@ -39,9 +39,32 @@ PLUGIN_NAMES = [
     "YASCanineRaces.esp",
 ]
 
+
+def plugins_available(plugin_names: list[str]) -> bool:
+    """True iff every named plugin is present in the game Data directory."""
+    data_dir = find_skyrim_data()
+    if data_dir is None:
+        return False
+    return all((data_dir / name).is_file() for name in plugin_names)
+
+
+def requires_plugins(*names: str):
+    """Decorator: skip if any of the named plugins is missing.
+
+    Integration tests depend on specific furry mod plugins (YAS, BDCat,
+    etc.) that won't be present on every machine. Use this to skip
+    cleanly instead of failing with cryptic errors."""
+    missing = [n for n in names
+               if not plugins_available([n])]
+    return pytest.mark.skipif(
+        bool(missing),
+        reason=f"required plugins not installed: {missing}",
+    )
+
+
 requires_gamefiles = pytest.mark.skipif(
-    find_skyrim_data() is None,
-    reason="Skyrim data files not found",
+    not plugins_available(PLUGIN_NAMES),
+    reason=f"Skyrim data or furry plugins missing: need {PLUGIN_NAMES}",
 )
 
 

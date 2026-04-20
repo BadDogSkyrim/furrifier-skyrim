@@ -42,9 +42,11 @@ def _find_data_dir():
     return find_game_data('tes5')
 
 
+from conftest import plugins_available
+
 requires_mino_files = pytest.mark.skipif(
-    _find_data_dir() is None,
-    reason="Skyrim / BDUngulates data files not found",
+    not plugins_available(MINO_PLUGINS),
+    reason=f"required plugins missing: {MINO_PLUGINS}",
 )
 
 pytestmark = requires_mino_files

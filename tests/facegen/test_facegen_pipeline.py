@@ -33,12 +33,6 @@ OUT_DDS = HERE / "out_tints" / "Data_vanilla"
 REF_FACEGEOM = DATA_VANILLA / "meshes/actors/character/FaceGenData/FaceGeom/Skyrim.esm"
 REF_FACETINT = DATA_VANILLA / "textures/actors/character/FaceGenData/FaceTint/Skyrim.esm"
 
-SANDBOX = Path(
-    r"C:\Users\hughr\AppData\Roaming\Vortex\skyrimse\mods\Sandbox"
-)
-SANDBOX_NIF = SANDBOX / "meshes/actors/character/FaceGenData/FaceGeom/Skyrim.esm"
-SANDBOX_DDS = SANDBOX / "textures/actors/character/FaceGenData/FaceTint/Skyrim.esm"
-
 NPC_CASES = [
     pytest.param("0001414D", id="ulfric"),
     pytest.param("0001327C", id="dervenin"),
@@ -75,13 +69,6 @@ def regenerate(form_id: str) -> dict:
     }
 
 
-def stage_to_sandbox(bundle: dict) -> None:
-    SANDBOX_NIF.mkdir(parents=True, exist_ok=True)
-    SANDBOX_DDS.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(bundle["our_nif"], SANDBOX_NIF / f"{bundle['form_id']}.NIF")
-    shutil.copy2(bundle["our_dds"], SANDBOX_DDS / f"{bundle['form_id']}.dds")
-
-
 def nif_block_type_counts(nif_path: Path) -> Counter:
     _ensure_paths()
     from pyn.pynifly import NifFile
@@ -106,9 +93,7 @@ def load_nif(path: Path):
 
 @pytest.fixture(scope="session", params=NPC_CASES)
 def npc_output(request):
-    bundle = regenerate(request.param)
-    stage_to_sandbox(bundle)
-    return bundle
+    return regenerate(request.param)
 
 
 # ----------------------------------------------------------- NIF STRUCTURE --
@@ -218,6 +203,33 @@ def test_nif_shape_normals_match_reference(npc_output):
         ref_n = np.asarray(ref_s.normals, dtype=np.float32)
         our_n = np.asarray(our_s.normals, dtype=np.float32)
         assert np.allclose(our_n, ref_n, atol=0.01), f"{ref_s.name} normals"
+
+
+def test_nif_shape_diffuse_textures_match_reference(npc_output):
+    """HDPT.TNAM → TXST.TX00 (Diffuse) drives eye-color / skin-variant
+    overrides. Dervenin's demon eyes look right only when the facegen
+    nif carries EyeDemon.dds instead of EyesMale.nif's default
+    EyeBrown.dds.
+
+    We check Diffuse only — other TXST slots (Normal, Specular, etc.)
+    land correctly when CK and our pipeline agree, but the vanilla
+    SkyrimSEAssets snapshot has stale non-Diffuse slots for some
+    shapes (e.g. Deeja's argonian eye keeps the source nif's tangent-
+    space EyeWerewolfBeast_n.dds even though TXST.TX01 supplies a
+    proper model-space normal). Diffuse is the slot that drives the
+    visible variant selection."""
+    ours = load_nif(npc_output["our_nif"])
+    ref = load_nif(npc_output["ref_nif"])
+    for ref_s in ref.shapes:
+        our_s = ours.shape_dict[ref_s.name]
+        ref_tex = ref_s.textures.get("Diffuse", "")
+        if not ref_tex:
+            continue
+        our_tex = our_s.textures.get("Diffuse", "")
+        # Skyrim paths are case-insensitive; CK's casing varies.
+        assert our_tex.lower() == ref_tex.lower(), (
+            f"{ref_s.name} Diffuse: ours={our_tex!r} ref={ref_tex!r}"
+        )
 
 
 def test_nif_shape_vertex_colors_match_reference(npc_output):
@@ -410,6 +422,131 @@ def test_compositor_native_size_matches_ck_reference():
     assert diff[..., 0].mean() < 5.0, "R drifted at native size"
     assert diff[..., 1].mean() < 5.0, "G drifted at native size"
     assert diff[..., 2].mean() < 5.0, "B drifted at native size"
+
+
+# ------------------------------------------------------- PHASE 4: MORPHS --
+
+
+@pytest.fixture(scope="session")
+def dervenin_output():
+    """Dedicated single-NPC fixture so morph-specific assertions don't have
+    to iterate the main parametrized set."""
+    return regenerate("0001327C")
+
+
+def test_head_shape_verts_match_reference_with_morphs(dervenin_output):
+    """Dervenin's head-shape verts, after race-morph + NAM9-driven chargen
+    morphs, should match CK's reference within tolerance. This is the
+    load-bearing morph-pipeline assertion: if it passes for all three
+    vanilla NPCs, the algorithm is correct."""
+    ours = load_nif(dervenin_output["our_nif"])
+    ref = load_nif(dervenin_output["ref_nif"])
+    ref_head = ref.shape_dict["MaleHeadWoodElf"]
+    our_head = ours.shape_dict["MaleHeadWoodElf"]
+    ref_v = np.asarray(ref_head.verts, dtype=np.float32)
+    our_v = np.asarray(our_head.verts, dtype=np.float32)
+    max_d = float(np.abs(our_v - ref_v).max())
+    mean_d = float(np.abs(our_v - ref_v).mean())
+    # Pre-morph baseline (no morphing at all): max ~4.0, mean ~0.32.
+    # With race morph alone: max ~1.0, mean ~0.15.
+    # With race+chargen+SkinnyMorph+NAMA presets: max ~0.05, mean ~0.001.
+    # CK's facegen is closed-source; the tiny residual comes from
+    # float rounding + any remaining morph we haven't found.
+    assert max_d < 0.1, (
+        f"Dervenin head shape max vert diff {max_d:.3f} exceeds 0.1 — "
+        f"morph pipeline regressed"
+    )
+    assert mean_d < 0.01, f"mean diff {mean_d:.4f} exceeds 0.01"
+
+
+def test_missing_chargen_tri_warns_not_errors(tmp_path, caplog):
+    """If a headpart's chargen tri is missing from the fixture, the bake
+    should proceed (shape emits unmorphed) with a warning logged."""
+    import logging
+    import json
+    import shutil
+
+    # Clone the vanilla fixture under tmp_path, delete the head's chargen tri
+    src_root = DATA_VANILLA
+    dst_root = tmp_path / "Data"
+    shutil.copytree(src_root, dst_root)
+
+    # Remove MaleHead.nif's chargen tri
+    victim = dst_root / "meshes/Actors/Character/Character Assets/MaleHeadCustomizations.tri"
+    if victim.exists():
+        victim.unlink()
+    # Also try lower-case variants the manifest may reference
+    for alt in victim.parent.glob("MaleHead*ustomization*.tri"):
+        alt.unlink()
+
+    _ensure_paths()
+    from furrifier.facegen.assemble import assemble_from_manifest
+
+    dst_nif = tmp_path / "out.nif"
+    with caplog.at_level(logging.WARNING):
+        assemble_from_manifest(dst_root, "0001327C", dst_nif)
+
+    # NIF must still be valid (10 shapes for Dervenin)
+    assert dst_nif.is_file(), "assembly crashed when chargen tri was missing"
+    nif = load_nif(dst_nif)
+    assert len(nif.shapes) == 10, "lost shapes when chargen tri went missing"
+    # Warning must mention the missing file
+    assert any("MaleHeadCustomization" in rec.message or "tri" in rec.message.lower()
+               for rec in caplog.records), (
+        f"no warning about missing tri; got records: "
+        f"{[r.message for r in caplog.records]}"
+    )
+
+
+def test_nam9_zero_sliders_applies_only_race_morph(tmp_path):
+    """An NPC with all-zero NAM9 sliders should have head-shape verts =
+    source verts + race morph delta (no chargen contribution). Verifies
+    the slider math doesn't accidentally add anything when NAM9 is quiet."""
+    import shutil
+    import json
+
+    src_root = DATA_VANILLA
+    dst_root = tmp_path / "Data"
+    shutil.copytree(src_root, dst_root)
+
+    # Zero out Dervenin's NAM9 + presets + set weight=100 so only the
+    # race morph contributes. Isolates the chargen-sliders path.
+    manifest = json.loads((dst_root / "manifest.json").read_text())
+    for npc in manifest["npcs"]:
+        if npc["form_id"] == "0001327C":
+            npc["nam9"] = [0.0] * 18
+            npc["weight"] = 100.0
+            npc["nama"] = [-1, -1, -1, -1]
+    (dst_root / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+    _ensure_paths()
+    from furrifier.facegen.assemble import assemble_from_manifest
+
+    dst_nif = tmp_path / "out.nif"
+    assemble_from_manifest(dst_root, "0001327C", dst_nif)
+    nif = load_nif(dst_nif)
+
+    # Load source base + expected race-only verts
+    from pyn.pynifly import NifFile
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "trifile_standalone",
+        r"C:\Modding\PyNifly\io_scene_nifly\tri\trifile.py")
+    tf_mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(tf_mod)
+    base_nif = NifFile(str(dst_root / "meshes/Actors/Character/Character Assets/MaleHead.nif"))
+    base_verts = np.asarray(base_nif.shapes[0].verts, dtype=np.float32)
+    with open(dst_root / "meshes/Actors/Character/Character Assets/MaleHeadRaces.tri", "rb") as f:
+        races = tf_mod.TriFile.from_file(f)
+    race_delta = (np.asarray(races.morphs["WoodElfRace"], dtype=np.float32)
+                  - np.asarray(races.morphs["Basis"], dtype=np.float32))
+    expected = base_verts + race_delta
+
+    ours = np.asarray(nif.shape_dict["MaleHeadWoodElf"].verts, dtype=np.float32)
+    diff = np.abs(ours - expected).max()
+    assert diff < 0.01, (
+        f"With NAM9=zeros, head verts should be (base + race_morph); "
+        f"got max diff {diff:.3f}"
+    )
 
 
 def test_dds_max_pixel_diff_bounded(npc_output, request):

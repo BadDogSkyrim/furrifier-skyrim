@@ -41,9 +41,11 @@ SCHLONG_PLUGINS = [
     "YASCanineSchlongs.esp",
 ]
 
+from conftest import plugins_available
+
 requires_schlong_files = pytest.mark.skipif(
-    _find_data_dir() is None,
-    reason="Skyrim data files not found",
+    not plugins_available(SCHLONG_PLUGINS),
+    reason=f"required plugins missing: {SCHLONG_PLUGINS}",
 )
 
 pytestmark = requires_schlong_files

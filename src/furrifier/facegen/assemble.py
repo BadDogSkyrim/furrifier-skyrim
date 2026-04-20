@@ -21,11 +21,15 @@ import os
 import sys
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, r"C:\Modding\PyNifly\io_scene_nifly")
 from pyn.pynifly import NifFile
 from pyn.structs import TransformBuf
 from pyn.nifdefs import PynBufferTypes
 from pyn.niflydll import nifly
+
+from .morph import apply_morphs
 
 
 HERE = Path(__file__).parent
@@ -44,12 +48,21 @@ HDPT_TYPE_FACE = 1  # Only Face-type headparts get the per-NPC FacegenDetail.
 
 
 def copy_shape(dst: NifFile, fg: "NiNode", src_shape, rename_to: str,
-               facegen_detail_path: str | None = None) -> "NiShape":
+               facegen_detail_path: str | None = None,
+               verts_override=None,
+               texture_overrides: dict[str, str] | None = None) -> "NiShape":
     """Copy one shape from its source nif into `dst` under `fg`, renamed.
 
     Preserves: verts, tris, uvs, normals, vertex colors, local xform,
     skin (bones + s2b + weights + global_to_skin), shader properties +
-    textures, alpha property, partitions."""
+    textures, alpha property, partitions.
+
+    verts_override: optional (N, 3) vert array (list of tuples or ndarray)
+    to use instead of src_shape.verts — used for morph-baked verts.
+
+    texture_overrides: optional {slot_name: relpath_under_textures/} map
+    from HDPT.TNAM → TXST. CK's facegen bake writes these over whatever
+    the source headpart nif's shader carried (e.g. eye-color variants)."""
     # UVs: createShapeFromData applies (u, 1-v) on write; pre-unflip.
     src_uvs = [(u, 1.0 - v) for u, v in src_shape.uvs] if src_shape.uvs else []
     # All-zero normals mean "recompute from geometry"; don't pass literals.
@@ -57,9 +70,14 @@ def copy_shape(dst: NifFile, fg: "NiNode", src_shape, rename_to: str,
     if src_normals and all(all(abs(c) < 1e-6 for c in n) for n in src_normals):
         src_normals = None
 
+    if verts_override is not None:
+        verts = [tuple(float(c) for c in v) for v in verts_override]
+    else:
+        verts = list(src_shape.verts)
+
     new_shape = dst.createShapeFromData(
         rename_to,
-        list(src_shape.verts),
+        verts,
         list(src_shape.tris),
         src_uvs,
         list(src_normals) if src_normals else None,
@@ -97,6 +115,15 @@ def copy_shape(dst: NifFile, fg: "NiNode", src_shape, rename_to: str,
     for slot, path in src_shape.textures.items():
         if path:
             new_shape.set_texture(slot, path)
+    # HDPT.TNAM → TXST overrides. Stored without the leading "textures\"
+    # segment; CK's facegen bake writes them with that prefix in the nif.
+    if texture_overrides:
+        for slot, rel in texture_overrides.items():
+            if not rel:
+                continue
+            if not rel.lower().startswith("textures\\") and not rel.lower().startswith("textures/"):
+                rel = "textures\\" + rel.lstrip("\\/")
+            new_shape.set_texture(slot, rel)
     # Face-type headparts get the per-NPC FacegenDetail tint path stamped
     # in during CK's Ctrl-F4. Mouth can carry the same shader flag but CK
     # leaves its slot empty — so we gate off HDPT type, not the flag.
@@ -176,7 +203,25 @@ def assemble_from_manifest(data_root: Path, form_id: str, dst_path: Path) -> Nif
         if len(src_nif.shapes) != 1:
             print(f"  [WARN] {src_rel} has {len(src_nif.shapes)} shapes; taking first")
         src_shape = src_nif.shapes[0]
-        sources.append((hp["hdpt_edid"], hp.get("hdpt_type"), src_nif, src_shape))
+
+        # Phase 4: bake race + chargen + weight morphs into the verts.
+        race_tri_path = (data_root / hp["race_tri"]) if hp.get("race_tri") else None
+        chargen_tri_path = (data_root / hp["chargen_tri"]) if hp.get("chargen_tri") else None
+        behavior_tri_path = (data_root / hp["behavior_tri"]) if hp.get("behavior_tri") else None
+        morphed_verts = apply_morphs(
+            np.asarray(src_shape.verts, dtype=np.float32),
+            race_tri_path=race_tri_path,
+            race_edid=entry.get("race_edid"),
+            chargen_tri_path=chargen_tri_path,
+            nam9=entry.get("nam9"),
+            behavior_tri_path=behavior_tri_path,
+            weight=entry.get("weight"),
+            nama=entry.get("nama"),
+            shape_name=hp["hdpt_edid"],
+        )
+        sources.append((hp["hdpt_edid"], hp.get("hdpt_type"),
+                        src_nif, src_shape, morphed_verts,
+                        hp.get("textures") or {}))
         for bone in src_shape.bone_names:
             if bone not in bone_xforms and bone in src_nif.nodes:
                 src_xf = src_nif.nodes[bone].transform
@@ -197,12 +242,14 @@ def assemble_from_manifest(data_root: Path, form_id: str, dst_path: Path) -> Nif
         f"textures\\actors\\character\\FaceGenData\\FaceTint\\"
         f"{entry['base_plugin']}\\{entry['form_id']}.dds"
     )
-    for edid, hdpt_type, _src_nif, src_shape in sources:
+    for edid, hdpt_type, _src_nif, src_shape, morphed_verts, tex_over in sources:
         print(f"[copy] {edid} (type={hdpt_type}, source shape "
               f"'{src_shape.name}', {len(src_shape.verts)} verts)")
         face_tint = facegen_detail_rel if hdpt_type == HDPT_TYPE_FACE else None
         copy_shape(dst, fg, src_shape, rename_to=edid,
-                   facegen_detail_path=face_tint)
+                   facegen_detail_path=face_tint,
+                   verts_override=morphed_verts,
+                   texture_overrides=tex_over)
 
     dst.save()
 
@@ -213,7 +260,7 @@ def assemble_from_manifest(data_root: Path, form_id: str, dst_path: Path) -> Nif
     # actually persists the change. Mismatching skin-instance type trips
     # Skyrim's NIF-vs-NPC validation and falls back to race default head.
     names_to_demote = {
-        edid for edid, _type, _src_nif, src_shape in sources
+        edid for edid, _type, _src_nif, src_shape, _morphed, _tex in sources
         if src_shape.skin_instance_name == "NiSkinInstance"
     }
     if names_to_demote:
