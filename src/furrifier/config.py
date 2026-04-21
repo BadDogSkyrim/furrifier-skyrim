@@ -20,12 +20,23 @@ class FurrifierConfig:
     furrify_npcs_male: bool = True
     furrify_npcs_female: bool = True
     furrify_schlongs: bool = True
+    build_facegen: bool = True
     max_tint_layers: int = 200
     debug: bool = False
     log_file: Optional[str] = None
+    # When set, wrap the run in cProfile and dump stats to this path.
+    # Top 30 cumulative-time functions are also printed at the end.
+    profile_file: Optional[str] = None
 
-    # Paths (auto-detected if not provided)
+    # Where to READ source assets (mods, masters, textures, BSAs).
+    # Auto-detected via find_game_data() if not provided.
     game_data_dir: Optional[str] = None
+
+    # Where to WRITE the patch + generated FaceGenData. Defaults to
+    # game_data_dir. Separate when pointing at a mod-manager staging
+    # folder (e.g. a Vortex/MO2 mod) so the build doesn't overwrite
+    # files in the live Data tree.
+    output_dir: Optional[str] = None
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> FurrifierConfig:
@@ -39,9 +50,12 @@ class FurrifierConfig:
             furrify_npcs_male=not args.no_male,
             furrify_npcs_female=not args.no_female,
             furrify_schlongs=not args.no_schlongs,
+            build_facegen=not args.no_facegen,
             debug=args.debug,
             log_file=args.log_file,
             game_data_dir=args.data_dir,
+            output_dir=args.output_dir,
+            profile_file=args.profile,
         )
 
 
@@ -84,12 +98,24 @@ def build_parser() -> argparse.ArgumentParser:
                         help='Skip female NPC furrification')
     parser.add_argument('--no-schlongs', action='store_true',
                         help='Disable SOS (schlong) compatibility')
+    parser.add_argument('--no-facegen', action='store_true',
+                        help='Skip building per-NPC FaceGen nif + DDS '
+                             '(otherwise written alongside the patch under '
+                             'FaceGenData/)')
     parser.add_argument('--data-dir',
-                        help='Path to Skyrim Data directory (auto-detected if omitted)')
+                        help='Path to Skyrim Data directory for READING '
+                             'source assets (auto-detected if omitted)')
+    parser.add_argument('--output-dir',
+                        help='Directory to WRITE the patch and FaceGenData '
+                             'into (defaults to --data-dir; set to a mod '
+                             "manager's staging folder to keep Data clean)")
     parser.add_argument('--debug', action='store_true',
                         help='Enable debug logging')
     parser.add_argument('--log-file',
                         help='Write log to file')
+    parser.add_argument('--profile', metavar='PATH',
+                        help='Run under cProfile and dump stats to PATH. '
+                             'Inspect with snakeviz or pstats.')
     return parser
 
 

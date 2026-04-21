@@ -2,24 +2,28 @@
 Phase 1 Step 1b: assemble a facegen nif from the NPC's component
 headpart nifs — the real engine path.
 
-Reads manifest.json from a fixture Data folder, locates the NPC by form
-ID, opens each source headpart nif, extracts its shape, renames the shape
-to the HDPT EditorID, and stacks them all under a single
-BSFaceGenNiNodeSkinned in a fresh output nif.
+Stacks each NPC headpart's shape under a single BSFaceGenNiNodeSkinned
+in a fresh output nif. Per Step 0 scout, vanilla SSE headparts are
+already BSDynamicTriShape with complete skin data, s2b, shader flags,
+partitions, vertex colors etc. — CK's Ctrl-F4 is effectively just
+concatenation + shape rename + morph bake.
 
-Per Step 0 scout, vanilla SSE headparts are already BSDynamicTriShape
-with complete skin data, s2b, shader flags, partitions, vertex colors
-etc. CK's Ctrl-F4 is effectively just concatenation + shape rename.
+Two entry points:
 
-Usage:
-    python assemble_from_headparts.py                       # Ulfric vanilla
-    python assemble_from_headparts.py Data_vanilla 0001327C # Dervenin
-    python assemble_from_headparts.py Data_furry   00013255 # Addvar
+- `build_facegen_nif(npc_info, resolver, dst_path)` is the live API
+  used by the furrifier pipeline. Takes a dict with the same shape as
+  one manifest entry plus an AssetResolver for source-file lookup.
+- `assemble_from_manifest(data_root, form_id, dst_path)` is the legacy
+  wrapper: reads `manifest.json` under `data_root`, spins up a
+  loose-only resolver rooted there, and delegates. Used by tests and
+  the CLI.
 """
 import json
+import logging
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 
@@ -29,13 +33,24 @@ from pyn.structs import TransformBuf
 from pyn.nifdefs import PynBufferTypes
 from pyn.niflydll import nifly
 
+from .assets import AssetResolver
 from .morph import apply_morphs
 
+
+log = logging.getLogger("furrifier.facegen.assemble")
 
 HERE = Path(__file__).parent
 # CLI mode resolves paths relative to the tests fixture tree.
 _TEST_FACEGEN_ROOT = Path(__file__).resolve().parents[3] / "tests" / "facegen"
 OUT_DIR = _TEST_FACEGEN_ROOT / "out_headparts"
+
+
+# All the facegen nifs we emit target Skyrim SE. Root is BSFadeNode
+# with flags=14 per Step 0 scouting (consistent across every
+# CK-generated sample inspected).
+_GAME = "SKYRIMSE"
+_ROOT_TYPE = "BSFadeNode"
+_ROOT_FLAGS = 14
 
 
 def identity_xform():
@@ -45,6 +60,7 @@ def identity_xform():
 
 
 HDPT_TYPE_FACE = 1  # Only Face-type headparts get the per-NPC FacegenDetail.
+HDPT_TYPE_EYES = 2  # Must use NiSkinInstance — see _should_demote.
 
 
 def copy_shape(dst: NifFile, fg: "NiNode", src_shape, rename_to: str,
@@ -146,35 +162,42 @@ def copy_shape(dst: NifFile, fg: "NiNode", src_shape, rename_to: str,
     return new_shape
 
 
-def assemble_from_manifest(data_root: Path, form_id: str, dst_path: Path) -> NifFile:
-    manifest = json.loads((data_root / "manifest.json").read_text())
-    entry = next((n for n in manifest["npcs"] if n["form_id"] == form_id), None)
-    if entry is None:
-        raise SystemExit(f"no NPC with form_id {form_id} in {data_root}/manifest.json")
+def build_facegen_nif(npc_info: dict, resolver: AssetResolver,
+                      dst_path: Path) -> NifFile:
+    """Assemble a facegen nif from `npc_info` and write it to `dst_path`.
 
-    print(f"[npc] {entry['label']} 0x{entry['form_id']} ({entry['npc_edid']})")
-    print(f"[npc] {len(entry['headparts'])} headparts")
+    `npc_info` has the same shape as one `manifest.json` entry — form_id,
+    base_plugin, headparts (list of {hdpt_edid, hdpt_type, source_nif,
+    race_tri, chargen_tri, behavior_tri, textures}), race_edid, nam9,
+    weight, nama.
 
-    # Reference facegen, used only to seed the output nif's root metadata
-    # (game, root block type, root name, root flags).
-    ref_path = data_root / entry["facegen_nif"]
-    ref = NifFile(str(ref_path))
+    Source nif / tri paths are Data-relative; they're resolved via
+    `resolver`. Missing headpart nifs are warned and skipped (the
+    resulting nif just omits those shapes); missing tris are tolerated
+    downstream by `apply_morphs`.
+    """
+    form_id = npc_info["form_id"]
+    base_plugin = npc_info["base_plugin"]
+
+    print(f"[npc] 0x{form_id} ({npc_info.get('npc_edid')})")
+    print(f"[npc] {len(npc_info['headparts'])} headparts")
 
     dst_path.parent.mkdir(parents=True, exist_ok=True)
     if dst_path.exists():
         dst_path.unlink()
+
     dst = NifFile()
     # CK writes `<FORMID>.NIF` as the root node's name. PyNifly's default is
     # 'Scene Root' which would show up wrong. Mirror CK exactly.
-    root_name = f"{entry['form_id']}.NIF"
-    dst.initialize(ref.game, str(dst_path),
-                   root_type=ref.root.blockname,
+    root_name = f"{form_id}.NIF"
+    dst.initialize(_GAME, str(dst_path),
+                   root_type=_ROOT_TYPE,
                    root_name=root_name)
     # initialize()'s root_name argument isn't actually persisted by PyNifly's
     # createNif; set it explicitly via the NiNode.name setter which updates
     # the NIF string table.
     dst.root.name = root_name
-    dst.root.flags = ref.root.flags
+    dst.root.flags = _ROOT_FLAGS
     try:
         dst.root.write_properties()
     except Exception as e:
@@ -187,36 +210,44 @@ def assemble_from_manifest(data_root: Path, form_id: str, dst_path: Path) -> Nif
     # bind-pose rotation, e.g. Spine2's ~7.7° X bend). Match that.
     sources = []
     bone_xforms: dict[str, TransformBuf] = {}
-    for hp in entry["headparts"]:
+    for hp in npc_info["headparts"]:
         src_rel = hp["source_nif"]
-        src_path = data_root / src_rel
-        if not src_path.is_file():
-            # Case-insensitive fallback
-            parent = src_path.parent
-            match = [p for p in parent.iterdir() if p.name.lower() == src_path.name.lower()]
-            if match:
-                src_path = match[0]
-            else:
-                print(f"  [MISSING] {src_rel}")
-                continue
+        src_path = resolver.resolve(src_rel)
+        if src_path is None:
+            log.warning("[%s] source nif missing: %s",
+                        npc_info.get("npc_edid") or form_id, src_rel)
+            continue
         src_nif = NifFile(str(src_path))
         if len(src_nif.shapes) != 1:
-            print(f"  [WARN] {src_rel} has {len(src_nif.shapes)} shapes; taking first")
+            log.warning("[%s] %s has %d shapes; taking first",
+                        hp["hdpt_edid"], src_rel, len(src_nif.shapes))
         src_shape = src_nif.shapes[0]
 
         # Phase 4: bake race + chargen + weight morphs into the verts.
-        race_tri_path = (data_root / hp["race_tri"]) if hp.get("race_tri") else None
-        chargen_tri_path = (data_root / hp["chargen_tri"]) if hp.get("chargen_tri") else None
-        behavior_tri_path = (data_root / hp["behavior_tri"]) if hp.get("behavior_tri") else None
+        # Resolve each tri relpath; warn on "listed but missing" (the
+        # resolver collapses "no tri" and "missing tri" into None, so
+        # we re-introduce the distinction here).
+        def _resolve_tri(relpath, kind):
+            if not relpath:
+                return None
+            found = resolver.resolve(relpath)
+            if found is None:
+                log.warning("[%s] %s tri missing: %s",
+                            hp["hdpt_edid"], kind, relpath)
+            return found
+
+        race_tri_path = _resolve_tri(hp.get("race_tri"), "race")
+        chargen_tri_path = _resolve_tri(hp.get("chargen_tri"), "chargen")
+        behavior_tri_path = _resolve_tri(hp.get("behavior_tri"), "behavior")
         morphed_verts = apply_morphs(
             np.asarray(src_shape.verts, dtype=np.float32),
             race_tri_path=race_tri_path,
-            race_edid=entry.get("race_edid"),
+            race_edid=npc_info.get("race_edid"),
             chargen_tri_path=chargen_tri_path,
-            nam9=entry.get("nam9"),
+            nam9=npc_info.get("nam9"),
             behavior_tri_path=behavior_tri_path,
-            weight=entry.get("weight"),
-            nama=entry.get("nama"),
+            weight=npc_info.get("weight"),
+            nama=npc_info.get("nama"),
             shape_name=hp["hdpt_edid"],
         )
         sources.append((hp["hdpt_edid"], hp.get("hdpt_type"),
@@ -230,6 +261,14 @@ def assemble_from_manifest(data_root: Path, form_id: str, dst_path: Path) -> Nif
                 stub.translation = src_xf.translation
                 bone_xforms[bone] = stub
 
+    # If nothing resolved, there's no valid facegen to write. Better
+    # to raise here — the caller's per-NPC try/except turns it into a
+    # clear "skipped N: no source headparts resolved" log line than
+    # silently writing a shape-less nif the game will bounce.
+    if not sources:
+        raise FileNotFoundError(
+            f"no headpart source nifs resolved for {form_id}")
+
     # CK orders top-level children as: bone stubs first, then
     # BSFaceGenNiNodeSkinned. Skyrim's NIF loader parses linearly — shapes
     # at the end reference bones by name, so bones must be declared before
@@ -240,7 +279,7 @@ def assemble_from_manifest(data_root: Path, form_id: str, dst_path: Path) -> Nif
 
     facegen_detail_rel = (
         f"textures\\actors\\character\\FaceGenData\\FaceTint\\"
-        f"{entry['base_plugin']}\\{entry['form_id']}.dds"
+        f"{base_plugin}\\{form_id}.dds"
     )
     for edid, hdpt_type, _src_nif, src_shape, morphed_verts, tex_over in sources:
         print(f"[copy] {edid} (type={hdpt_type}, source shape "
@@ -254,14 +293,25 @@ def assemble_from_manifest(data_root: Path, form_id: str, dst_path: Path) -> Nif
     dst.save()
 
     # Demote pass — must happen AFTER the initial save, re-open the file,
-    # demote shapes whose source used plain NiSkinInstance, save again.
-    # PyNifly's in-flow save path always writes BSDismember even after a
-    # pre-save demote() call; only post-save + re-open + demote + re-save
-    # actually persists the change. Mismatching skin-instance type trips
-    # Skyrim's NIF-vs-NPC validation and falls back to race default head.
+    # demote shapes whose HDPT type doesn't support dismemberment, save
+    # again. PyNifly's `skin()` always creates BSDismemberSkinInstance;
+    # only post-save + re-open + demote + re-save persists the switch to
+    # plain NiSkinInstance. Classifying by HDPT type (not the source
+    # nif's own type) is important because some YAS meshes ship as
+    # BSDismember even for eyes/brows — source-type matching would
+    # leave those misclassified and Skyrim crashes on load.
+    # Demote to NiSkinInstance when:
+    #   - the source nif uses NiSkinInstance (vanilla eye/mouth/brows/
+    #     scar meshes do; CK preserves the source type), OR
+    #   - the HDPT type is Eyes (2). Eyes *must* use NiSkinInstance
+    #     regardless of source — some YAS eye meshes ship as
+    #     BSDismember (upstream bug) and Skyrim's facegen morph-data
+    #     pipeline crashes dereferencing dismember partitions on an
+    #     eye shape at NPC load time.
     names_to_demote = {
-        edid for edid, _type, _src_nif, src_shape, _morphed, _tex in sources
-        if src_shape.skin_instance_name == "NiSkinInstance"
+        edid for edid, hdpt_type, _src_nif, src_shape, _morphed, _tex in sources
+        if hdpt_type == HDPT_TYPE_EYES
+           or src_shape.skin_instance_name == "NiSkinInstance"
     }
     if names_to_demote:
         reopened = NifFile(str(dst_path))
@@ -270,9 +320,21 @@ def assemble_from_manifest(data_root: Path, form_id: str, dst_path: Path) -> Nif
                 nifly.demoteSkinInstance(reopened._handle, s._handle)
         reopened.save()
 
-    print(f"[save] {dst_path} ({os.path.getsize(dst_path)} bytes; "
-          f"ref {ref_path.stat().st_size} bytes)")
+    print(f"[save] {dst_path} ({os.path.getsize(dst_path)} bytes)")
     return dst
+
+
+def assemble_from_manifest(data_root: Path, form_id: str, dst_path: Path) -> NifFile:
+    """Legacy manifest-driven entry point. Loads manifest.json, finds
+    the NPC by form_id, and calls `build_facegen_nif` through a
+    loose-only resolver rooted at `data_root`."""
+    manifest = json.loads((data_root / "manifest.json").read_text())
+    entry = next((n for n in manifest["npcs"] if n["form_id"] == form_id), None)
+    if entry is None:
+        raise SystemExit(f"no NPC with form_id {form_id} in {data_root}/manifest.json")
+
+    with AssetResolver(data_root, bsa_readers=[]) as resolver:
+        return build_facegen_nif(entry, resolver, dst_path)
 
 
 if __name__ == "__main__":

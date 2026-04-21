@@ -87,7 +87,17 @@ def _run_furrification_body(
         log.error("Could not find Skyrim installation. Use --data-dir.")
         return 1
 
+    # Output dir defaults to data_dir when unset. Kept separate so the
+    # user can write the patch + facegen into a mod-manager staging
+    # folder without polluting the live Data tree.
+    if config.output_dir:
+        output_dir = Path(config.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        output_dir = data_dir
+
     log.debug(f"Data directory: {data_dir}")
+    log.debug(f"Output directory: {output_dir}")
 
     # Load preference scheme
     emit("Loading scheme")
@@ -126,7 +136,7 @@ def _run_furrification_body(
     race_tints = build_race_tints(list(plugin_set))
 
     # Create patch (masters added lazily as FormIDs are remapped)
-    patch_path = data_dir / config.patch_filename
+    patch_path = output_dir / config.patch_filename
     patch = Plugin.new_plugin(patch_path)
     patch.plugin_set = plugin_set
 
@@ -210,13 +220,30 @@ def _run_furrification_body(
     # Print statistics
     furry.print_statistics()
 
-    # Print warning/error summary
-    _print_log_summary(log_counter)
-
-    # Save
+    # Save the patch first — the FaceGen engine reads nothing from it,
+    # and saving before the (comparatively slow) FaceGen step means the
+    # user always has a usable patch even if they Ctrl-C during bake.
     emit("Saving patch")
     patch.save()
     log.info(f"Saved patch: {patch_path}")
+
+    # Build per-NPC FaceGenData (nif + DDS) under <output>/FaceGenData/
+    # so the user doesn't have to open CK and Ctrl-F4. Source assets
+    # (headpart nifs, tri files, tint masks) are resolved against
+    # data_dir; the outputs land under output_dir.
+    if config.build_facegen:
+        emit("Building FaceGen")
+        log.info("Building FaceGen...")
+        from .facegen import build_facegen_for_patch
+        _run_facegen(config, patch, plugin_set, data_dir, output_dir, progress)
+
+    # Print warning/error summary (after FaceGen so its warnings roll up too)
+    _print_log_summary(log_counter)
+
+    # If a log file was configured, echo its full path as the last line
+    # so the user doesn't have to hunt for it afterward.
+    if config.log_file:
+        log.info("Log written to: %s", Path(config.log_file).resolve())
 
     emit("Done")
     return 0
@@ -243,6 +270,46 @@ class _LogCounter(logging.Handler):
             self.errors.append(self.format(record))
         elif record.levelno >= logging.WARNING:
             self.warnings.append(self.format(record))
+
+
+def _run_facegen(config, patch, plugin_set, data_dir, output_dir, progress):
+    """Run the facegen builder, optionally under cProfile.
+
+    When `config.profile_file` is set, dump raw stats to that path and
+    print the top-30 cumulative-time functions so the bottleneck is
+    visible without launching a viewer.
+    """
+    from .facegen import build_facegen_for_patch
+
+    def _run():
+        build_facegen_for_patch(patch, plugin_set,
+                                data_dir=data_dir,
+                                output_dir=output_dir,
+                                progress=progress)
+
+    if not config.profile_file:
+        _run()
+        return
+
+    import cProfile
+    import io
+    import pstats
+    profiler = cProfile.Profile()
+    try:
+        profiler.enable()
+        _run()
+    finally:
+        profiler.disable()
+        out_path = Path(config.profile_file).resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        profiler.dump_stats(out_path)
+        log.info("cProfile stats written to: %s", out_path)
+        # Also surface the top 30 cumulative-time calls in the run log
+        # so the obvious bottleneck is visible without a viewer.
+        buf = io.StringIO()
+        stats = pstats.Stats(profiler, stream=buf).sort_stats("cumulative")
+        stats.print_stats(30)
+        log.info("Top 30 cumulative-time calls:\n%s", buf.getvalue())
 
 
 def _print_log_summary(counter: "_LogCounter") -> None:

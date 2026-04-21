@@ -149,8 +149,8 @@ class FurrifierWindow(ctk.CTk):
         ctk.CTkEntry(form, textvariable=self.patch_var).grid(
             row=1, column=1, padx=(0, 8), pady=8, sticky="ew")
 
-        # Data dir — prefill with auto-detected path so the user sees
-        # where the patch would go. They can still edit or browse.
+        # Data dir — read-side. Source of masters, mods, textures, BSAs.
+        # Prefilled with auto-detected game Data folder.
         ctk.CTkLabel(form, text="Data dir:").grid(
             row=2, column=0, padx=(10, 8), pady=8, sticky="w")
         detected = find_game_data('tes5')
@@ -162,28 +162,51 @@ class FurrifierWindow(ctk.CTk):
                       command=self._browse_data_dir).grid(
             row=2, column=2, padx=(0, 10), pady=8)
 
+        # Output dir — write-side. Patch.esp and FaceGenData tree go
+        # here. Blank = same as Data dir.
+        ctk.CTkLabel(form, text="Output dir:").grid(
+            row=3, column=0, padx=(10, 8), pady=8, sticky="w")
+        self.output_dir_var = tk.StringVar(value="")
+        ctk.CTkEntry(form, textvariable=self.output_dir_var,
+                     placeholder_text="(same as Data dir)").grid(
+            row=3, column=1, padx=(0, 8), pady=8, sticky="ew")
+        ctk.CTkButton(form, text="Browse...", width=120,
+                      command=self._browse_output_dir).grid(
+            row=3, column=2, padx=(0, 10), pady=8)
+
         # Plugins: "Edit plugins..." button + selected-count label.
         # Overrides LoadOrder.from_game(active_only=True) for this run.
         ctk.CTkLabel(form, text="Plugins:").grid(
-            row=3, column=0, padx=(10, 8), pady=8, sticky="w")
+            row=4, column=0, padx=(10, 8), pady=8, sticky="w")
         self.plugins_summary_var = tk.StringVar(value="(using active load order)")
         ctk.CTkLabel(form, textvariable=self.plugins_summary_var,
                      anchor="w").grid(
-            row=3, column=1, padx=(0, 8), pady=8, sticky="ew")
+            row=4, column=1, padx=(0, 8), pady=8, sticky="ew")
         ctk.CTkButton(form, text="Edit plugins...", width=120,
                       command=self._open_plugin_picker).grid(
-            row=3, column=2, padx=(0, 10), pady=8)
+            row=4, column=2, padx=(0, 10), pady=8)
 
         # Log file
         ctk.CTkLabel(form, text="Log file:").grid(
-            row=4, column=0, padx=(10, 8), pady=8, sticky="w")
+            row=5, column=0, padx=(10, 8), pady=8, sticky="w")
         self.log_file_var = tk.StringVar(value="")
         ctk.CTkEntry(form, textvariable=self.log_file_var,
                      placeholder_text="(optional)").grid(
-            row=4, column=1, padx=(0, 8), pady=8, sticky="ew")
+            row=5, column=1, padx=(0, 8), pady=8, sticky="ew")
         ctk.CTkButton(form, text="Browse...", width=120,
                       command=self._browse_log_file).grid(
-            row=4, column=2, padx=(0, 10), pady=8)
+            row=5, column=2, padx=(0, 10), pady=8)
+
+        # Profile file (cProfile dump) — optional. Blank = no profiling.
+        ctk.CTkLabel(form, text="Profile file:").grid(
+            row=6, column=0, padx=(10, 8), pady=8, sticky="w")
+        self.profile_file_var = tk.StringVar(value="")
+        ctk.CTkEntry(form, textvariable=self.profile_file_var,
+                     placeholder_text="(optional — cProfile output)").grid(
+            row=6, column=1, padx=(0, 8), pady=8, sticky="ew")
+        ctk.CTkButton(form, text="Browse...", width=120,
+                      command=self._browse_profile_file).grid(
+            row=6, column=2, padx=(0, 10), pady=8)
 
         # Option checkboxes
         opts = ctk.CTkFrame(self)
@@ -192,6 +215,7 @@ class FurrifierWindow(ctk.CTk):
         self.male_var = tk.BooleanVar(value=True)
         self.female_var = tk.BooleanVar(value=True)
         self.schlongs_var = tk.BooleanVar(value=True)
+        self.facegen_var = tk.BooleanVar(value=True)
         self.debug_var = tk.BooleanVar(value=False)
         ctk.CTkCheckBox(opts, text="Furrify armor",
                         variable=self.armor_var).grid(row=0, column=0, padx=10, pady=8, sticky="w")
@@ -201,8 +225,10 @@ class FurrifierWindow(ctk.CTk):
                         variable=self.female_var).grid(row=0, column=2, padx=10, pady=8, sticky="w")
         ctk.CTkCheckBox(opts, text="Schlongs (SOS)",
                         variable=self.schlongs_var).grid(row=0, column=3, padx=10, pady=8, sticky="w")
+        ctk.CTkCheckBox(opts, text="Build FaceGen",
+                        variable=self.facegen_var).grid(row=0, column=4, padx=10, pady=8, sticky="w")
         ctk.CTkCheckBox(opts, text="Debug logging",
-                        variable=self.debug_var).grid(row=0, column=4, padx=10, pady=8, sticky="w")
+                        variable=self.debug_var).grid(row=0, column=5, padx=10, pady=8, sticky="w")
 
         # Log pane
         log_frame = ctk.CTkFrame(self)
@@ -214,19 +240,21 @@ class FurrifierWindow(ctk.CTk):
         self.log_text.grid(row=0, column=0, padx=6, pady=6, sticky="nsew")
         self.log_text.configure(state="disabled")
 
-        # Bottom bar: phase label + progress + run button
+        # Bottom bar: phase label + run button. No progress bar — the
+        # customtkinter indeterminate bar's animation burned ~175s of
+        # CPU across a 100-NPC run (profiled 2026-04-21) because it
+        # redraws at high frequency on a timer. The phase label (which
+        # updates every NPC via the worker's progress callback) is
+        # enough to show motion.
         bottom = ctk.CTkFrame(self)
         bottom.grid(row=4, column=0, padx=12, pady=(6, 12), sticky="ew")
         bottom.grid_columnconfigure(0, weight=1)
         self.phase_var = tk.StringVar(value="Ready.")
         ctk.CTkLabel(bottom, textvariable=self.phase_var, anchor="w").grid(
-            row=0, column=0, padx=10, pady=(8, 0), sticky="ew")
-        self.progress = ctk.CTkProgressBar(bottom, mode="indeterminate")
-        self.progress.grid(row=1, column=0, padx=10, pady=(4, 8), sticky="ew")
-        self.progress.set(0)
+            row=0, column=0, padx=10, pady=8, sticky="ew")
         self.run_button = ctk.CTkButton(bottom, text="Run", width=120,
                                         command=self._start_run)
-        self.run_button.grid(row=0, column=1, rowspan=2, padx=10, pady=8)
+        self.run_button.grid(row=0, column=1, padx=10, pady=8)
 
     # --- actions ---------------------------------------------------------
 
@@ -237,6 +265,16 @@ class FurrifierWindow(ctk.CTk):
         )
         if path:
             self.data_dir_var.set(path)
+
+    def _browse_output_dir(self) -> None:
+        path = filedialog.askdirectory(
+            title="Select output directory",
+            initialdir=(self.output_dir_var.get()
+                        or self.data_dir_var.get()
+                        or None),
+        )
+        if path:
+            self.output_dir_var.set(path)
 
     def _open_plugin_picker(self) -> None:
         data_dir_str = self.data_dir_var.get().strip()
@@ -272,6 +310,15 @@ class FurrifierWindow(ctk.CTk):
         if path:
             self.log_file_var.set(path)
 
+    def _browse_profile_file(self) -> None:
+        path = filedialog.asksaveasfilename(
+            title="cProfile output file",
+            defaultextension=".prof",
+            filetypes=[("Profile files", "*.prof"), ("All files", "*.*")],
+        )
+        if path:
+            self.profile_file_var.set(path)
+
     def _config_from_fields(self) -> FurrifierConfig:
         patch = self.patch_var.get().strip() or "YASNPCPatch.esp"
         if Path(patch).suffix.lower() not in (".esp", ".esm", ".esl"):
@@ -283,9 +330,12 @@ class FurrifierWindow(ctk.CTk):
             furrify_npcs_male=self.male_var.get(),
             furrify_npcs_female=self.female_var.get(),
             furrify_schlongs=self.schlongs_var.get(),
+            build_facegen=self.facegen_var.get(),
             debug=self.debug_var.get(),
             log_file=self.log_file_var.get().strip() or None,
             game_data_dir=self.data_dir_var.get().strip() or None,
+            output_dir=self.output_dir_var.get().strip() or None,
+            profile_file=self.profile_file_var.get().strip() or None,
         )
 
     def _start_run(self) -> None:
@@ -299,7 +349,6 @@ class FurrifierWindow(ctk.CTk):
         self._install_log_handler(config)
         self.run_button.configure(state="disabled", text="Running...")
         self.phase_var.set("Starting...")
-        self.progress.start()
 
         self._worker = threading.Thread(
             target=self._run_worker, args=(config, load_order), daemon=True)
@@ -375,8 +424,6 @@ class FurrifierWindow(ctk.CTk):
             pass
 
     def _on_worker_finished(self, *, success: bool, error: str = "") -> None:
-        self.progress.stop()
-        self.progress.set(0)
         self.run_button.configure(state="normal", text="Run")
         self._remove_log_handler()
         if success:
@@ -389,16 +436,43 @@ class FurrifierWindow(ctk.CTk):
 
     def _install_log_handler(self, config: FurrifierConfig) -> None:
         root = logging.getLogger()
-        root.setLevel(logging.DEBUG if config.debug else logging.INFO)
+        level = logging.DEBUG if config.debug else logging.INFO
+        root.setLevel(level)
         handler = _QueueLogHandler(self._queue)
-        handler.setLevel(logging.DEBUG if config.debug else logging.INFO)
+        handler.setLevel(level)
         root.addHandler(handler)
         self._log_handler = handler
 
+        # Log file is optional. The GUI used to silently ignore this
+        # field — file logging only happened via setup_logging() on the
+        # CLI path. Attach a FileHandler here so setting the field
+        # actually writes something.
+        self._file_handler: Optional[logging.FileHandler] = None
+        if config.log_file:
+            try:
+                log_path = Path(config.log_file).resolve()
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                fh = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+                fh.setLevel(level)
+                fh.setFormatter(logging.Formatter(
+                    "%(asctime)s %(levelname)s %(name)s: %(message)s"))
+                root.addHandler(fh)
+                self._file_handler = fh
+            except OSError as exc:
+                # Don't fail the run just because the log path was bad;
+                # surface the problem via the queue handler instead.
+                logging.getLogger(__name__).warning(
+                    "could not open log file %r: %s", config.log_file, exc)
+
     def _remove_log_handler(self) -> None:
+        root = logging.getLogger()
         if self._log_handler is not None:
-            logging.getLogger().removeHandler(self._log_handler)
+            root.removeHandler(self._log_handler)
             self._log_handler = None
+        if getattr(self, "_file_handler", None) is not None:
+            root.removeHandler(self._file_handler)
+            self._file_handler.close()
+            self._file_handler = None
 
     def _clear_log(self) -> None:
         self.log_text.configure(state="normal")
@@ -742,7 +816,6 @@ def main() -> int:
     theme["CTkButton"]["fg_color"] = [midnight, midnight]
     theme["CTkButton"]["hover_color"] = [midnight_hover, midnight_hover]
     theme["CTkButton"]["border_color"] = [midnight_dark, midnight_dark]
-    theme["CTkProgressBar"]["progress_color"] = [midnight, midnight_hover]
     theme["CTkCheckBox"]["fg_color"] = [midnight, midnight]
     theme["CTkCheckBox"]["hover_color"] = [midnight_hover, midnight_hover]
     theme["CTkCheckBox"]["border_color"] = [midnight_dark, midnight_dark]

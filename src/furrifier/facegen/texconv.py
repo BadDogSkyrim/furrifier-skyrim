@@ -69,7 +69,7 @@ def encode_bc7_batch(png_paths: Iterable[Path], out_dir: Path) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     _run([
         "-f", "BC7_UNORM",
-        "-m", "1",
+        "-m", "0",         # full mipmap chain (matches CK; same as encode_bc7)
         "-y",
         "-nologo",
         "-o", str(out_dir),
