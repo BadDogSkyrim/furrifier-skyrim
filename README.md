@@ -1,51 +1,71 @@
 # Furrifier
 
-The furrifier is a command-line executable that furrifiers every NPC in your active load
-order. Vanilla races are given a furry appearance; headpart and armor races are reassigned
-so furrified races get furry variants of armor and headparts. 
+The furrifier furrifies every NPC in your active load order. Vanilla races are given a
+furry appearance; headpart and armor races are reassigned so furrified races get furry
+variants of armor and headparts.
 
-It operates on your entire active load order--change what's included by changing what mods are active.
+It operates on your entire active load order — change what's included by changing what mods
+are active.
 
-Usage:
+The kit ships two executables:
+
+- **`furrify_skyrim_gui.exe`** — a GUI with a live 3D preview pane. Double-click to launch;
+  pick options in the form and hit Run.
+- **`furrify_skyrim.exe`** — the CLI. Same code, same options, useful for scripted runs.
+
+## Command-line usage
 
 ```
-furrify_skyrim.exe [--help] [--patch PATCH] 
-  [--scheme {all_races,cats_dogs,legacy,user}] [--no-armor] [--no-male]
-  [--no-female] [--no-schlongs] [--data-dir DATA_DIR] [-o DIR] [--debug] 
-  [--log FILE]
+furrify_skyrim.exe [--help] [--patch PATCH]
+  [--scheme {all_races,cats_dogs,legacy,user}]
+  [--no-armor] [--no-schlongs] [--no-facegen]
+  [--data-dir DATA_DIR] [-o DIR]
+  [--facetint-size {256,512,1024,2048,4096}]
+  [--limit N] [--debug] [--log FILE] [--profile PATH]
 ```
 
 Options:
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--scheme NAME` | Race assignment scheme | `all_races` |
-| `--patch FILE` | Output patch filename | Game mods folder, `YASNPCPatch.esp` |
-| `--data-dir PATH` | Skyrim mod folder for READING source assets | auto-detected |
-| `-o`, `--output DIR` | Directory to WRITE the patch and FaceGenData | same as `--data-dir` |
+| `--scheme NAME` | Race assignment scheme (see below) | `all_races` |
+| `--patch FILE` | Output patch filename | `YASNPCPatch.esp` |
+| `--data-dir PATH` | Skyrim Data dir for READING source assets | auto-detected |
+| `-o`, `--output DIR` | Directory to WRITE patch + FaceGenData | same as `--data-dir` |
 | `--no-armor` | Skip armor furrification | |
-| `--no-male` | Skip male NPCs | |
-| `--no-female` | Skip female NPCs | |
-| `--no-schlongs` | Disable SOS compatibility | Ignore if SOS is not loaded |
+| `--no-schlongs` | Disable SOS (schlong) compatibility | ignored if SOS not loaded |
+| `--no-facegen` | Skip building per-NPC FaceGen nif + DDS | |
+| `--facetint-size N` | Square edge length (pixels) for baked face-tint DDS. One of 256, 512, 1024, 2048, 4096 | match first mask's native size (vanilla = 512) |
+| `--limit N` | Cap FaceGen to the first N NPCs — useful for previewing | no cap |
 | `--debug` | Enable debug logging | |
 | `--log FILE` | Write log to file | |
+| `--profile PATH` | Run under cProfile and dump stats to PATH (inspect with `snakeviz` or `pstats`) | |
 
-Once the furrifier has run, load the patch in Creation Kit and run facegen on all NPCs:
+### FaceGen output
 
-* Get Creation Kit Platform Extended if you don't have it alredy. (Not required but makes 
-everything more convenient.) 
-* Load up the new plugin.
-* Select "Actors" in the left pane of the object window.
-* Click "Show only active forms" in the upper left, above the pane. (If you don't have CKPE
-it won't  be there. Skip this step.)
-* Select everything in the right pane
-* Enter Ctrl-F4. Click okay.
+By default, furrifier bakes each NPC's FaceGen nif + DDS itself, writing into the output
+directory under:
 
-The CK will run for quite a while, generating every unique NPC. It will create nif files in 
-`meshes\actors\character\FaceGenData\FaceGeom` and texture files in `textures\actors\character\FaceGenData\FaceTint`. If you use multiple profiles, collect
-this output and put it and the patch into a mod unique to this profile.
+```
+meshes\actors\character\FaceGenData\FaceGeom\<plugin>\<formid>.nif
+textures\actors\character\FaceGenData\FaceTint\<plugin>\<formid>.dds
+```
 
-You can also run one of the mods that generates faces on the fly, but performance will be worse. 
+That means you can launch the game directly after a run — no Creation Kit step required.
+
+If you pass `--no-facegen` or want to re-bake in the CK anyway, the old workflow still
+works: load the patch in Creation Kit (CKPE recommended), select all actors, press
+Ctrl-F4 to bake. Any mod that generates faces on the fly will also work.
+
+## GUI usage
+
+`furrify_skyrim_gui.exe` exposes every CLI option as a form field plus a live preview pane
+on the right: pick an NPC, see how they'd look under the current scheme. Changing the
+scheme or plugin set refreshes the preview automatically. Buttons on the preview side:
+
+- **Load NPCs** — build the session and populate the picker.
+- **◀ / ▶** — browse the NPCs you've previewed.
+- **Reframe** — reset the camera to its default framing if you've orbited off the head.
 
 # Customizing the furrification
 
