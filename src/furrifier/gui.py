@@ -294,17 +294,6 @@ class FurrifierWindow(QMainWindow):
         browse_log = QPushButton("Browse...", frame)
         browse_log.clicked.connect(self._browse_log_file)
         grid.addWidget(browse_log, row, 2)
-        row += 1
-
-        # Profile file
-        grid.addWidget(QLabel("Profile file:"), row, 0)
-        self.profile_file_edit = QLineEdit("", frame)
-        self.profile_file_edit.setPlaceholderText(
-            "(optional — cProfile output)")
-        grid.addWidget(self.profile_file_edit, row, 1)
-        browse_prof = QPushButton("Browse...", frame)
-        browse_prof.clicked.connect(self._browse_profile_file)
-        grid.addWidget(browse_prof, row, 2)
 
         return frame
 
@@ -399,13 +388,6 @@ class FurrifierWindow(QMainWindow):
         if path:
             self.log_file_edit.setText(path)
 
-    def _browse_profile_file(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
-            self, "cProfile output file", "",
-            "Profile files (*.prof);;All files (*)")
-        if path:
-            self.profile_file_edit.setText(path)
-
     def _open_plugin_picker(self) -> None:
         data_dir_str = self.data_dir_edit.text().strip()
         if not data_dir_str:
@@ -460,7 +442,6 @@ class FurrifierWindow(QMainWindow):
             log_file=self.log_file_edit.text().strip() or None,
             game_data_dir=self.data_dir_edit.text().strip() or None,
             output_dir=self.output_dir_edit.text().strip() or None,
-            profile_file=self.profile_file_edit.text().strip() or None,
             facegen_limit=facegen_limit,
             facetint_size=self.facetint_size_combo.currentData(),
         )
