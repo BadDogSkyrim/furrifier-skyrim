@@ -28,6 +28,7 @@ from __future__ import annotations
 import importlib.util
 import logging
 import math
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -35,6 +36,18 @@ import numpy as np
 
 
 log = logging.getLogger("furrifier.facegen.morph")
+
+
+# Load PyNifly's TriFile module once at import time — bypassing the
+# package's bpy-tainted __init__. Previously happened per-call, which
+# dominated the tri-load cost when many NPCs share headparts.
+_tri_spec = importlib.util.spec_from_file_location(
+    "_furrifier_trifile",
+    r"C:\Modding\PyNifly\io_scene_nifly\tri\trifile.py",
+)
+_tri_module = importlib.util.module_from_spec(_tri_spec)
+_tri_spec.loader.exec_module(_tri_module)
+_TriFile = _tri_module.TriFile
 
 
 # NAM9 slot → (positive morph name, negative morph name).
@@ -65,16 +78,13 @@ SLOT_MAP: list[tuple[Optional[str], Optional[str]]] = [
 ]
 
 
+@lru_cache(maxsize=64)
 def _load_trifile(path: Path):
-    """Import PyNifly's TriFile bypassing the package's bpy-tainted __init__."""
-    spec = importlib.util.spec_from_file_location(
-        "_furrifier_trifile",
-        r"C:\Modding\PyNifly\io_scene_nifly\tri\trifile.py",
-    )
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    """Parse a .tri file. Cached: a batch-facegen run across many NPCs
+    repeatedly loads the same race/chargen/behavior tris (e.g. every
+    wood elf pulls the same three)."""
     with open(path, "rb") as f:
-        return mod.TriFile.from_file(f)
+        return _TriFile.from_file(f)
 
 
 def _tri_delta(tri, morph_name: str) -> Optional[np.ndarray]:

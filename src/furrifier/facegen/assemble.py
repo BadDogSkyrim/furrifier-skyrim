@@ -336,16 +336,12 @@ def build_facegen_nif(npc_info: dict, resolver: AssetResolver,
                    verts_override=morphed_verts,
                    texture_overrides=tex_over)
 
-    dst.save()
-
-    # Demote pass — must happen AFTER the initial save, re-open the file,
-    # demote shapes whose HDPT type doesn't support dismemberment, save
-    # again. PyNifly's `skin()` always creates BSDismemberSkinInstance;
-    # only post-save + re-open + demote + re-save persists the switch to
-    # plain NiSkinInstance. Classifying by HDPT type (not the source
-    # nif's own type) is important because some YAS meshes ship as
-    # BSDismember even for eyes/brows — source-type matching would
-    # leave those misclassified and Skyrim crashes on load.
+    # Demote pass — PyNifly's `skin()` always creates
+    # BSDismemberSkinInstance, but eyes and other non-dismemberable
+    # parts need plain NiSkinInstance (Skyrim rejects the wrong type
+    # and falls back to the race default head). Classifying by HDPT
+    # type (not the source nif's own type) is important because some
+    # YAS meshes ship as BSDismember even for eyes/brows.
     # Demote to NiSkinInstance when:
     #   - the source nif uses NiSkinInstance (vanilla eye/mouth/brows/
     #     scar meshes do; CK preserves the source type), OR
@@ -360,11 +356,11 @@ def build_facegen_nif(npc_info: dict, resolver: AssetResolver,
            or src_shape.skin_instance_name == "NiSkinInstance"
     }
     if names_to_demote:
-        reopened = NifFile(str(dst_path))
-        for s in reopened.shapes:
+        for s in dst.shapes:
             if s.name in names_to_demote:
-                nifly.demoteSkinInstance(reopened._handle, s._handle)
-        reopened.save()
+                nifly.demoteSkinInstance(dst._handle, s._handle)
+
+    dst.save()
 
     print(f"[save] {dst_path} ({os.path.getsize(dst_path)} bytes)")
     return dst

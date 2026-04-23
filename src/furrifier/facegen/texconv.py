@@ -17,13 +17,18 @@ Texconv preserves filename (swaps .png for .dds), so `out_dir/<stem>.dds`
 is deterministic.
 """
 import subprocess
+import sys
 from pathlib import Path
 from typing import Iterable
 
 
-# __file__ = .../furrifier/src/furrifier/facegen/texconv.py
-# parents[0]=facegen  [1]=furrifier(inner)  [2]=src  [3]=furrifier(outer)
-TEXCONV_EXE = Path(__file__).resolve().parents[3] / "tools" / "texconv.exe"
+# Dev: .../furrifier/src/furrifier/facegen/texconv.py
+#   parents[0]=facegen  [1]=furrifier(inner)  [2]=src  [3]=furrifier(outer)
+# Frozen: tools/ ships loose next to the exe (like schemes/ and races/).
+if getattr(sys, "frozen", False):
+    TEXCONV_EXE = Path(sys.executable).parent / "tools" / "texconv.exe"
+else:
+    TEXCONV_EXE = Path(__file__).resolve().parents[3] / "tools" / "texconv.exe"
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
@@ -33,9 +38,12 @@ def _run(args: list[str]) -> subprocess.CompletedProcess:
             "Download from https://github.com/microsoft/DirectXTex/releases "
             "and place at that path."
         )
+    # Suppress the console window the frozen GUI exe would otherwise
+    # pop each time texconv is spawned. Harmless (0) on non-Windows.
     return subprocess.run(
         [str(TEXCONV_EXE), *args],
         capture_output=True, text=True, check=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
 
 

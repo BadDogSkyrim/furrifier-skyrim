@@ -146,7 +146,18 @@ def composite_layers(resolver: AssetResolver, tints: list[dict],
                 break
     else:
         h = w = output_size
-    acc = np.zeros((h, w, 4), dtype=np.float32)
+
+    # Split the accumulator into contiguous RGB and alpha arrays for the
+    # inner loop. Working through `acc[..., :3]` strided views is ~30%
+    # of the compositor run time; contiguous ops are much faster. Pre-
+    # allocate three scratch buffers (tmp3 for per-layer RGB math, tmp1a
+    # for contrib_a, tmp1b for the alpha blend) so the hot loop makes
+    # zero fresh allocations — down from six per layer.
+    acc_rgb = np.zeros((h, w, 3), dtype=np.float32)
+    acc_a = np.zeros((h, w), dtype=np.float32)
+    tmp3 = np.empty((h, w, 3), dtype=np.float32)
+    tmp1a = np.empty((h, w), dtype=np.float32)
+    tmp1b = np.empty((h, w), dtype=np.float32)
 
     # Find the NPC's skin-tone layer (TINP=6) if present
     skin_layer = next((t for t in tints if t.get("tinp") == TINP_SKIN_TONE), None)
@@ -161,15 +172,11 @@ def composite_layers(resolver: AssetResolver, tints: list[dict],
     # solid QNAM fill — same behavior as NPCs with no TINP=6 entry.
     skin_cov = load_cached(skin_layer["mask"], w) if skin_layer else None
     if skin_cov is not None:
-        acc[..., :3] = base_rgb[None, None, :] * skin_cov[..., None]
-        acc[..., 3] = skin_cov
+        np.multiply(base_rgb, skin_cov[..., None], out=acc_rgb)
+        acc_a[:] = skin_cov
     elif base_color is not None:
-        # No SkinTone layer (or its mask was unresolvable) → solid fill,
-        # as if the mask were pure white.
-        acc[..., 0] = base_rgb[0]
-        acc[..., 1] = base_rgb[1]
-        acc[..., 2] = base_rgb[2]
-        acc[..., 3] = 1.0
+        acc_rgb[:] = base_rgb
+        acc_a.fill(1.0)
 
     for layer in tints:
         # Skip the skin-tone layer — already handled above via QNAM.
@@ -181,14 +188,31 @@ def composite_layers(resolver: AssetResolver, tints: list[dict],
 
         color = np.asarray(layer["color"][:3], dtype=np.float32) / 255.0
         intensity = float(layer["intensity"])
-        contrib_a = cov * intensity
-        contrib_rgb = color[None, None, :] * contrib_a[..., None]
 
-        # Alpha-over (premultiplied: contrib is already color*alpha above)
-        inv = 1.0 - contrib_a[..., None]
-        acc[..., :3] = contrib_rgb + inv * acc[..., :3]
-        acc[..., 3:4] = contrib_a[..., None] + inv * acc[..., 3:4]
+        # contrib_a = cov * intensity  (cov comes from the shared cache;
+        # don't mutate it — write into our scratch buffer instead)
+        np.multiply(cov, intensity, out=tmp1a)
 
+        # acc_rgb += contrib_a * (color - acc_rgb)
+        # Algebraically identical to the classic alpha-over formula
+        # (color*contrib_a + (1-contrib_a)*acc_rgb) but skips the
+        # separate contrib_rgb intermediate array.
+        np.subtract(color, acc_rgb, out=tmp3)
+        tmp3 *= tmp1a[..., None]
+        acc_rgb += tmp3
+
+        # acc_a = contrib_a + (1 - contrib_a) * acc_a
+        #       = acc_a + contrib_a * (1 - acc_a)
+        np.subtract(1.0, acc_a, out=tmp1b)
+        tmp1b *= tmp1a
+        acc_a += tmp1b
+
+    # Assemble the (H, W, 4) output. This is the one strided write we
+    # can't avoid without changing the function's return contract — but
+    # it happens once per NPC, not once per layer.
+    acc = np.empty((h, w, 4), dtype=np.float32)
+    acc[..., :3] = acc_rgb
+    acc[..., 3] = acc_a
     return acc
 
 

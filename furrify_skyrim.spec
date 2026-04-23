@@ -42,7 +42,9 @@ a_cli = Analysis(
     pathex=[],
     binaries=[],
     datas=[('src/furrifier/assets/*.png', 'furrifier/assets'),
-           ('src/furrifier/assets/*.ico', 'furrifier/assets')],
+           ('src/furrifier/assets/*.ico', 'furrifier/assets'),
+           ('src/furrifier/assets/*.svg', 'furrifier/assets'),
+           ('src/furrifier/preview/scene.qml', 'furrifier/preview')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -79,7 +81,9 @@ a_gui = Analysis(
     pathex=[],
     binaries=[],
     datas=[('src/furrifier/assets/*.png', 'furrifier/assets'),
-           ('src/furrifier/assets/*.ico', 'furrifier/assets')],
+           ('src/furrifier/assets/*.ico', 'furrifier/assets'),
+           ('src/furrifier/assets/*.svg', 'furrifier/assets'),
+           ('src/furrifier/preview/scene.qml', 'furrifier/preview')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -149,7 +153,7 @@ def _ignore_test_files(dirname, names):
     return [n for n in names if n in _TEST_ONLY]
 
 
-for _folder_name in ('schemes', 'races'):
+for _folder_name in ('schemes', 'races', 'tools'):
     _src = _spec_dir / _folder_name
     _dst = _dist_dir / _folder_name
     if _src.is_dir():

@@ -113,7 +113,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--profile', metavar='PATH',
                         help='Run under cProfile and dump stats to PATH. '
                              'Inspect with snakeviz or pstats.')
-    parser.add_argument('--facegen-limit', type=int, metavar='N',
+    parser.add_argument('--limit', dest='facegen_limit', type=int, metavar='N',
                         help='Cap FaceGen to the first N NPCs. Useful for '
                              'previewing a scheme without a full bake.')
     return parser

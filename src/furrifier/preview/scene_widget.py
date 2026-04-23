@@ -38,7 +38,11 @@ from ..facegen import AssetResolver
 
 log = logging.getLogger("furrifier.preview.scene_widget")
 
-QML_FILE = Path(__file__).parent / "scene.qml"
+if getattr(sys, "frozen", False):
+    # PyInstaller bundle: scene.qml is under _MEIPASS/furrifier/preview/
+    QML_FILE = Path(sys._MEIPASS) / "furrifier" / "preview" / "scene.qml"  # type: ignore[attr-defined]
+else:
+    QML_FILE = Path(__file__).parent / "scene.qml"
 
 
 # ---- geometry --------------------------------------------------------------
