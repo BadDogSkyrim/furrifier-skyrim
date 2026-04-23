@@ -781,11 +781,14 @@ class PluginPickerDialog(QDialog):
 
     def _show_context_menu(self, pos) -> None:
         menu = QMenu(self)
-        check_all = QAction("Check all", menu)
+        # Keyboard mnemonics follow xEdit conventions: C for Check all,
+        # E for uncheck (since Uncheck overlaps with Check on C), I for
+        # Invert. Qt QAction uses `&` to mark the accelerator.
+        check_all = QAction("&Check all", menu)
         check_all.triggered.connect(self._check_all)
-        uncheck_all = QAction("Uncheck all", menu)
+        uncheck_all = QAction("Unch&eck all", menu)
         uncheck_all.triggered.connect(self._uncheck_all)
-        invert = QAction("Invert selection", menu)
+        invert = QAction("&Invert selection", menu)
         invert.triggered.connect(self._invert)
         menu.addAction(check_all)
         menu.addAction(uncheck_all)

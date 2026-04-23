@@ -37,15 +37,32 @@ def _stub_plugin_set():
     return ps
 
 
-def _stub_npc(form_id: int, editor_id: str = "Stub"):
-    """Fake NPC record with just enough surface for the filter + logging."""
+def _stub_npc(form_id: int, editor_id: str = "Stub", *, traits: bool = False):
+    """Fake NPC record with just enough surface for the filter + logging.
+
+    `traits=True` simulates an NPC with `ACBS.template_flags.Traits`
+    set so we can exercise the trait-templated skip path.
+    """
     from unittest.mock import MagicMock
     from esplib.utils import LocalFormID
     npc = MagicMock()
     npc.form_id = LocalFormID(form_id)
     npc.editor_id = editor_id
-    # No ACBS → _is_chargen_preset returns False (catch-all path)
-    npc.__getitem__.side_effect = KeyError("no ACBS")
+    if traits:
+        # ACBS.template_flags.Traits=True, ACBS.flags.IsCharGenFacePreset=False.
+        # Distinguish the two sub-keys so the chargen filter doesn't
+        # accidentally catch this stub via a blanket-truthy MagicMock.
+        template_flags = MagicMock(Traits=True)
+        flags = MagicMock(IsCharGenFacePreset=False)
+        acbs = MagicMock()
+        acbs.__getitem__.side_effect = lambda k: (
+            template_flags if k == "template_flags"
+            else flags if k == "flags"
+            else MagicMock())
+        npc.__getitem__.return_value = acbs
+    else:
+        # No ACBS → _is_chargen_preset + inherits_traits both short-circuit.
+        npc.__getitem__.side_effect = KeyError("no ACBS")
     npc.get_subrecord.return_value = None
     return npc
 
@@ -103,6 +120,39 @@ def test_limit_none_runs_all(tmp_path):
             data_dir=tmp_path, output_dir=tmp_path)
 
     assert call_count == 4
+
+
+def test_trait_templated_npcs_are_skipped(tmp_path, caplog):
+    """Trait-templated NPCs render using their TPLT target's facegen
+    at runtime, so baking a shell for them is pure waste. They must
+    be filtered before extract_npc_info is called."""
+    from furrifier import facegen as fg_module
+
+    npcs = [
+        _stub_npc(0x0100_0001, "Normal1"),
+        _stub_npc(0x0100_0002, "Templated", traits=True),
+        _stub_npc(0x0100_0003, "Normal2"),
+    ]
+    patch_obj = _stub_patch(npcs)
+
+    seen = []
+
+    def _tracking_extract(npc, *args, **kwargs):
+        seen.append(npc.editor_id)
+        raise RuntimeError("skip downstream work")
+
+    with mock_patch.object(fg_module, "extract_npc_info",
+                           side_effect=_tracking_extract):
+        with caplog.at_level(logging.INFO):
+            fg_module.build_facegen_for_patch(
+                patch_obj, plugin_set=_stub_plugin_set(),
+                data_dir=tmp_path, output_dir=tmp_path)
+
+    assert "Templated" not in seen, \
+        "trait-templated NPC should have been filtered out"
+    assert {"Normal1", "Normal2"}.issubset(seen)
+    joined = " ".join(r.message for r in caplog.records)
+    assert "trait-templated" in joined.lower()
 
 
 def test_limit_larger_than_count_is_a_noop(tmp_path):

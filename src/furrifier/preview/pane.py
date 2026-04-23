@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 from esplib import LoadOrder
 
 from ..config import FurrifierConfig
+from ..npc import inherits_traits
 from .npc_picker import NpcEntry, NpcPickerWidget
 from .scene_widget import FacegenSceneWidget
 from .worker import PreviewWorker, RequestTracker
@@ -120,14 +121,25 @@ class PreviewPane(QWidget):
         # Back / Forward nav over the preview history. Small fixed-
         # width so they don't dominate the picker row. Unicode arrows
         # render fine in Qt's default font.
+        # Default Unicode glyph size is too small at the current DPI —
+        # bump the button's font so the arrow reads clearly without
+        # widening the button (fixed 32px width keeps the picker row tidy).
+        # Zero the default button padding/margin so the big glyph
+        # doesn't inflate the button — otherwise 24pt text adds ~10px
+        # of vertical padding per side and the nav row grows taller
+        # than the picker combobox.
+        _nav_qss = ("QPushButton { font-size: 20pt; padding: 0px; "
+                    "margin: 0px; }")
         self.back_button = QPushButton("◀", self)
-        self.back_button.setFixedWidth(32)
+        self.back_button.setFixedSize(32, 32)
         self.back_button.setEnabled(False)
+        self.back_button.setStyleSheet(_nav_qss)
         self.back_button.setToolTip("Previous NPC in preview history")
         self.back_button.clicked.connect(self._on_back)
         self.forward_button = QPushButton("▶", self)
-        self.forward_button.setFixedWidth(32)
+        self.forward_button.setFixedSize(32, 32)
         self.forward_button.setEnabled(False)
+        self.forward_button.setStyleSheet(_nav_qss)
         self.forward_button.setToolTip("Next NPC in preview history")
         self.forward_button.clicked.connect(self._on_forward)
         self.picker = NpcPickerWidget(self)
@@ -142,6 +154,7 @@ class PreviewPane(QWidget):
         self.scene.setSizePolicy(sp)
         self.status_label = QLabel("Click 'Load NPCs' to begin.", self)
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setStyleSheet("QLabel { font-weight: bold; }")
         # Editor-id + headparts readout under the viewer — useful
         # for confirming which parts the furrifier actually chose.
         self.headparts_label = QLabel("", self)
@@ -471,6 +484,12 @@ class PreviewPane(QWidget):
                 if obj_id in seen_ids:
                     continue
                 seen_ids.add(obj_id)
+                # Trait-templated NPCs render using their TPLT
+                # target's facegen at runtime — the shell has no
+                # appearance data of its own, so there's nothing
+                # meaningful to preview.
+                if inherits_traits(npc):
+                    continue
                 # Scheme filter — skips NPCs whose race has no
                 # furry assignment (child races, creature-only races,
                 # etc.). determine_npc_race is cheap: just a race

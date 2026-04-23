@@ -22,6 +22,7 @@ import struct
 
 from esplib import PluginSet
 
+from ..npc import inherits_traits
 from .assets import AssetResolver
 from .assemble import build_facegen_nif
 from .composite import build_facetint_dds, build_facetint_png
@@ -162,6 +163,14 @@ def build_facegen_for_patch(
     skipped_preset = len(raw) - len(npcs)
     if skipped_preset:
         log.info("FaceGen: skipping %d CharGen face preset NPCs", skipped_preset)
+    # Trait-templated NPCs render using their template's facegen at
+    # runtime, so baking a shell for them produces an empty nif the
+    # game never reads. Skip entirely.
+    before_trait_filter = len(npcs)
+    npcs = [n for n in npcs if not inherits_traits(n)]
+    skipped_trait = before_trait_filter - len(npcs)
+    if skipped_trait:
+        log.info("FaceGen: skipping %d trait-templated NPCs", skipped_trait)
     # Apply user-requested cap. Default (None) runs everything.
     if limit is not None and len(npcs) > limit:
         log.info("FaceGen: limit=%d — baking first %d of %d NPCs",
