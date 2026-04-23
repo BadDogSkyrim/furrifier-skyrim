@@ -74,3 +74,56 @@ class TestConfig:
     def test_normalize_argv_equals_form(self):
         out = normalize_argv(['--SCHEME=Legacy'])
         assert out == ['--scheme=Legacy']
+
+
+    def test_output_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(['--output', 'C:/mods/sandbox'])
+        assert args.output_dir == 'C:/mods/sandbox'
+
+
+    def test_output_short_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(['-o', 'C:/mods/sandbox'])
+        assert args.output_dir == 'C:/mods/sandbox'
+
+
+    def test_output_dir_alias_still_works(self):
+        """Legacy `--output-dir` is a hidden alias for `--output`."""
+        parser = build_parser()
+        args = parser.parse_args(['--output-dir', 'C:/mods/sandbox'])
+        assert args.output_dir == 'C:/mods/sandbox'
+
+
+    def test_log_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(['--log', 'run.log'])
+        assert args.log_file == 'run.log'
+
+
+    def test_log_file_alias_still_works(self):
+        """Legacy `--log-file` is a hidden alias for `--log`."""
+        parser = build_parser()
+        args = parser.parse_args(['--log-file', 'run.log'])
+        assert args.log_file == 'run.log'
+
+
+    def test_facetint_size_default_is_none(self):
+        parser = build_parser()
+        args = parser.parse_args([])
+        config = FurrifierConfig.from_args(args)
+        assert config.facetint_size is None
+
+
+    def test_facetint_size_accepts_valid_power_of_two(self):
+        parser = build_parser()
+        args = parser.parse_args(['--facetint-size', '1024'])
+        config = FurrifierConfig.from_args(args)
+        assert config.facetint_size == 1024
+
+
+    def test_facetint_size_rejects_invalid(self):
+        import pytest
+        parser = build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(['--facetint-size', '999'])

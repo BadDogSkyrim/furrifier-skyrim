@@ -119,7 +119,8 @@ def build_facegen_for_patch(
         data_dir: Path,
         output_dir: Optional[Path] = None,
         progress: Optional[ProgressCallback] = None,
-        limit: Optional[int] = None) -> tuple[int, int]:
+        limit: Optional[int] = None,
+        facetint_size: Optional[int] = None) -> tuple[int, int]:
     """Build FaceGen files for every NPC override in `patch`.
 
     `data_dir` is the Skyrim install Data folder — source of headpart
@@ -215,7 +216,8 @@ def build_facegen_for_patch(
                 t2 = time.perf_counter()
                 if info.get("tints"):
                     tint_dir = facetint_root / base_plugin
-                    png = build_facetint_png(info, resolver, tint_dir)
+                    png = build_facetint_png(info, resolver, tint_dir,
+                                             output_size=facetint_size)
                     pngs_by_dir.setdefault(tint_dir, []).append(png)
                 t3 = time.perf_counter()
                 t_extract += t1 - t0

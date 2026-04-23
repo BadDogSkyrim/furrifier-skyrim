@@ -136,13 +136,18 @@ def composite_layers(resolver: AssetResolver, tints: list[dict],
     # Determine canvas size: output_size if supplied, else first
     # RESOLVABLE mask's native size. (Can't just use tints[0] — it might
     # be the one that's missing.) Fallback when nothing resolves:
-    # vanilla 512x512.
+    # vanilla 512x512. Read only the header via Image.open — PIL is lazy
+    # and won't decode pixels without .convert/.load, so the probe is
+    # near-free. Skipping the decode here is what keeps the first
+    # resolvable mask from being decoded twice (once for probe, once
+    # for composite).
     if output_size is None:
         h = w = 512
         for t in tints:
-            first = load_cached(t["mask"], target_size=None)
-            if first is not None:
-                h, w = first.shape[:2]
+            p = resolver.resolve(t["mask"])
+            if p is not None:
+                with Image.open(p) as im:
+                    w, h = im.size
                 break
     else:
         h = w = output_size

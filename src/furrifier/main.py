@@ -197,7 +197,8 @@ def _run_facegen(config, patch, plugin_set, data_dir, output_dir, progress):
                                 data_dir=data_dir,
                                 output_dir=output_dir,
                                 progress=progress,
-                                limit=config.facegen_limit)
+                                limit=config.facegen_limit,
+                                facetint_size=config.facetint_size)
 
     if not config.profile_file:
         _run()

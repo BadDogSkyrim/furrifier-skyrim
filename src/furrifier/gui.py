@@ -321,6 +321,15 @@ class FurrifierWindow(QMainWindow):
             layout.addWidget(cb)
         layout.addWidget(self.debug_cb)
         layout.addStretch(1)
+        # Face-tint output size. "Auto" preserves the compositor's
+        # native-mask-size default; explicit powers of 2 force a
+        # Lanczos resample to that edge length.
+        layout.addWidget(QLabel("Tint size:", frame))
+        self.facetint_size_combo = QComboBox(frame)
+        self.facetint_size_combo.addItem("Auto", None)
+        for size in (256, 512, 1024, 2048, 4096):
+            self.facetint_size_combo.addItem(str(size), size)
+        layout.addWidget(self.facetint_size_combo)
         # FaceGen NPC cap. Integer > 0, blank = no cap. Preview a
         # scheme on a handful of NPCs without paying for a full bake.
         layout.addWidget(QLabel("FaceGen limit:", frame))
@@ -453,6 +462,7 @@ class FurrifierWindow(QMainWindow):
             output_dir=self.output_dir_edit.text().strip() or None,
             profile_file=self.profile_file_edit.text().strip() or None,
             facegen_limit=facegen_limit,
+            facetint_size=self.facetint_size_combo.currentData(),
         )
 
     def _build_load_order(

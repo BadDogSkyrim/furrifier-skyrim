@@ -73,6 +73,39 @@ def test_cache_reduces_mask_loads_across_npcs(data_dir, monkeypatch):
     )
 
 
+def test_no_double_decode_on_canvas_size_probe(data_dir, monkeypatch):
+    """With output_size=None, the compositor picks the canvas size from
+    the first resolvable mask's native shape. That probe must not force
+    a full pixel decode — only a header read — so each unique mask is
+    still decoded exactly once across the whole run."""
+    from furrifier.facegen import composite as comp_mod
+    load_calls: list[Path] = []
+    original = comp_mod.load_mask_coverage
+
+    def counting_load(path, target_size=None):
+        load_calls.append(Path(path))
+        return original(path, target_size)
+
+    monkeypatch.setattr(comp_mod, "load_mask_coverage", counting_load)
+
+    tints = [
+        {"tini": 1, "color": [255, 0, 0, 255], "intensity": 1.0, "tias": -1,
+         "tinp": 7, "mask": "textures/red.dds"},
+        {"tini": 2, "color": [0, 255, 0, 255], "intensity": 1.0, "tias": -1,
+         "tinp": 7, "mask": "textures/green.dds"},
+    ]
+
+    with AssetResolver(data_dir, bsa_readers=[]) as resolver:
+        composite_layers(resolver, tints, base_color=[0, 0, 0])
+
+    # Two unique masks → two decodes. Before the fix it was 3: red was
+    # decoded once for the canvas-size probe at native, once for the
+    # composite at the target size.
+    assert len(load_calls) == 2, (
+        f"expected one decode per mask, got {load_calls}"
+    )
+
+
 def test_cache_respects_target_size(data_dir, monkeypatch):
     """A mask loaded at size 256 and the same mask loaded at size 512
     must NOT share a cache entry — the Lanczos resample makes them

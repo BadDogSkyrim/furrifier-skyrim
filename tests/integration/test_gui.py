@@ -106,6 +106,27 @@ def test_config_from_fields_facegen_limit(qapp):
         window.deleteLater()
 
 
+def test_config_from_fields_facetint_size(qapp):
+    """Tint-size combo: Auto → None; explicit size → int."""
+    from furrifier.gui import FurrifierWindow
+
+    window = FurrifierWindow()
+    try:
+        # Default: "Auto" → None (compositor picks native mask size).
+        assert window._config_from_fields().facetint_size is None
+        # Select 1024.
+        idx = window.facetint_size_combo.findData(1024)
+        assert idx >= 0, "1024 must be an option in the tint-size combo"
+        window.facetint_size_combo.setCurrentIndex(idx)
+        assert window._config_from_fields().facetint_size == 1024
+        # All five power-of-two sizes are selectable.
+        for size in (256, 512, 1024, 2048, 4096):
+            assert window.facetint_size_combo.findData(size) >= 0, (
+                f"{size} must be selectable")
+    finally:
+        window.deleteLater()
+
+
 def test_read_plugin_masters_handles_missing_file(tmp_path):
     """The helper must never raise — callers treat its output as a
     best-effort hint, not a contract."""

@@ -11,8 +11,8 @@ Usage:
 ```
 furrify_skyrim.exe [--help] [--patch PATCH] 
   [--scheme {all_races,cats_dogs,legacy,user}] [--no-armor] [--no-male]
-  [--no-female] [--no-schlongs] [--data-dir DATA_DIR] [--debug] 
-  [--log-file LOG_FILE]
+  [--no-female] [--no-schlongs] [--data-dir DATA_DIR] [-o DIR] [--debug] 
+  [--log FILE]
 ```
 
 Options:
@@ -21,13 +21,14 @@ Options:
 |------|-------------|---------|
 | `--scheme NAME` | Race assignment scheme | `all_races` |
 | `--patch FILE` | Output patch filename | Game mods folder, `YASNPCPatch.esp` |
-| `--data-dir PATH` | Skyrim mod folder | auto-detected |
+| `--data-dir PATH` | Skyrim mod folder for READING source assets | auto-detected |
+| `-o`, `--output DIR` | Directory to WRITE the patch and FaceGenData | same as `--data-dir` |
 | `--no-armor` | Skip armor furrification | |
 | `--no-male` | Skip male NPCs | |
 | `--no-female` | Skip female NPCs | |
 | `--no-schlongs` | Disable SOS compatibility | Ignore if SOS is not loaded |
 | `--debug` | Enable debug logging | |
-| `--log-file FILE` | Write log to file | |
+| `--log FILE` | Write log to file | |
 
 Once the furrifier has run, load the patch in Creation Kit and run facegen on all NPCs:
 

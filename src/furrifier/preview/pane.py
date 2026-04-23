@@ -142,6 +142,11 @@ class PreviewPane(QWidget):
         self.forward_button.setStyleSheet(_nav_qss)
         self.forward_button.setToolTip("Next NPC in preview history")
         self.forward_button.clicked.connect(self._on_forward)
+        self.reframe_button = QPushButton("Reframe", self)
+        self.reframe_button.setEnabled(False)
+        self.reframe_button.setToolTip(
+            "Re-center the camera on the visible shapes")
+        self.reframe_button.clicked.connect(self._on_reframe)
         self.picker = NpcPickerWidget(self)
         self.picker.setEnabled(False)  # enabled once NPCs loaded
         self.scene = FacegenSceneWidget(self)
@@ -152,7 +157,7 @@ class PreviewPane(QWidget):
         sp = _SP(_SP.Policy.Expanding, _SP.Policy.Expanding)
         sp.setHeightForWidth(True)
         self.scene.setSizePolicy(sp)
-        self.status_label = QLabel("Click 'Load NPCs' to begin.", self)
+        self.status_label = QLabel("Click 'Load NPCs' for preview.", self)
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_label.setStyleSheet("QLabel { font-weight: bold; }")
         # Editor-id + headparts readout under the viewer — useful
@@ -173,6 +178,7 @@ class PreviewPane(QWidget):
         nav_row.addWidget(self.back_button)
         nav_row.addWidget(self.picker, stretch=1)
         nav_row.addWidget(self.forward_button)
+        nav_row.addWidget(self.reframe_button)
         layout.addLayout(nav_row)
         layout.addWidget(self.status_label)
         layout.addWidget(self.scene, stretch=1)
@@ -305,6 +311,13 @@ class PreviewPane(QWidget):
         self.forward_button.setEnabled(
             self._history_pos < len(self._history) - 1)
 
+
+    def _on_reframe(self) -> None:
+        """Reset the scene camera to its default framing. Small
+        convenience for when the user has orbited/panned off the head
+        and wants the default portrait view back."""
+        self.scene.reframe_camera()
+
     def _display_label_for(self, form_id: int,
                             nif_path: Path) -> None:
         edid = self._editor_id_for(form_id)
@@ -413,6 +426,7 @@ class PreviewPane(QWidget):
             self.scene.set_nif(Path(nif_path), data_dir,
                                facetint_path=tint_path,
                                preserve_camera=preserve)
+            self.reframe_button.setEnabled(True)
         except Exception as exc:
             log.exception("Scene load failed: %s", exc)
             self.status_label.setText(f"Scene load failed: {exc}")

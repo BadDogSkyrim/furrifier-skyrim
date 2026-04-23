@@ -579,6 +579,24 @@ class FacegenSceneWidget(QWidget):
                 root.setProperty("panX", pan_x)
                 root.setProperty("panY", pan_y)
 
+    def reframe_camera(self) -> None:
+        """Reset the QML root's camera state to its default framing:
+        yaw/pitch to 0 (front), pan to 0, and distance to radius*2.5
+        (same formula as the QML initial binding). No-op if the QML
+        root hasn't materialised yet."""
+        root = self._quick_widget.rootObject()
+        if root is None:
+            return
+        radius = root.property("radius")
+        if radius is None:
+            radius = self._ctx.radius
+        root.setProperty("yaw", 0.0)
+        root.setProperty("pitch", 0.0)
+        root.setProperty("panX", 0.0)
+        root.setProperty("panY", 0.0)
+        root.setProperty("distance", float(radius) * 2.5)
+
+
     def closeEvent(self, event) -> None:
         # Close BSA handles, clean up the per-widget texture cache.
         if self._resolver is not None:

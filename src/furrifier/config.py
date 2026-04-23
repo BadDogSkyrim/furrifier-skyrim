@@ -40,6 +40,11 @@ class FurrifierConfig:
     # files in the live Data tree.
     output_dir: Optional[str] = None
 
+    # Square edge length (pixels) for baked face-tint DDS output.
+    # Must be one of facegen.composite.VALID_OUTPUT_SIZES or None.
+    # None = match the first resolvable mask's native size (vanilla = 512).
+    facetint_size: Optional[int] = None
+
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> FurrifierConfig:
         patch = args.patch or cls.patch_filename
@@ -57,6 +62,7 @@ class FurrifierConfig:
             output_dir=args.output_dir,
             profile_file=args.profile,
             facegen_limit=args.facegen_limit,
+            facetint_size=args.facetint_size,
         )
 
 
@@ -102,20 +108,29 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--data-dir',
                         help='Path to Skyrim Data directory for READING '
                              'source assets (auto-detected if omitted)')
-    parser.add_argument('--output-dir',
+    parser.add_argument('-o', '--output', dest='output_dir', metavar='DIR',
                         help='Directory to WRITE the patch and FaceGenData '
                              'into (defaults to --data-dir; set to a mod '
                              "manager's staging folder to keep Data clean)")
+    parser.add_argument('--output-dir', dest='output_dir',
+                        help=argparse.SUPPRESS)
     parser.add_argument('--debug', action='store_true',
                         help='Enable debug logging')
-    parser.add_argument('--log-file',
+    parser.add_argument('--log', dest='log_file', metavar='FILE',
                         help='Write log to file')
+    parser.add_argument('--log-file', dest='log_file',
+                        help=argparse.SUPPRESS)
     parser.add_argument('--profile', metavar='PATH',
                         help='Run under cProfile and dump stats to PATH. '
                              'Inspect with snakeviz or pstats.')
     parser.add_argument('--limit', dest='facegen_limit', type=int, metavar='N',
                         help='Cap FaceGen to the first N NPCs. Useful for '
                              'previewing a scheme without a full bake.')
+    parser.add_argument('--facetint-size', type=int,
+                        choices=(256, 512, 1024, 2048, 4096),
+                        help='Square edge length (pixels) for baked face-tint '
+                             'DDS output. Default: match first mask\'s native '
+                             'size (vanilla = 512).')
     return parser
 
 
