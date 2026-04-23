@@ -118,6 +118,42 @@ def _face_normals(verts: np.ndarray, tris: np.ndarray) -> np.ndarray:
 # ---- shape loading ---------------------------------------------------------
 
 
+def _rigid_preview_xform(shape, nif):
+    """Return a (rotation, translation) that reproduces Skyrim's rigid
+    rendering of a skinned shape. None for non-skinned shapes.
+
+    We approximate a full linear-blend skin with a single rigid
+    transform using the shape's dominant bone (highest summed weight).
+    In the baked facegen nif, bone nodes are top-level children of the
+    root, so `nif.nodes[bone].transform` is already in root-space.
+    Skyrim's render formula collapses to:
+
+        render_pos = bone_world @ (skin_to_bone @ v)
+
+    which expands to `combined_rot @ v + combined_trans`.
+    """
+    try:
+        bone_weights = shape.bone_weights
+    except Exception:
+        return None
+    if not bone_weights:
+        return None
+    dominant = max(bone_weights,
+                   key=lambda b: sum(w for _, w in bone_weights[b]))
+    if dominant not in nif.nodes:
+        return None
+    bone_xf = nif.nodes[dominant].transform
+    s2b = shape.get_shape_skin_to_bone(dominant)
+    bone_trans = np.array(list(bone_xf.translation), dtype=np.float32)
+    bone_rot = np.array([list(r) for r in bone_xf.rotation],
+                        dtype=np.float32)
+    s2b_trans = np.array(list(s2b.translation), dtype=np.float32)
+    s2b_rot = np.array([list(r) for r in s2b.rotation], dtype=np.float32)
+    combined_rot = bone_rot @ s2b_rot
+    combined_trans = bone_rot @ s2b_trans + bone_trans
+    return combined_rot, combined_trans
+
+
 def load_nif_shapes(nif_path: Path) -> List[dict]:
     """Pull verts / tris / uvs / normals / diffuse path from every
     shape in a facegen nif. Returned dicts feed FacegenShapeGeometry."""
@@ -145,6 +181,16 @@ def load_nif_shapes(nif_path: Path) -> List[dict]:
                        if shape.normals else None)
         if raw_normals is not None and not np.any(raw_normals):
             raw_normals = None
+        # Apply the dominant-bone rigid transform so skinned shapes
+        # (eyes, some hair/accessories) land in the same frame as the
+        # head instead of at their authored origin. Non-skinned shapes
+        # skip this and stay where they are.
+        xf = _rigid_preview_xform(shape, nif)
+        if xf is not None:
+            rot, trans = xf
+            verts = verts @ rot.T + trans
+            if raw_normals is not None:
+                raw_normals = raw_normals @ rot.T
         shapes.append({
             "name": shape.name,
             "verts": verts,
