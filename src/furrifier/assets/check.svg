@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14 14">
+  <!-- Gold check glyph for custom-styled QCheckBox::indicator:checked.
+       Stroke colour matches the accent token (#CBA568). -->
+  <path d="M 2 7.5 L 5.5 11 L 12 3.5"
+        stroke="#CBA568"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        fill="none"/>
+</svg>

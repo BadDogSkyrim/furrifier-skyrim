@@ -419,9 +419,7 @@ class FurryContext:
         record.add_subrecord('QNAM', struct.pack('<fff',
                              qr / 255.0, qg / 255.0, qb / 255.0))
 
-    def furrify_all_npcs(self, plugins,
-                         furrify_male: bool = True,
-                         furrify_female: bool = True) -> int:
+    def furrify_all_npcs(self, plugins) -> int:
         """Furrify all NPCs across the load order. Returns count.
 
         Only processes the winning override of each NPC (last in load
@@ -443,12 +441,6 @@ class FurryContext:
             processed += 1
             if (processed % 500) == 0:
                 log.debug(f"  NPCs: {processed}/{total}")
-
-            if not furrify_male and not is_npc_female(npc):
-                continue
-            if not furrify_female and is_npc_female(npc):
-                continue
-
             result = self.furrify_npc(npc)
             if result is not None:
                 count += 1

@@ -10,11 +10,15 @@ The returned dict's shape matches one entry in `manifest.json` so
 """
 from __future__ import annotations
 
+import logging
 import struct
 from typing import Any, Dict, List, Optional
 
 from esplib import PluginSet
 from esplib.record import Record
+
+
+log = logging.getLogger(__name__)
 
 
 # HDPT.TNAM → TXST texture-slot mapping. Keys are TXST subrecord
@@ -271,6 +275,13 @@ def _extract_headparts(
                 type_none.append(d)
             else:
                 by_type[t] = d
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug(
+            "Race %s defaults for %s: types=%s, unresolved=%d",
+            race.editor_id if race else "<none>",
+            npc.editor_id,
+            sorted(by_type.keys()),
+            len(type_none))
 
     # Step 2: NPC PNAMs override / add by type
     pnam_srs = [sr for sr in npc.subrecords if sr.signature == "PNAM"]
@@ -326,15 +337,23 @@ def _extract_npc_tint_entries(npc: Record) -> List[Dict[str, Any]]:
 
 
 def _extract_race_tint_layers(
-        race: Record, is_female: bool) -> Dict[int, Dict[str, Any]]:
-    """Return {tini_index: {"mask": path, "tinp": type_code}} for the
-    given sex's Head Data. Male is first NAM0 section, female is second.
-    TINP (Tint Mask Type): 6 = Skin Tone, 7 = War Paint, 14 = Dirt, etc."""
+        race: Record, is_female: bool) -> List[Dict[str, Any]]:
+    """Return race tint layers as an ordered list of dicts in the
+    order they appear in the race record.
+
+    Each dict has {tini, mask, tinp}. Male is first NAM0 section,
+    female is second. TINP (Tint Mask Type): 6 = Skin Tone,
+    7 = War Paint, 14 = Dirt, etc.
+
+    Ordered list (not dict) because tint application order matters
+    for the final composite — layers must blend in race-record order
+    regardless of the order TINIs happen to appear on individual NPCs.
+    """
     target_section = 2 if is_female else 1
     nam0_count = 0
     in_section = False
-    layers: Dict[int, Dict[str, Any]] = {}
-    current_tini: Optional[int] = None
+    layers: List[Dict[str, Any]] = []
+    current: Optional[Dict[str, Any]] = None
 
     for sr in race.subrecords:
         if sr.signature == "NAM0":
@@ -343,47 +362,58 @@ def _extract_race_tint_layers(
                 in_section = True
             elif in_section:
                 break
-            current_tini = None
+            current = None
             continue
 
         if not in_section:
             continue
 
         if sr.signature == "TINI" and len(sr.data) >= 2:
-            current_tini = struct.unpack("<H", sr.data[:2])[0]
-            layers.setdefault(current_tini, {})
-        elif sr.signature == "TINT" and current_tini is not None:
-            layers[current_tini]["mask"] = sr.data.decode(
+            current = {"tini": struct.unpack("<H", sr.data[:2])[0]}
+            layers.append(current)
+        elif sr.signature == "TINT" and current is not None:
+            current["mask"] = sr.data.decode(
                 "cp1252", errors="replace").rstrip("\x00")
-        elif sr.signature == "TINP" and current_tini is not None:
-            layers[current_tini]["tinp"] = struct.unpack("<H", sr.data[:2])[0]
+        elif sr.signature == "TINP" and current is not None:
+            current["tinp"] = struct.unpack("<H", sr.data[:2])[0]
 
     return layers
 
 
 def _extract_tints(npc: Record, race: Optional[Record],
                    is_female: bool) -> List[Dict[str, Any]]:
-    """Join NPC tint entries (TINI/TINC/TINV) against the race's
-    per-tini tint table. Any NPC layer whose mask can't be resolved
-    via the race table is dropped."""
+    """Join NPC tint entries (TINI/TINC/TINV) against the race's tint
+    table, emitting layers in race-record order.
+
+    Composite blending is order-dependent, and the race record is the
+    authoritative ordering — NPCs can carry their TINI subrecords in
+    any order (CK normally writes them in race order but nothing
+    requires it, and the furrifier's own tint writer doesn't guarantee
+    it either). Iterating race-order here keeps the final composite
+    consistent regardless of NPC-side ordering.
+
+    Any race layer the NPC doesn't apply (no matching TINI) is skipped.
+    Any NPC layer whose race mask can't be resolved is also skipped.
+    """
     if race is None:
         return []
-    npc_entries = _extract_npc_tint_entries(npc)
+    npc_entries_by_tini = {e["tini"]: e for e in _extract_npc_tint_entries(npc)}
     race_layers = _extract_race_tint_layers(race, is_female)
     out: List[Dict[str, Any]] = []
-    for layer in npc_entries:
-        race_entry = race_layers.get(layer["tini"])
-        mask_path_str = race_entry.get("mask") if race_entry else None
+    for race_layer in race_layers:
+        npc_entry = npc_entries_by_tini.get(race_layer["tini"])
+        if npc_entry is None:
+            continue
+        mask_path_str = race_layer.get("mask")
         if not mask_path_str:
             continue
-        tinp = race_entry.get("tinp") if race_entry else None
         # RACE TINT paths are texture-relative (no leading "textures\\");
         # prepend it so the resolver can look up under Data/.
         mask = f"textures/{_norm_slash(mask_path_str)}"
         out.append({
-            **layer,
+            **npc_entry,
             "mask": mask,
-            "tinp": tinp,
+            "tinp": race_layer.get("tinp"),
         })
     return out
 
@@ -412,11 +442,24 @@ def extract_npc_info(npc: Record, plugin_set: PluginSet,
     race_edid: Optional[str] = None
     rnam = npc.get_subrecord("RNAM")
     if rnam is not None:
+        rnam_fid = rnam.get_form_id()
         try:
-            race = plugin_set.resolve_form_id(rnam.get_form_id(), npc.plugin)
-        except Exception:
+            race = plugin_set.resolve_form_id(rnam_fid, npc.plugin)
+        except Exception as exc:
+            log.debug("RNAM resolve raised for %s: %s", npc.editor_id, exc)
             race = None
-        if race is not None:
+        if race is None:
+            # Dig into WHY it failed — file_index into patch.header.masters,
+            # whether that master is in load order, whether the absolute FID
+            # has an override chain. One-liner diagnostic.
+            masters = npc.plugin.header.masters if npc.plugin else []
+            file_idx = rnam_fid.file_index
+            master_name = (masters[file_idx]
+                           if 0 <= file_idx < len(masters) else "<self>")
+            log.debug(
+                "RNAM unresolved for %s: raw=%08X file_idx=%d master=%r",
+                npc.editor_id, int(rnam_fid), file_idx, master_name)
+        else:
             race_edid = race.editor_id
 
     return {

@@ -59,6 +59,33 @@ def identity_xform():
     return xf
 
 
+def _area_weighted_vertex_normals(verts: np.ndarray,
+                                  tris: np.ndarray) -> np.ndarray:
+    """Compute per-vertex normals from triangle geometry.
+
+    Each triangle contributes its face normal weighted by area
+    (the raw cross product length encodes 2x area) to every vertex
+    it touches; result is normalized per-vertex.
+
+    Matches the formula used by most 3D viewers for smooth-shaded
+    meshes and matches what we used to rely on PyNifly to produce
+    on save — but PyNifly doesn't repair all-zero stored normals,
+    and the shape's stored normals are stale after we bake chargen
+    morphs into verts. Running this unconditionally fixes both.
+    """
+    v0 = verts[tris[:, 0]]
+    v1 = verts[tris[:, 1]]
+    v2 = verts[tris[:, 2]]
+    fn = np.cross(v1 - v0, v2 - v0)  # area-weighted face normals
+    out = np.zeros_like(verts)
+    np.add.at(out, tris[:, 0], fn)
+    np.add.at(out, tris[:, 1], fn)
+    np.add.at(out, tris[:, 2], fn)
+    lengths = np.linalg.norm(out, axis=1, keepdims=True)
+    lengths[lengths == 0] = 1.0
+    return (out / lengths).astype(np.float32)
+
+
 HDPT_TYPE_FACE = 1  # Only Face-type headparts get the per-NPC FacegenDetail.
 HDPT_TYPE_EYES = 2  # Must use NiSkinInstance — see _should_demote.
 
@@ -79,24 +106,43 @@ def copy_shape(dst: NifFile, fg: "NiNode", src_shape, rename_to: str,
     texture_overrides: optional {slot_name: relpath_under_textures/} map
     from HDPT.TNAM → TXST. CK's facegen bake writes these over whatever
     the source headpart nif's shader carried (e.g. eye-color variants)."""
-    # UVs: createShapeFromData applies (u, 1-v) on write; pre-unflip.
-    src_uvs = [(u, 1.0 - v) for u, v in src_shape.uvs] if src_shape.uvs else []
-    # All-zero normals mean "recompute from geometry"; don't pass literals.
-    src_normals = src_shape.normals
-    if src_normals and all(all(abs(c) < 1e-6 for c in n) for n in src_normals):
-        src_normals = None
+    # UVs pass through untouched as of PyNifly UV fix (2026-04-22).
+    # Earlier versions applied (u, 1-v) on write and we had to pre-
+    # unflip here to compensate; no longer needed.
+    src_uvs = list(src_shape.uvs) if src_shape.uvs else []
 
     if verts_override is not None:
-        verts = [tuple(float(c) for c in v) for v in verts_override]
+        verts_np = np.asarray(verts_override, dtype=np.float32)
     else:
-        verts = list(src_shape.verts)
+        verts_np = np.asarray(src_shape.verts, dtype=np.float32)
+    verts = [tuple(float(c) for c in v) for v in verts_np]
+
+    # Normals policy:
+    # - Source has no normals at all, or all-zero normals: the source
+    #   is using a model-space normal texture for its lighting, not
+    #   vertex normals. Pass None so our output does the same. Don't
+    #   fabricate geometry normals — they'd conflict with the
+    #   model-space map at render time.
+    # - Source has real normals: they describe the un-morphed source
+    #   geometry, and morph baking has moved verts since. Recompute
+    #   area-weighted normals from the current geometry so the output
+    #   lighting matches the morphed shape.
+    src_normals = src_shape.normals
+    has_real_normals = (src_normals and not all(
+        all(abs(c) < 1e-6 for c in n) for n in src_normals))
+    if has_real_normals:
+        tris_np = np.asarray(src_shape.tris, dtype=np.uint32)
+        normals_np = _area_weighted_vertex_normals(verts_np, tris_np)
+        normals_arg = [tuple(float(c) for c in n) for n in normals_np]
+    else:
+        normals_arg = None
 
     new_shape = dst.createShapeFromData(
         rename_to,
         verts,
         list(src_shape.tris),
         src_uvs,
-        list(src_normals) if src_normals else None,
+        normals_arg,
         use_type=PynBufferTypes.BSDynamicTriShapeBufType,
         parent=fg,
     )

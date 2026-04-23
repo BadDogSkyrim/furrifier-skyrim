@@ -9,8 +9,6 @@ class TestConfig:
         assert config.patch_filename == 'YASNPCPatch.esp'
         assert config.race_scheme == 'all_races'
         assert config.furrify_armor is True
-        assert config.furrify_npcs_male is True
-        assert config.furrify_npcs_female is True
         assert config.furrify_schlongs is True
         assert config.debug is False
 

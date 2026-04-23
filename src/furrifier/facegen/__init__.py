@@ -38,6 +38,24 @@ log = logging.getLogger("furrifier.facegen")
 _CHARGEN_PRESET_BIT = 1 << 2
 
 
+def base_plugin_for(npc, patch) -> str:
+    """Return the plugin filename that 'owns' the NPC for FaceGenData
+    pathing purposes — the plugin that DEFINED the record, not the
+    plugin that currently overrides it.
+
+    For an override of a Skyrim.esm NPC: returns 'Skyrim.esm' even
+    when the winning override lives in the patch. For a record newly
+    created by the furrifier (file_index == len(patch.masters)):
+    returns the patch's filename. Matches the FaceGenData layout CK
+    produces.
+    """
+    idx = npc.form_id.file_index
+    masters = patch.header.masters
+    if idx < len(masters):
+        return masters[idx]
+    return patch.file_path.name
+
+
 def _is_chargen_preset(npc) -> bool:
     try:
         return bool(npc["ACBS"]["flags"].IsCharGenFacePreset)
@@ -50,6 +68,23 @@ def _is_chargen_preset(npc) -> bool:
 
 
 ProgressCallback = Callable[[str], None]
+
+
+def _uninject_patch_from_plugin_set(plugin_set: PluginSet,
+                                    patch_name: str) -> None:
+    """Undo a previous `_inject_patch_into_plugin_set` for
+    `patch_name`. Used when rebuilding a session against a cached
+    plugin_set — the old patch must come out before the new one
+    goes in, or both coexist and FormID resolution returns whichever
+    wins the stale override chain. No-op if the name isn't injected.
+    """
+    plugin_set._plugins.pop(patch_name, None)
+    plugin_set._loaded_full.pop(patch_name, None)
+    try:
+        plugin_set.load_order.plugins.remove(patch_name)
+    except ValueError:
+        pass
+    plugin_set._override_index = None
 
 
 def _inject_patch_into_plugin_set(plugin_set: PluginSet, patch) -> None:
@@ -82,7 +117,8 @@ def build_facegen_for_patch(
         plugin_set: PluginSet,
         data_dir: Path,
         output_dir: Optional[Path] = None,
-        progress: Optional[ProgressCallback] = None) -> tuple[int, int]:
+        progress: Optional[ProgressCallback] = None,
+        limit: Optional[int] = None) -> tuple[int, int]:
     """Build FaceGen files for every NPC override in `patch`.
 
     `data_dir` is the Skyrim install Data folder — source of headpart
@@ -90,6 +126,11 @@ def build_facegen_for_patch(
     where the generated files land; defaults to `data_dir`. Keeping
     them separate lets callers write into a mod-manager staging folder
     without polluting the live Data tree.
+
+    `limit` caps the number of NPCs we bake to the first N (after
+    filtering out CharGen face presets). None = no cap. Useful for
+    previewing a scheme's output on a small subset before committing
+    to a full-load-order run.
 
     Writes into output_dir:
       meshes/actors/character/FaceGenData/FaceGeom/<patch>/<formid>.nif
@@ -103,26 +144,11 @@ def build_facegen_for_patch(
     """
     data_dir = Path(data_dir)
     output_dir = Path(output_dir) if output_dir is not None else data_dir
-    patch_name = patch.file_path.name  # e.g. "YASNPCPatch.esp"
-    masters = patch.header.masters
 
     # Make the patch's RACE / HDPT overrides visible to extract. Without
     # this, extract resolves every reference through the vanilla chain
     # and hands the builder vanilla headparts for furrified NPCs.
     _inject_patch_into_plugin_set(plugin_set, patch)
-
-    def _base_plugin_for(npc) -> str:
-        """FaceGen folders follow the plugin that *defined* the NPC,
-        not the plugin that overrides it. An override of Dervenin
-        (defined in Skyrim.esm) goes under FaceGeom/Skyrim.esm/ even
-        when the winning override lives in the patch; new records
-        created by the furrifier itself (file_index == len(masters))
-        use the patch's own folder.
-        """
-        idx = npc.form_id.file_index
-        if idx < len(masters):
-            return masters[idx]
-        return patch_name
 
     facegeom_root = (output_dir / "meshes" / "actors" / "character"
                      / "FaceGenData" / "FaceGeom")
@@ -136,6 +162,11 @@ def build_facegen_for_patch(
     skipped_preset = len(raw) - len(npcs)
     if skipped_preset:
         log.info("FaceGen: skipping %d CharGen face preset NPCs", skipped_preset)
+    # Apply user-requested cap. Default (None) runs everything.
+    if limit is not None and len(npcs) > limit:
+        log.info("FaceGen: limit=%d — baking first %d of %d NPCs",
+                 limit, limit, len(npcs))
+        npcs = npcs[:limit]
     total = len(npcs)
     if total == 0:
         log.info("FaceGen: no NPCs in patch; nothing to do")
@@ -165,7 +196,7 @@ def build_facegen_for_patch(
                 progress(f"FaceGen {i + 1}/{total}")
             edid_for_log = npc.editor_id or f"0x{int(npc.form_id):08X}"
             try:
-                base_plugin = _base_plugin_for(npc)
+                base_plugin = base_plugin_for(npc, patch)
                 t0 = time.perf_counter()
                 info = extract_npc_info(npc, plugin_set, base_plugin)
                 t1 = time.perf_counter()
@@ -218,6 +249,7 @@ def build_facegen_for_patch(
 
 __all__ = [
     "AssetResolver",
+    "base_plugin_for",
     "build_facegen_nif",
     "build_facetint_dds",
     "build_facetint_png",

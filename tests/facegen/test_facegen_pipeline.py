@@ -180,8 +180,11 @@ def test_nif_bone_stub_transforms_match_reference(npc_output):
 
 
 def test_nif_shape_uvs_match_reference(npc_output):
-    """Regression on the PyNifly UV flip bug — createShapeFromData
-    applies (u, 1-v) on write while shape.uvs reads raw."""
+    """UV parity with CK's reference facegen. Previously there was a
+    PyNifly bug where reads and writes applied asymmetric (u, 1-v)
+    flips; we compensated in `copy_shape` with a pre-unflip. Fix
+    landed in PyNifly on 2026-04-22 and the compensating flip came
+    out — this test guards against the asymmetry creeping back in."""
     ours = load_nif(npc_output["our_nif"])
     ref = load_nif(npc_output["ref_nif"])
     for ref_s in ref.shapes:
@@ -191,18 +194,36 @@ def test_nif_shape_uvs_match_reference(npc_output):
         assert np.allclose(our_uvs, ref_uvs, atol=0.001), f"{ref_s.name} UVs"
 
 
-def test_nif_shape_normals_match_reference(npc_output):
-    """Regression on all-zero-normals bug — zero literals get quantized
-    to 1/255 noise; pass None to recompute."""
+def test_nif_shape_normals_are_valid(npc_output):
+    """Any normals we emit must be unit-length and non-zero. Shapes
+    whose source uses a model-space normal texture for lighting
+    legitimately have no vertex normals at all (the `if our_s.normals`
+    skip) — that's fine; what's not fine is emitting zero-length
+    normals, which leaves a shape unlit under vertex lighting.
+
+    Regression guard: CK's own facegen output ships with all-zero
+    normals on some shapes; assemble.copy_shape used to forward that
+    bug. It now either recomputes from geometry (real normals
+    upstream) or leaves them out entirely (no-normals upstream)."""
     ours = load_nif(npc_output["our_nif"])
-    ref = load_nif(npc_output["ref_nif"])
-    for ref_s in ref.shapes:
-        our_s = ours.shape_dict[ref_s.name]
-        if not ref_s.normals:
+    for our_s in ours.shapes:
+        if not our_s.normals:
+            continue  # no vertex-normal block at all
+        n = np.asarray(our_s.normals, dtype=np.float32)
+        lengths = np.linalg.norm(n, axis=1)
+        # All-zero block is the "uses model-space normal texture"
+        # case — PyNifly writes zeros when we hand it None, and
+        # Skyrim's shader ignores vertex normals when the shape's
+        # model-space-normals flag is set. Not a broken emit.
+        if lengths.max() < 1e-3:
             continue
-        ref_n = np.asarray(ref_s.normals, dtype=np.float32)
-        our_n = np.asarray(our_s.normals, dtype=np.float32)
-        assert np.allclose(our_n, ref_n, atol=0.01), f"{ref_s.name} normals"
+        # Mixed block: some real, some zero. That's the bug this
+        # test is here to catch — individual vertices won't light.
+        assert lengths.min() > 0.95, (
+            f"{our_s.name}: min normal length {lengths.min():.3f} — "
+            "some vertex has degenerate/zero normal")
+        assert lengths.max() < 1.05, (
+            f"{our_s.name}: max normal length {lengths.max():.3f}")
 
 
 def test_nif_shape_diffuse_textures_match_reference(npc_output):

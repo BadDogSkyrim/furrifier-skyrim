@@ -17,8 +17,6 @@ class FurrifierConfig:
     patch_filename: str = 'YASNPCPatch.esp'
     race_scheme: str = 'all_races'
     furrify_armor: bool = True
-    furrify_npcs_male: bool = True
-    furrify_npcs_female: bool = True
     furrify_schlongs: bool = True
     build_facegen: bool = True
     max_tint_layers: int = 200
@@ -27,6 +25,10 @@ class FurrifierConfig:
     # When set, wrap the run in cProfile and dump stats to this path.
     # Top 30 cumulative-time functions are also printed at the end.
     profile_file: Optional[str] = None
+    # Cap the number of NPCs we build FaceGen for. None = no cap.
+    # Useful for previewing a scheme's output without paying for a
+    # full-load-order bake (minutes per run on 4000+ NPCs).
+    facegen_limit: Optional[int] = None
 
     # Where to READ source assets (mods, masters, textures, BSAs).
     # Auto-detected via find_game_data() if not provided.
@@ -47,8 +49,6 @@ class FurrifierConfig:
             patch_filename=patch,
             race_scheme=args.scheme or cls.race_scheme,
             furrify_armor=not args.no_armor,
-            furrify_npcs_male=not args.no_male,
-            furrify_npcs_female=not args.no_female,
             furrify_schlongs=not args.no_schlongs,
             build_facegen=not args.no_facegen,
             debug=args.debug,
@@ -56,6 +56,7 @@ class FurrifierConfig:
             game_data_dir=args.data_dir,
             output_dir=args.output_dir,
             profile_file=args.profile,
+            facegen_limit=args.facegen_limit,
         )
 
 
@@ -92,10 +93,6 @@ def build_parser() -> argparse.ArgumentParser:
                         help='Race assignment scheme (default: all_races)')
     parser.add_argument('--no-armor', action='store_true',
                         help='Skip armor furrification')
-    parser.add_argument('--no-male', action='store_true',
-                        help='Skip male NPC furrification')
-    parser.add_argument('--no-female', action='store_true',
-                        help='Skip female NPC furrification')
     parser.add_argument('--no-schlongs', action='store_true',
                         help='Disable SOS (schlong) compatibility')
     parser.add_argument('--no-facegen', action='store_true',
@@ -116,6 +113,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--profile', metavar='PATH',
                         help='Run under cProfile and dump stats to PATH. '
                              'Inspect with snakeviz or pstats.')
+    parser.add_argument('--facegen-limit', type=int, metavar='N',
+                        help='Cap FaceGen to the first N NPCs. Useful for '
+                             'previewing a scheme without a full bake.')
     return parser
 
 

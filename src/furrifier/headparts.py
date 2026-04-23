@@ -179,6 +179,8 @@ def find_best_headpart_match(
         if target_blind is not None:
             candidates = _filter_by_blindness(candidates, target_blind)
         if candidates:
+            # Salt 317: "equivalent-list candidate pick" — independent
+            # from the label-match pick below (salt 319).
             idx = hash_string(npc_alias, 317, len(candidates))
             return candidates[idx]
 
@@ -188,7 +190,12 @@ def find_best_headpart_match(
         log.debug(f"No headparts of type {hp_type.name} for {furry_race_id}/{npc_sex.name}")
         return None
 
-    available = [all_headparts[hp_id] for hp_id in race_headparts[key]
+    # race_headparts[key] is a set — iteration order depends on
+    # PYTHONHASHSEED, which breaks the hash_string pick downstream
+    # (different tie-break orderings → different index). Sort by
+    # editor_id so the candidate list is stable across runs.
+    available = [all_headparts[hp_id]
+                 for hp_id in sorted(race_headparts[key])
                  if hp_id in all_headparts]
     if target_blind is not None:
         available = _filter_by_blindness(available, target_blind)
@@ -212,7 +219,11 @@ def find_best_headpart_match(
             best_matches.append(hp)
 
     if best_score > -10 and best_matches:
-        idx = hash_string(npc_alias, 317, len(best_matches))
+        # Salt 319: "best-label-match tiebreaker pick". Different from
+        # the equivalent-list salt above so an NPC that falls through
+        # to this code path doesn't correlate with what the candidate
+        # pick would have chosen on the other branch.
+        idx = hash_string(npc_alias, 319, len(best_matches))
         return best_matches[idx]
 
     return None

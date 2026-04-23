@@ -7,7 +7,7 @@ name = "furrifier-skyrim"
 version = "0.1.0"
 description = "Batch-convert Skyrim NPCs to furry races"
 requires-python = ">=3.11"
-dependencies = ["esplib", "customtkinter>=5.2"]
+dependencies = ["esplib", "PySide6>=6.8"]
 
 [project.scripts]
 furrifier = "furrifier.main:main"
