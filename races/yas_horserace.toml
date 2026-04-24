@@ -1,0 +1,116 @@
+# Furrifier race catalog: BDHorseRace
+# Split from yas_races.toml so all of BDHorseRace's data lives together.
+# See yas_races.toml for the rest of the YAS/BD race definitions.
+
+headpart_equivalents = [
+  {vanilla = "FemaleEyesDarkElfDeepRed"           , furry = "BDHorseFemEyesDarkElfDeepRed"},
+  {vanilla = "FemaleEyesDarkElfDeepRed2"          , furry = "BDHorseFemEyesDarkElfDeepRed2"},
+  {vanilla = "FemaleEyesDarkElfRed"               , furry = "BDHorseFemEyesDarkElfRed"},
+  {vanilla = "FemaleEyesDarkElfUnique"            , furry = "BDHorseFemEyesDarkElfUnique"},
+  {vanilla = "FemaleEyesHighElfDarkYellow"        , furry = "BDHorseFemEyesHighElfDarkYellow"},
+  {vanilla = "FemaleEyesHighElfOrange"            , furry = "BDHorseFemEyesHighElfOrange"},
+  {vanilla = "FemaleEyesHighElfYellow"            , furry = "BDHorseFemEyesHighElfYellow"},
+  {vanilla = "FemaleEyesHumanAmber"               , furry = "BDHorseFemEyesHumanAmber"},
+  {vanilla = "FemaleEyesHumanBrightGreen"         , furry = "BDHorse0FemEyesGreen"},
+  {vanilla = "FemaleEyesHumanBrightGreen"         , furry = "BDHorseFemEyesHumanBrightGreen"},
+  {vanilla = "FemaleEyesHumanBrown"               , furry = "BDHorse0FemEyesBrown"},
+  {vanilla = "FemaleEyesHumanBrown"               , furry = "BDHorseFemEyesHumanBrown"},
+  {vanilla = "FemaleEyesHumanBrownBloodShot"      , furry = "BDHorseFemEyesHumanBrownBloodShot"},
+  {vanilla = "FemaleEyesHumanDarkBlue"            , furry = "BDHorseFemEyesHumanDarkBlue"},
+  {vanilla = "FemaleEyesHumanDemon"               , furry = "BDHorse0FemEyesRed"},
+  {vanilla = "FemaleEyesHumanDemon"               , furry = "BDHorseFemEyesHumanDemon"},
+  {vanilla = "FemaleEyesHumanGreenHazel"          , furry = "BDHorseFemEyesHumanGreenHazel"},
+  {vanilla = "FemaleEyesHumanGrey"                , furry = "BDHorseFemEyesHumanGrey"},
+  {vanilla = "FemaleEyesHumanHazel"               , furry = "BDHorseFemEyesHumanHazel"},
+  {vanilla = "FemaleEyesHumanHazelBrown"          , furry = "BDHorseFemEyesHumanHazelBrown"},
+  {vanilla = "FemaleEyesHumanIceBlue"             , furry = "BDHorse0FemEyesIceBlue"},
+  {vanilla = "FemaleEyesHumanIceBlue"             , furry = "BDHorseFemEyesHumanIceBlue"},
+  {vanilla = "FemaleEyesHumanLightBlue"           , furry = "BDHorse0FemEyesBlue"},
+  {vanilla = "FemaleEyesHumanLightBlue"           , furry = "BDHorseFemEyesHumanLightBlue"},
+  {vanilla = "FemaleEyesHumanLightBlueBloodShot"  , furry = "BDHorseFemEyesHumanLightBlueBloodShot"},
+  {vanilla = "FemaleEyesHumanLightGrey"           , furry = "BDHorseFemEyesHumanLightGrey"},
+  {vanilla = "FemaleEyesHumanVampire"             , furry = "BDHorseFemEyesVamp"},
+  {vanilla = "FemaleEyesHumanYellow"              , furry = "BDHorse0FemEyesYellow"},
+  {vanilla = "FemaleEyesHumanYellow"              , furry = "BDHorseFemEyesHumanYellow"},
+  {vanilla = "FemaleEyesOrcBlind"                 , furry = "BDHorseFemEyesOrcBlind"},
+  {vanilla = "FemaleEyesOrcDarkGrey"              , furry = "BDHorseFemEyesOrcDarkGrey"},
+  {vanilla = "FemaleEyesOrcIceBlue"               , furry = "BDHorseFemEyesOrcIceBlue"},
+  {vanilla = "FemaleEyesOrcRed"                   , furry = "BDHorseFemEyesOrcRed"},
+  {vanilla = "FemaleEyesOrcYellow"                , furry = "BDHorseFemEyesOrcYellow"},
+  {vanilla = "FemaleEyesWoodElfBrown"             , furry = "BDHorseFemEyesWoodElfBrown"},
+  {vanilla = "FemaleEyesWoodElfDeepBrown"         , furry = "BDHorseFemEyesWoodElfDeepBrown"},
+  {vanilla = "FemaleEyesWoodElfDeepViolet"        , furry = "BDHorseFemEyesWoodElfDeepViolet"},
+  {vanilla = "FemaleEyesWoodElfLightBrown"        , furry = "BDHorseFemEyesWoodElfLightBrown"},
+  {vanilla = "MaleEyesDarkElfDeepRed"             , furry = "BDHorseMaleEyesDarkElfDeepRed"},
+  {vanilla = "MaleEyesDarkElfDeepRed2"            , furry = "BDHorseMaleEyesDarkElfDeepRed2"},
+  {vanilla = "MaleEyesDarkElfRed"                 , furry = "BDHorseMaleEyesDarkElfRed"},
+  {vanilla = "MaleEyesHighElfDarkYellow"          , furry = "BDHorseMaleEyesHighElfDarkYellow"},
+  {vanilla = "MaleEyesHighElfOrange"              , furry = "BDHorseMaleEyesHighElfOrange"},
+  {vanilla = "MaleEyesHighElfYellow"              , furry = "BDHorseMaleEyesHighElfYellow"},
+  {vanilla = "MaleEyesHumanAmber"                 , furry = "BDHorseMaleEyesHumanAmber"},
+  {vanilla = "MaleEyesHumanBrightGreen"           , furry = "BDHorse0MaleEyesGreen"},
+  {vanilla = "MaleEyesHumanBrightGreen"           , furry = "BDHorseMaleEyesHumanBrightGreen"},
+  {vanilla = "MaleEyesHumanBrown"                 , furry = "BDHorse0MaleEyesBrown"},
+  {vanilla = "MaleEyesHumanBrown"                 , furry = "BDHorseMaleEyesHumanBrown"},
+  {vanilla = "MaleEyesHumanBrownBloodShot"        , furry = "BDHorseMaleEyesHumanBrownBloodShot"},
+  {vanilla = "MaleEyesHumanDarkBlue"              , furry = "BDHorseMaleEyesHumanDarkBlue"},
+  {vanilla = "MaleEyesHumanDemon"                 , furry = "BDHorse0MaleEyesRed"},
+  {vanilla = "MaleEyesHumanDemon"                 , furry = "BDHorseMaleEyesHumanDemon"},
+  {vanilla = "MaleEyesHumanGrey"                  , furry = "BDHorseMaleEyesHumanGrey"},
+  {vanilla = "MaleEyesHumanHazel"                 , furry = "BDHorseMaleEyesHumanHazel"},
+  {vanilla = "MaleEyesHumanHazelBrown"            , furry = "BDHorseMaleEyesHumanHazelBrown"},
+  {vanilla = "MaleEyesHumanIceBlue"               , furry = "BDHorse0MaleEyesIceBlue"},
+  {vanilla = "MaleEyesHumanIceBlue"               , furry = "BDHorseMaleEyesHumanIceBlue"},
+  {vanilla = "MaleEyesHumanLightBlue"             , furry = "BDHorse0MaleEyesBlue"},
+  {vanilla = "MaleEyesHumanLightBlue"             , furry = "BDHorseMaleEyesHumanLightBlue"},
+  {vanilla = "MaleEyesHumanLightBlueBloodShot"    , furry = "BDHorseMaleEyesHumanLightBlueBloodShot"},
+  {vanilla = "MaleEyesHumanLightGrey"             , furry = "BDHorseMaleEyesHumanLightGrey"},
+  {vanilla = "MaleEyesHumanVampire"               , furry = "BDHorseMaleEyesVamp"},
+  {vanilla = "MaleEyesHumanYellow"                , furry = "BDHorse0MaleEyesYellow"},
+  {vanilla = "MaleEyesHumanYellow"                , furry = "BDHorseMaleEyesHumanYellow"},
+  {vanilla = "MaleEyesOrcBlind"                   , furry = "BDHorseMaleEyesOrcBlind"},
+  {vanilla = "MaleEyesOrcDarkGrey"                , furry = "BDHorseMaleEyesOrcDarkGrey"},
+  {vanilla = "MaleEyesOrcIceBlue"                 , furry = "BDHorseMaleEyesOrcIceBlue"},
+  {vanilla = "MaleEyesOrcRed"                     , furry = "BDHorseMaleEyesOrcRed"},
+  {vanilla = "MaleEyesOrcYellow"                  , furry = "BDHorseMaleEyesOrcYellow"},
+  {vanilla = "MaleEyesWoodElfBrown"               , furry = "BDHorseMaleEyesWoodElfBrown"},
+  {vanilla = "MaleEyesWoodElfDeepBrown"           , furry = "BDHorseMaleEyesWoodElfDeepBrown"},
+  {vanilla = "MaleEyesWoodElfDeepViolet"          , furry = "BDHorseMaleEyesWoodElfDeepViolet"},
+  {vanilla = "MaleEyesWoodElfLightBrown"          , furry = "BDHorseMaleEyesWoodElfLightBrown"},
+]
+
+[headpart_labels]
+BDHairHorseFemNord04            = "NEAT,TIEDBACK,BRAIDS"
+BDHairHorseFemOrc03             = "NEAT,TIEDBACK"
+BDHairHorseFemOrc08             = "NOBLE,NEAT,TIEDBACK"
+BDHairHorseFemOrc14             = "NEAT,TIEDBACK"
+BDHairHorseFemOrc17             = "MOHAWK,FUNKY,BOLD"
+BDHairHorseMaleNord17           = "EXCLUDE"
+BDHairHorseMaleNord20           = "EXCLUDE"
+BDHairHorseMaleOrc13            = "NEAT,TIEDBACK"
+BDHorseFemManeBase              = "EXCLUDE"
+BDHorseFemManeFree              = "TIEDBACK,BOLD"
+BDHorseFemManeFringe            = "NEAT,SHORT"
+BDHorseFemManeLong              = "NEAT,TIEDBACK,LONG,YOUNG"
+BDHorseFemManeMohawk            = "MOHAWK,BOLD"
+BDHorseFemManeMohawkFlip        = "MOHAWK,BOLD"
+BDHorseFemManeRoached           = "NEAT,MILITARY,SHORT"
+BDHorseFemManeShort             = "MESSY,LONG"
+BDHorseFemManeSide01            = "LONG,MESSY"
+BDHorseFemManeSide01Fringe      = "LONG,MESSY"
+BDHorseFemManeSide02            = "SHORT"
+BDHorseFemManeSide03            = "SHORT"
+BDHorseFemManeSimple            = "MESSY,LONG"
+BDHorseFemManeTied              = "SHORT,MILITARY,BOLD"
+BDHorseMaleHairFringe           = "YOUNG,NEAT,SHORT"
+BDHorseMaleHairManeShort        = "MESSY,LONG"
+BDHorseMaleHairMohawkFringe     = "MOHAWK,YOUNG,NEAT"
+BDHorseMaleHairRoached          = "NEAT,MILITARY,SHORT"
+BDHorseMaleHairSideMane         = "MESSY,LONG"
+BDHorseMaleHairSideManeFringe   = "MESSY,LONG"
+BDHorseMaleHairTied             = "SHORT,MILITARY,BOLD"
+BDHorseMaleManeFree             = "TIEDBACK,BOLD"
+BDHorseMaleManeMohawk           = "MOHAWK,NEAT"
+BDHorseMaleManeSide02           = "SHORT"
+BDHorseMaleManeSide03           = "SHORT"
+BDHorseMaleManeSimple           = "MESSY,SHORT"

@@ -1,0 +1,112 @@
+# Furrifier race catalog: BDDeerRace
+# Split from yas_races.toml so all of BDDeerRace's data lives together.
+# See yas_races.toml for the rest of the YAS/BD race definitions.
+
+headpart_equivalents = [
+  {vanilla = "FemaleEyesDarkElfDeepRed"           , furry = "BDDeerFemEyesDarkElfDeepRed"},
+  {vanilla = "FemaleEyesDarkElfDeepRed2"          , furry = "BDDeerFemEyesDarkElfDeepRed2"},
+  {vanilla = "FemaleEyesDarkElfRed"               , furry = "BDDeerFemEyesDarkElfRed"},
+  {vanilla = "FemaleEyesDarkElfUnique"            , furry = "BDDeerFemEyesDarkElfUnique"},
+  {vanilla = "FemaleEyesHighElfDarkYellow"        , furry = "BDDeerFemEyesHighElfDarkYellow"},
+  {vanilla = "FemaleEyesHighElfOrange"            , furry = "BDDeerFemEyesHighElfOrange"},
+  {vanilla = "FemaleEyesHighElfYellow"            , furry = "BDDeerFemEyesHighElfYellow"},
+  {vanilla = "FemaleEyesHumanAmber"               , furry = "BDDeerFemEyesHumanAmber"},
+  {vanilla = "FemaleEyesHumanBrightGreen"         , furry = "BDDeerFemEyesGreen"},
+  {vanilla = "FemaleEyesHumanBrightGreen"         , furry = "BDDeerFemEyesHumanBrightGreen"},
+  {vanilla = "FemaleEyesHumanBrown"               , furry = "BDDeerFemEyesBrown"},
+  {vanilla = "FemaleEyesHumanBrown"               , furry = "BDDeerFemEyesHumanBrown"},
+  {vanilla = "FemaleEyesHumanBrownBloodShot"      , furry = "BDDeerFemEyesHumanBrownBloodShot"},
+  {vanilla = "FemaleEyesHumanDarkBlue"            , furry = "BDDeerFemEyesHumanDarkBlue"},
+  {vanilla = "FemaleEyesHumanDemon"               , furry = "BDDeerFemEyesHumanDemon"},
+  {vanilla = "FemaleEyesHumanDemon"               , furry = "BDDeerFemEyesRed"},
+  {vanilla = "FemaleEyesHumanGreenHazel"          , furry = "BDDeerFemEyesHumanGreenHazel"},
+  {vanilla = "FemaleEyesHumanGrey"                , furry = "BDDeerFemEyesHumanGrey"},
+  {vanilla = "FemaleEyesHumanHazel"               , furry = "BDDeerFemEyesHumanHazel"},
+  {vanilla = "FemaleEyesHumanHazelBrown"          , furry = "BDDeerFemEyesHumanHazelBrown"},
+  {vanilla = "FemaleEyesHumanIceBlue"             , furry = "BDDeerFemEyesHumanIceBlue"},
+  {vanilla = "FemaleEyesHumanIceBlue"             , furry = "BDDeerFemEyesIceBlue"},
+  {vanilla = "FemaleEyesHumanLightBlue"           , furry = "BDDeerFemEyesBlue"},
+  {vanilla = "FemaleEyesHumanLightBlue"           , furry = "BDDeerFemEyesHumanLightBlue"},
+  {vanilla = "FemaleEyesHumanLightBlueBloodShot"  , furry = "BDDeerFemEyesHumanLightBlueBloodShot"},
+  {vanilla = "FemaleEyesHumanLightGrey"           , furry = "BDDeerFemEyesHumanLightGrey"},
+  {vanilla = "FemaleEyesHumanVampire"             , furry = "BDDeerFemEyesVamp"},
+  {vanilla = "FemaleEyesHumanYellow"              , furry = "BDDeerFemEyesHumanYellow"},
+  {vanilla = "FemaleEyesHumanYellow"              , furry = "BDDeerFemEyesYellow"},
+  {vanilla = "FemaleEyesOrcBlind"                 , furry = "BDDeerFemEyesOrcBlind"},
+  {vanilla = "FemaleEyesOrcDarkGrey"              , furry = "BDDeerFemEyesOrcDarkGrey"},
+  {vanilla = "FemaleEyesOrcIceBlue"               , furry = "BDDeerFemEyesOrcIceBlue"},
+  {vanilla = "FemaleEyesOrcRed"                   , furry = "BDDeerFemEyesOrcRed"},
+  {vanilla = "FemaleEyesOrcYellow"                , furry = "BDDeerFemEyesOrcYellow"},
+  {vanilla = "FemaleEyesWoodElfBrown"             , furry = "BDDeerFemEyesWoodElfBrown"},
+  {vanilla = "FemaleEyesWoodElfDeepBrown"         , furry = "BDDeerFemEyesWoodElfDeepBrown"},
+  {vanilla = "FemaleEyesWoodElfDeepViolet"        , furry = "BDDeerFemEyesWoodElfDeepViolet"},
+  {vanilla = "FemaleEyesWoodElfLightBrown"        , furry = "BDDeerFemEyesWoodElfLightBrown"},
+  {vanilla = "MaleEyesDarkElfDeepRed"             , furry = "BDDeerMaleEyesDarkElfDeepRed"},
+  {vanilla = "MaleEyesDarkElfDeepRed2"            , furry = "BDDeerMaleEyesDarkElfDeepRed2"},
+  {vanilla = "MaleEyesDarkElfRed"                 , furry = "BDDeerMaleEyesDarkElfRed"},
+  {vanilla = "MaleEyesHighElfDarkYellow"          , furry = "BDDeerMaleEyesHighElfDarkYellow"},
+  {vanilla = "MaleEyesHighElfOrange"              , furry = "BDDeerMaleEyesHighElfOrange"},
+  {vanilla = "MaleEyesHighElfYellow"              , furry = "BDDeerMaleEyesHighElfYellow"},
+  {vanilla = "MaleEyesHumanAmber"                 , furry = "BDDeerMaleEyesHumanAmber"},
+  {vanilla = "MaleEyesHumanBrightGreen"           , furry = "BDDeerMaleEyesGreen"},
+  {vanilla = "MaleEyesHumanBrightGreen"           , furry = "BDDeerMaleEyesHumanBrightGreen"},
+  {vanilla = "MaleEyesHumanBrown"                 , furry = "BDDeerMaleEyesBrown"},
+  {vanilla = "MaleEyesHumanBrown"                 , furry = "BDDeerMaleEyesHumanBrown"},
+  {vanilla = "MaleEyesHumanBrownBloodShot"        , furry = "BDDeerMaleEyesHumanBrownBloodShot"},
+  {vanilla = "MaleEyesHumanDarkBlue"              , furry = "BDDeerMaleEyesHumanDarkBlue"},
+  {vanilla = "MaleEyesHumanDemon"                 , furry = "BDDeerMaleEyesHumanDemon"},
+  {vanilla = "MaleEyesHumanDemon"                 , furry = "BDDeerMaleEyesRed"},
+  {vanilla = "MaleEyesHumanGrey"                  , furry = "BDDeerMaleEyesHumanGrey"},
+  {vanilla = "MaleEyesHumanHazel"                 , furry = "BDDeerMaleEyesHumanHazel"},
+  {vanilla = "MaleEyesHumanHazelBrown"            , furry = "BDDeerMaleEyesHumanHazelBrown"},
+  {vanilla = "MaleEyesHumanIceBlue"               , furry = "BDDeerMaleEyesHumanIceBlue"},
+  {vanilla = "MaleEyesHumanIceBlue"               , furry = "BDDeerMaleEyesIceBlue"},
+  {vanilla = "MaleEyesHumanLightBlue"             , furry = "BDDeerMaleEyesBlue"},
+  {vanilla = "MaleEyesHumanLightBlue"             , furry = "BDDeerMaleEyesHumanLightBlue"},
+  {vanilla = "MaleEyesHumanLightBlueBloodShot"    , furry = "BDDeerMaleEyesHumanLightBlueBloodShot"},
+  {vanilla = "MaleEyesHumanLightGrey"             , furry = "BDDeerMaleEyesHumanLightGrey"},
+  {vanilla = "MaleEyesHumanVampire"               , furry = "BDDeerMaleEyesVamp"},
+  {vanilla = "MaleEyesHumanYellow"                , furry = "BDDeerMaleEyesHumanYellow"},
+  {vanilla = "MaleEyesHumanYellow"                , furry = "BDDeerMaleEyesYellow"},
+  {vanilla = "MaleEyesOrcBlind"                   , furry = "BDDeerMaleEyesOrcBlind"},
+  {vanilla = "MaleEyesOrcDarkGrey"                , furry = "BDDeerMaleEyesOrcDarkGrey"},
+  {vanilla = "MaleEyesOrcIceBlue"                 , furry = "BDDeerMaleEyesOrcIceBlue"},
+  {vanilla = "MaleEyesOrcRed"                     , furry = "BDDeerMaleEyesOrcRed"},
+  {vanilla = "MaleEyesOrcYellow"                  , furry = "BDDeerMaleEyesOrcYellow"},
+  {vanilla = "MaleEyesWoodElfBrown"               , furry = "BDDeerMaleEyesWoodElfBrown"},
+  {vanilla = "MaleEyesWoodElfDeepBrown"           , furry = "BDDeerMaleEyesWoodElfDeepBrown"},
+  {vanilla = "MaleEyesWoodElfDeepViolet"          , furry = "BDDeerMaleEyesWoodElfDeepViolet"},
+  {vanilla = "MaleEyesWoodElfLightBrown"          , furry = "BDDeerMaleEyesWoodElfLightBrown"},
+]
+
+headpart_probability = [
+  {race = "BDDeerRace", sex = "Male", EYEBROWS = 1.0, FACIAL_HAIR = 0.2},
+  {race = "BDDeerRace", sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
+  {race = "BDDeerRaceVampire", sex = "Male", EYEBROWS = 1.0, FACIAL_HAIR = 0.2},
+  {race = "BDDeerRaceVampire", sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
+]
+
+[headpart_labels]
+BDDeerDreads01                 = "DREADS,BOLD,FUNKY,LONG"
+BDDeerDreadsBeads              = "DREADS,BOLD,NOBLE,LONG"
+BDDeerDreadsBeadsDark          = "DREADS,BOLD,NOBLE,LONG"
+BDDeerFemDreads                = "DREADS,BOLD,FUNKY,LONG"
+BDDeerFemDreadsBeads           = "DREADS,BOLD,NOBLE,LONG"
+BDDeerFemMane                  = "EXCLUDE"
+BDDeerHairFemMohawk            = "MOHAWK,MILITARY,BOLD"
+BDDeerHairFemMohawkDark        = "MOHAWK,MILITARY,BOLD"
+BDDeerHairFemMohawkFeathers    = "MOHAWK,FUNKY,BOLD"
+BDDeerHairFemShaggy001         = "MESSY,LONG"
+BDDeerHairFemShortCrop001      = "NEAT,SHORT"
+BDDeerHairFemShortCrop002      = "NEAT,SHORT"
+BDDeerHairFemShortCrop003      = "NEAT,SHORT"
+BDDeerHairFemTiedStyle001      = "NEAT,NOBLE,LONG"
+BDDeerHairFemVanillaBraid001   = "NEAT,TIEDBACK,LONG"
+BDDeerHairFemVanillaCrop001    = "NEAT,TIEDBACK"
+BDDeerHairFemVanillaHair001    = "FUNKY,BRAIDS,TIEDBACK"
+BDDeerHairFringe               = "YOUNG,NEAT,SHORT"
+BDDeerMaleMohawk               = "MOHAWK,MILITARY,BOLD"
+BDDeerMaleMohawkFeathers       = "MOHAWK,FUNKY,BOLD"
+BDDeerMaleShaggy001            = "MESSY,LONG"
+BDDeerMane                     = "BOLD,LONG,MANE"
+BDDeerNoHair                   = "NEAT,BOLD,BALD,BUZZ"

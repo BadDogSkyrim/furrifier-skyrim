@@ -1,0 +1,34 @@
+# Furrifier race catalog: CellanRace
+# Split from yas_races.toml so all of CellanRace's data lives together.
+# See yas_races.toml for the rest of the YAS/BD race definitions.
+
+headpart_equivalents = [
+  # Eyes — Cellan has only Blue/Brown/Yellow/Vampire per sex, so we
+  # map each to the closest vanilla Human color rather than seeding
+  # every possible vanilla-race eye with a Cellan equivalent.
+  {vanilla = "FemaleEyesHumanLightBlue"  , furry = "FemaleEyesCellanBlue"},
+  {vanilla = "FemaleEyesHumanBrown"      , furry = "FemaleEyesCellanBrown"},
+  {vanilla = "FemaleEyesHumanYellow"     , furry = "FemaleEyesCellanYellow"},
+  {vanilla = "FemaleEyesHumanVampire"    , furry = "FemaleEyesCellanVampire"},
+  {vanilla = "MaleEyesHumanLightBlue"    , furry = "MaleEyesCellanBlue"},
+  {vanilla = "MaleEyesHumanBrown"        , furry = "MaleEyesCellanBrown"},
+  {vanilla = "MaleEyesHumanYellow"       , furry = "MaleEyesCellanYellow"},
+  {vanilla = "MaleEyesHumanVampire"      , furry = "MaleEyesCellanVampire"},
+]
+
+headpart_probability = [
+  {race = "CellanRace", sex = "Male", EYEBROWS = 0.0, FACIAL_HAIR = 0.2},
+  {race = "CellanRace", sex = "Female", EYEBROWS = 0.0, FACIAL_HAIR = 0.0},
+  {race = "CellanRaceVampire", sex = "Male", EYEBROWS = 0.0, FACIAL_HAIR = 0.2},
+  {race = "CellanRaceVampire", sex = "Female", EYEBROWS = 0.0, FACIAL_HAIR = 0.0},
+]
+
+[headpart_labels]
+HairCellanFemale01 = "BRAIDS"
+HairCellanFemale02 = "SHORT"
+HairCellanFemale03 = "SHORT,BRAIDS,TIEDBACK,FUNKY"
+HairCellanFemale04 = "LONG,NEAT,BRAIDS"
+HairCellanMale01   = "BRAIDS,NEAT"
+HairCellanMale02   = "BRAIDS,TIEDBACK"
+HairCellanMale03   = "FUNKY,MOHAWK"
+HairCellanMale04   = "BRAIDS"
