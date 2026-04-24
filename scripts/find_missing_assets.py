@@ -6,26 +6,29 @@ Run from the furrifier project root with the package installed:
 
     python scripts/find_missing_assets.py
     python scripts/find_missing_assets.py --data-dir "C:/Skyrim SE/Data"
-    python scripts/find_missing_assets.py --plugin MyMod.esp
+    python scripts/find_missing_assets.py --plugin "BD*.esp"
     python scripts/find_missing_assets.py --verbose
 
 Output is grouped by plugin; within each plugin, missing paths are
 sorted. A count line per plugin shows the total. Suppress the
 per-file list with ``--summary`` if you just want totals.
 
-Notes on the extraction:
+How extraction works:
 
-- Strings are sniffed from raw subrecord bytes (null-terminated,
-  ending in a known Skyrim file extension). This catches the
-  common path-carrying subrecords (MODL, ICON, TX00–TX07, FNAM,
-  VMAD-embedded script paths) without needing a per-record schema.
-- Some path subrecords omit the data-root prefix
-  (``textures/``, ``meshes/``, ``sound/``, ``scripts/``). The
-  script tries both the raw path and the extension-implied prefix;
-  if either resolves, the reference is fine.
-- False positives: the odd byte sequence that happens to end in a
-  known extension will show up. They're rare in practice; if they
-  clutter your output, ``--ignore-regex`` filters them.
+The script knows a finite set of (record_signature, subrecord_signature)
+pairs that carry file path strings — derived two ways:
+
+1. From esplib's existing record schemas, by looking for subrecord
+   members whose value type is ``EspString`` and whose semantic
+   name is ``"model"`` or ``"icon"``.
+2. From a hand-curated table for record types esplib doesn't
+   schema (TXST, SOUN, SNDR, STAT, ACTI, ARMA's MOD2..MOD5, …).
+
+For every subrecord matching one of those pairs, we decode it as
+a single null-terminated string and check whether that path
+resolves to a loose file or BSA entry via the AssetResolver. Any
+subrecord NOT in the path-bearing set is skipped — no regex
+sniffing of binary blobs.
 
 Place: ``furrifier/scripts/find_missing_assets.py``. Not part of
 the shipped kit (outside the PyInstaller spec's copy list), so it
@@ -43,6 +46,8 @@ from collections import defaultdict
 from pathlib import Path
 
 from esplib import LoadOrder, PluginSet, find_game_data
+from esplib.defs import tes5
+from esplib.defs.types import EspString
 
 from furrifier.facegen.assets import AssetResolver
 
@@ -50,36 +55,92 @@ from furrifier.facegen.assets import AssetResolver
 log = logging.getLogger("find_missing_assets")
 
 
-# Known Skyrim asset file extensions we care about. Lowercase.
-_EXTENSIONS = [
-    "nif", "tri", "hkx", "egm",              # meshes / anim
-    "bgem", "bgsm",                          # material files
-    "dds",                                   # textures
-    "wav", "xwm", "fuz",                     # audio
-    "lip",                                   # lip sync
-    "pex",                                   # papyrus compiled
-    "seq",                                   # sequence
-    "swf",                                   # interface
-]
+# Hand-curated table: record types esplib doesn't schema, but whose
+# path-carrying subrecord layout is well-known from xEdit's
+# wbDefinitionsTES5.pas / the UESP wiki. Each entry is the set of
+# subrecord signatures that carry a single null-terminated path
+# string. Add to this when you spot a record type whose paths the
+# script is missing.
+_HARDCODED_PATH_SUBRECORDS: dict[str, set[str]] = {
+    # ARMA's first/third-person model paths (MOD2 male, MOD3 female,
+    # MOD4 male alt, MOD5 female alt). esplib's ARMA schema covers
+    # MODL but only as a FormID (race linkage); it doesn't model the
+    # MOD2..MOD5 string subrecords.
+    "ARMA": {"MOD2", "MOD3", "MOD4", "MOD5"},
+    # Texture set: 8 slots for diffuse / normal / etc.
+    "TXST": {"TX00", "TX01", "TX02", "TX03", "TX04", "TX05",
+             "TX06", "TX07"},
+    # Static / activator / world objects.
+    "STAT": {"MODL"},
+    "ACTI": {"MODL"},
+    "DOOR": {"MODL"},
+    "CONT": {"MODL"},
+    "FURN": {"MODL"},
+    "FLOR": {"MODL"},
+    "TREE": {"MODL"},
+    "GRAS": {"MODL"},
+    "MSTT": {"MODL"},
+    "EXPL": {"MODL"},
+    "HAZD": {"MODL"},
+    "IDLM": {"MODL"},
+    "IPCT": {"MODL"},
+    # Lights, lighting effects.
+    "LIGH": {"MODL", "ICON"},
+    "LSCR": {"ICON"},
+    "EFSH": {"ICON", "ICO2"},
+    # Magic visuals.
+    "MGEF": {"MODL", "ICON", "MICO"},
+    # Inventory-like records esplib doesn't cover.
+    "APPA": {"MODL", "ICON", "MICO"},
+    "INGR": {"MODL", "ICON", "MICO"},
+    "KEYM": {"MODL", "ICON", "MICO"},
+    "IMOD": {"MODL", "ICON", "MICO"},
+    "NOTE": {"MODL", "ICON"},
+    "EYES": {"ICON"},
+    # Sound files.
+    "SOUN": {"FNAM"},
+    "SNDR": {"ANAM"},
+    "MUSC": {"ANAM"},
+    # HDPT extra path: NAM1 carries a chargen morph file (.tri).
+    # esplib's HDPT schema covers MODL but not the NAM0/NAM1
+    # morph-data pair.
+    "HDPT": {"NAM1"},
+}
 
-# Path-character class: alphanumerics, path separators, common
-# filename punctuation. Minimum 4 chars before the extension so
-# binary garbage like "y.dds" embedded in a hash blob doesn't pass.
-_PATH_RE = re.compile(
-    (r"([A-Za-z0-9 _\-\\/.()]{4,}?\."
-     r"(?:" + "|".join(_EXTENSIONS) + r"))\b").encode("ascii"),
-    re.IGNORECASE,
-)
+
+def _build_path_subrecord_map() -> dict[str, set[str]]:
+    """Combine schema-derived and hardcoded path-subrecord knowledge
+    into ``{record_signature: {subrecord_signatures, ...}}``.
+
+    Schema-derived entries come from esplib's tes5 record schemas:
+    any subrecord member whose ``value_def`` is an ``EspString`` with
+    semantic name ``"model"`` or ``"icon"`` carries a file path.
+    """
+    out: dict[str, set[str]] = defaultdict(set)
+    path_value_names = {"model", "icon"}
+    for record_name in dir(tes5):
+        if (not record_name.isupper() or len(record_name) > 4
+                or record_name.startswith("_")):
+            continue
+        schema = getattr(tes5, record_name, None)
+        if schema is None or not hasattr(schema, "members"):
+            continue
+        for member in schema.members:
+            if not hasattr(member, "value_def"):
+                continue
+            v = member.value_def
+            if (isinstance(v, EspString)
+                    and getattr(v, "name", None) in path_value_names):
+                out[record_name].add(member.signature)
+
+    for rec_sig, sigs in _HARDCODED_PATH_SUBRECORDS.items():
+        out[rec_sig].update(sigs)
+
+    return dict(out)
 
 
-# Subrecord signatures that carry binary data (hashes, FormIDs,
-# bounding boxes), never file paths. Scanning them produces false
-# positives — bytes that happen to match the path regex inside a
-# CRC or hash. The *T family is the model-texture-hash chain that
-# accompanies MODL / MOD2..MOD5 path subrecords.
-_BINARY_SUBRECORDS = frozenset({
-    "MODT", "MO2T", "MO3T", "MO4T", "MO5T",
-})
+_PATH_SUBRECORDS = _build_path_subrecord_map()
+
 
 # Bethesda's root prefixes by file extension. Some subrecords store
 # paths already rooted (e.g. "textures\actors\...") while others
@@ -104,24 +165,38 @@ _IMPLICIT_PREFIXES = {
 }
 
 
+def _decode_zstring(data: bytes) -> str:
+    """Decode a single null-terminated cp1252 string from a subrecord's
+    payload bytes. Subrecords that carry a path always store one
+    string at offset 0; trailing bytes after the first NUL are padding
+    we ignore. Empty / oversized / control-char-laden values return ``''``."""
+    end = data.find(b"\x00")
+    raw = data if end < 0 else data[:end]
+    try:
+        s = raw.decode("cp1252")
+    except UnicodeDecodeError:
+        return ""
+    s = s.strip()
+    if not s or len(s) > 260:
+        return ""
+    return s.replace("/", "\\").lower()
+
+
 def extract_paths_from_record(record):
-    """Yield ``(path, subrecord_signature)`` for every path-like
-    string found. Same path appearing in multiple subrecords of the
-    same record produces multiple yields — each location matters
-    when you're trying to fix references."""
+    """Yield ``(path, subrecord_signature)`` for every path-bearing
+    subrecord (per ``_PATH_SUBRECORDS``) on this record. Same path
+    referenced from multiple slots of the same record yields once
+    per subrecord signature — each location matters when you're
+    trying to fix references."""
+    sig_set = _PATH_SUBRECORDS.get(record.signature)
+    if not sig_set:
+        return
     for sr in record.subrecords:
-        if sr.signature in _BINARY_SUBRECORDS:
+        if sr.signature not in sig_set:
             continue
-        for match in _PATH_RE.finditer(sr.data):
-            raw = match.group(1)
-            try:
-                s = raw.decode("latin-1")
-            except Exception:
-                continue
-            s = s.strip("\x00").strip().replace("/", "\\").lower()
-            if (not s) or "\x00" in s or len(s) > 260 or s.startswith("\\"):
-                continue
-            yield (s, sr.signature)
+        path = _decode_zstring(sr.data)
+        if path:
+            yield (path, sr.signature)
 
 
 def candidate_paths(rel: str) -> list[str]:
