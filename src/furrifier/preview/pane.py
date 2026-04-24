@@ -34,6 +34,7 @@ from esplib import LoadOrder
 
 from ..config import FurrifierConfig
 from ..npc import inherits_traits
+from ..session_cache import SessionCache
 from .npc_picker import NpcEntry, NpcPickerWidget
 from .scene_widget import FacegenSceneWidget
 from .worker import PreviewWorker, RequestTracker
@@ -76,10 +77,12 @@ class PreviewPane(QWidget):
     _dispatch_bake = Signal(int, int)         # request_id, form_id
 
     def __init__(self, config_provider: ConfigProvider,
+                 cache: SessionCache,
                  load_order_provider: Optional[LoadOrderProvider] = None,
                  parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._config_provider = config_provider
+        self._cache = cache
         # Optional — when None, the worker's setup_session falls back
         # to LoadOrder.from_game(active_only=True).
         self._load_order_provider = load_order_provider
@@ -187,7 +190,7 @@ class PreviewPane(QWidget):
         # Background worker + thread. Qt-native pattern: QObject
         # living on a QThread; slots dispatched via QueuedConnection.
         self._thread = QThread(self)
-        self._worker = PreviewWorker()
+        self._worker = PreviewWorker(cache=self._cache)
         self._worker.moveToThread(self._thread)
         self._thread.start()
 

@@ -34,11 +34,9 @@ from esplib.record import Record
 from ..config import FurrifierConfig
 from ..session import (
     FurrificationSession,
-    LoadedPlugins,
     bake_facegen_for,
-    build_session_over_plugins,
-    load_plugins,
 )
+from ..session_cache import SessionCache
 
 
 log = logging.getLogger("furrifier.preview.worker")
@@ -84,36 +82,6 @@ def _resolve_face_npc(npc: Record, plugin_set: PluginSet) -> Record:
     return current
 
 
-def _session_cache_key(config: FurrifierConfig) -> tuple:
-    """Fields that invalidate a fully-built session when they change.
-    Scheme + patch_name + data/output dirs — all of these affect the
-    session's output. Options like `furrify_armor` don't matter here."""
-    return (
-        config.race_scheme,
-        config.patch_filename,
-        config.game_data_dir or "",
-        config.output_dir or "",
-    )
-
-
-def _plugin_cache_key(config: FurrifierConfig,
-                      load_order: Optional[LoadOrder]) -> tuple:
-    """Fields that invalidate the cached *plugin load* specifically.
-    Plugin loading is scheme-independent, but the user's plugin
-    selection (via the main-window picker) does matter — different
-    set of plugins means different override chains. Load-order
-    fingerprint (tuple of names) goes into the key so toggling
-    plugins re-loads; leaving selection alone keeps the cache."""
-    lo_fingerprint: tuple = ()
-    if load_order is not None:
-        lo_fingerprint = tuple(p.lower() for p in load_order.plugins)
-    return (
-        config.patch_filename,
-        config.game_data_dir or "",
-        lo_fingerprint,
-    )
-
-
 class PreviewWorker(QObject):
     """QObject that runs on its own QThread and owns the session.
 
@@ -131,14 +99,13 @@ class PreviewWorker(QObject):
     bake_ready = Signal(int, str, str)  # request_id, nif_path, dds_path_or_empty
     bake_failed = Signal(int, str)
 
-    def __init__(self, parent: Optional[QObject] = None) -> None:
+    def __init__(self, cache: SessionCache,
+                 parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
+        # Shared with the Run worker via the main window — a preview
+        # build populates it, a subsequent Run reuses the plugin load.
+        self._cache = cache
         self._session: Optional[FurrificationSession] = None
-        self._session_key: Optional[tuple] = None
-        # Plugin cache lives longer than the session — scheme changes
-        # keep the plugins and just re-run race furrification.
-        self._plugins: Optional[LoadedPlugins] = None
-        self._plugins_key: Optional[tuple] = None
         self._temp_root: Optional[Path] = None
         # Each bake request gets a monotonic ID. The GUI records the
         # latest ID it issued; stale completions can be ignored.
@@ -149,33 +116,18 @@ class PreviewWorker(QObject):
     @Slot(object, object)
     def build_session(self, config: FurrifierConfig,
                       load_order: Optional[LoadOrder] = None) -> None:
-        """Build (or rebuild) the session.
+        """Build (or rebuild) the session via the shared cache.
 
-        Three fast paths:
-        - Fully-cached session (everything unchanged) → instant.
-        - Plugin cache still valid (only scheme changed) → skip the
-          ~15s plugin load, just rebuild the scheme-dependent pieces
-          (~1-2s).
-        - Cold cache (first build, or plugin-load config changed, or
-          the plugin override changed) → full reload.
+        The cache itself decides whether the call is a no-op (full
+        match), a scheme-only rebuild (~1-2s), or a full cold load
+        (~15s). Building here only emits ``session_building`` when
+        real work would happen, so repeat clicks with the same config
+        don't flash the status label.
         """
-        new_plugin_key = _plugin_cache_key(config, load_order)
-        new_session_key = (new_plugin_key, _session_cache_key(config))
-        if self._session is not None and self._session_key == new_session_key:
-            self.session_ready.emit()
-            return
-
         self.session_building.emit()
         try:
-            if (self._plugins is not None
-                    and self._plugins_key == new_plugin_key):
-                log.info("Reusing cached plugin load (scheme-only change).")
-            else:
-                self._plugins = load_plugins(config, load_order=load_order)
-                self._plugins_key = new_plugin_key
-
-            self._session = build_session_over_plugins(config, self._plugins)
-            self._session_key = new_session_key
+            self._session = self._cache.get_or_build_session(
+                config, load_order=load_order)
 
             if self._temp_root is None:
                 self._temp_root = Path(
@@ -184,7 +136,6 @@ class PreviewWorker(QObject):
         except Exception as exc:
             log.exception("Session build failed: %s", exc)
             self._session = None
-            self._session_key = None
             self.session_failed.emit(str(exc))
 
     @Slot(int, int)

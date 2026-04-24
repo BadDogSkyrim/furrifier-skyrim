@@ -46,6 +46,7 @@ from esplib.utils import BinaryReader
 from .config import FurrifierConfig
 from .main import run_furrification
 from .race_defs import list_available_schemes
+from .session_cache import SessionCache
 
 
 PLUGIN_EXTS = {".esp", ".esm", ".esl"}
@@ -120,16 +121,19 @@ class _Worker(QThread):
 
     def __init__(self, config: FurrifierConfig,
                  load_order: Optional[LoadOrder],
+                 cache: SessionCache,
                  parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
         self._config = config
         self._load_order = load_order
+        self._cache = cache
 
     def run(self) -> None:  # noqa: D401 — QThread.run override
         try:
             run_furrification(
                 self._config, load_order=self._load_order,
-                progress=lambda p: self.phase.emit(p))
+                progress=lambda p: self.phase.emit(p),
+                cache=self._cache)
             self.finished_ok.emit()
         except Exception as exc:
             logging.getLogger(__name__).exception(
@@ -152,6 +156,11 @@ class FurrifierWindow(QMainWindow):
         # None = use active load order from plugins.txt; a list = explicit
         # selection from the plugin picker.
         self._plugin_override: Optional[list[str]] = None
+        # Shared cache: preview worker populates it on first preview,
+        # Run worker reuses it instead of paying the ~15s plugin load
+        # twice. Invalidated after a Run completes (the Run mutates
+        # the shared plugin_set with its patch).
+        self._session_cache = SessionCache()
 
         self._build_widgets()
         self._apply_icon()
@@ -197,6 +206,7 @@ class FurrifierWindow(QMainWindow):
         from .preview import PreviewPane
         self.preview_pane = PreviewPane(
             config_provider=self._config_from_fields,
+            cache=self._session_cache,
             load_order_provider=self._build_preview_load_order,
             parent=splitter)
         splitter.addWidget(self.preview_pane)
@@ -467,7 +477,8 @@ class FurrifierWindow(QMainWindow):
         self.run_button.setText("Running...")
         self.phase_label.setText("Starting...")
 
-        worker = _Worker(config, load_order, parent=self)
+        worker = _Worker(config, load_order, cache=self._session_cache,
+                         parent=self)
         worker.phase.connect(self.phase_label.setText)
         worker.finished_ok.connect(self._on_finished_ok)
         worker.failed.connect(self._on_failed)
@@ -481,6 +492,10 @@ class FurrifierWindow(QMainWindow):
         self.run_button.setText("Run")
         self.phase_label.setText("Done.")
         self._worker = None
+        # Run's patch injection + thousands of patch records polluted
+        # the shared plugin_set's override chain. Any subsequent
+        # preview must start from a fresh load.
+        self._session_cache.invalidate()
 
     def _on_failed(self, message: str) -> None:
         self._remove_log_handler()
@@ -490,6 +505,7 @@ class FurrifierWindow(QMainWindow):
         QMessageBox.critical(self, "Furrifier",
                              f"Furrification failed:\n{message}")
         self._worker = None
+        self._session_cache.invalidate()
 
     # --- log plumbing ------------------------------------------------------
 

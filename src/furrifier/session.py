@@ -224,15 +224,24 @@ def setup_session(
         config: FurrifierConfig,
         load_order: Optional[LoadOrder] = None,
         progress: Optional[ProgressCallback] = None,
+        cache: "Optional[SessionCache]" = None,
 ) -> FurrificationSession:
     """Convenience wrapper: load plugins then build a session over
     them. Most callers just want the session; the two-stage form is
     for the live-preview worker, which caches plugins across scheme
     changes to avoid paying for the re-load.
 
+    If ``cache`` is provided, delegate to its ``get_or_build_session``
+    — lets the preview and Run paths share a single expensive plugin
+    load. Tests and the CLI pass ``None`` and get the original
+    always-fresh behavior.
+
     Raises :class:`RuntimeError` if Skyrim's Data folder can't be
     located.
     """
+    if cache is not None:
+        return cache.get_or_build_session(
+            config, load_order=load_order, progress=progress)
     plugins = load_plugins(config, load_order=load_order, progress=progress)
     return build_session_over_plugins(config, plugins, progress=progress)
 

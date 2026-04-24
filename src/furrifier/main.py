@@ -26,6 +26,7 @@ def run_furrification(
     config: FurrifierConfig,
     load_order: Optional[LoadOrder] = None,
     progress: Optional[ProgressCallback] = None,
+    cache: "Optional[SessionCache]" = None,
 ) -> int:
     """Run the full furrification pipeline.
 
@@ -40,6 +41,11 @@ def run_furrification(
         Called with a short phase label at each pipeline milestone
         (e.g. "Loading plugins", "Furrifying NPCs"). Use to drive a GUI
         status line. Logging to the module logger still happens either way.
+    cache : SessionCache, optional
+        When present, reuse a previously-loaded plugin set / session
+        instead of loading from scratch. The GUI passes the same cache
+        instance its preview worker uses, so a preview run followed by
+        a full Run pays the ~15s load cost once total.
 
     Returns
     -------
@@ -52,7 +58,8 @@ def run_furrification(
     root_logger = logging.getLogger()
     root_logger.addHandler(log_counter)
     try:
-        return _run_furrification_body(config, load_order, progress, log_counter)
+        return _run_furrification_body(
+            config, load_order, progress, log_counter, cache=cache)
     finally:
         root_logger.removeHandler(log_counter)
 
@@ -62,6 +69,7 @@ def _run_furrification_body(
     load_order: Optional[LoadOrder],
     progress: Optional[ProgressCallback],
     log_counter: "_LogCounter",
+    cache: "Optional[SessionCache]" = None,
 ) -> int:
     def emit(phase: str) -> None:
         if progress is not None:
@@ -77,7 +85,7 @@ def _run_furrification_body(
     # same for full runs and for live preview. setup_session owns it.
     try:
         session = setup_session(config, load_order=load_order,
-                                progress=progress)
+                                progress=progress, cache=cache)
     except RuntimeError as exc:
         log.error("%s", exc)
         return 1
