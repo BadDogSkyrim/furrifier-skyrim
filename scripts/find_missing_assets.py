@@ -15,20 +15,21 @@ per-file list with ``--summary`` if you just want totals.
 
 How extraction works:
 
-The script knows a finite set of (record_signature, subrecord_signature)
-pairs that carry file path strings — derived two ways:
+The script only scans record types that esplib already schemas
+(``esplib.defs.tes5``). For each schemaed record, it walks the
+schema's members — recursing through ``EspGroup`` blocks like
+ARMA's "Male World Model" — and picks out subrecord signatures
+whose ``value_def`` is an ``EspString`` semantically tagged as a
+path (``name='model'`` or ``name='icon'``). Those are the only
+subrecords scanned; their values come from
+``record[signature]`` after a one-shot ``record.bind_schema()``,
+so we get esplib's parsed string directly — no raw-byte work in
+this script.
 
-1. From esplib's existing record schemas, by looking for subrecord
-   members whose value type is ``EspString`` and whose semantic
-   name is ``"model"`` or ``"icon"``.
-2. From a hand-curated table for record types esplib doesn't
-   schema (TXST, SOUN, SNDR, STAT, ACTI, ARMA's MOD2..MOD5, …).
-
-For every subrecord matching one of those pairs, we decode it as
-a single null-terminated string and check whether that path
-resolves to a loose file or BSA entry via the AssetResolver. Any
-subrecord NOT in the path-bearing set is skipped — no regex
-sniffing of binary blobs.
+Records whose signature has no esplib schema are counted in a
+"skipped" tally and reported at the end of the run. That tally
+tells you which record types in your load order would benefit
+from an esplib schema (or, failing that, a script-side fallback).
 
 Place: ``furrifier/scripts/find_missing_assets.py``. Not part of
 the shipped kit (outside the PyInstaller spec's copy list), so it
@@ -55,91 +56,63 @@ from furrifier.facegen.assets import AssetResolver
 log = logging.getLogger("find_missing_assets")
 
 
-# Hand-curated table: record types esplib doesn't schema, but whose
-# path-carrying subrecord layout is well-known from xEdit's
-# wbDefinitionsTES5.pas / the UESP wiki. Each entry is the set of
-# subrecord signatures that carry a single null-terminated path
-# string. Add to this when you spot a record type whose paths the
-# script is missing.
-_HARDCODED_PATH_SUBRECORDS: dict[str, set[str]] = {
-    # ARMA's first/third-person model paths (MOD2 male, MOD3 female,
-    # MOD4 male alt, MOD5 female alt). esplib's ARMA schema covers
-    # MODL but only as a FormID (race linkage); it doesn't model the
-    # MOD2..MOD5 string subrecords.
-    "ARMA": {"MOD2", "MOD3", "MOD4", "MOD5"},
-    # Texture set: 8 slots for diffuse / normal / etc.
-    "TXST": {"TX00", "TX01", "TX02", "TX03", "TX04", "TX05",
-             "TX06", "TX07"},
-    # Static / activator / world objects.
-    "STAT": {"MODL"},
-    "ACTI": {"MODL"},
-    "DOOR": {"MODL"},
-    "CONT": {"MODL"},
-    "FURN": {"MODL"},
-    "FLOR": {"MODL"},
-    "TREE": {"MODL"},
-    "GRAS": {"MODL"},
-    "MSTT": {"MODL"},
-    "EXPL": {"MODL"},
-    "HAZD": {"MODL"},
-    "IDLM": {"MODL"},
-    "IPCT": {"MODL"},
-    # Lights, lighting effects.
-    "LIGH": {"MODL", "ICON"},
-    "LSCR": {"ICON"},
-    "EFSH": {"ICON", "ICO2"},
-    # Magic visuals.
-    "MGEF": {"MODL", "ICON", "MICO"},
-    # Inventory-like records esplib doesn't cover.
-    "APPA": {"MODL", "ICON", "MICO"},
-    "INGR": {"MODL", "ICON", "MICO"},
-    "KEYM": {"MODL", "ICON", "MICO"},
-    "IMOD": {"MODL", "ICON", "MICO"},
-    "NOTE": {"MODL", "ICON"},
-    "EYES": {"ICON"},
-    # Sound files.
-    "SOUN": {"FNAM"},
-    "SNDR": {"ANAM"},
-    "MUSC": {"ANAM"},
-    # HDPT extra path: NAM1 carries a chargen morph file (.tri).
-    # esplib's HDPT schema covers MODL but not the NAM0/NAM1
-    # morph-data pair.
-    "HDPT": {"NAM1"},
-}
+_PATH_VALUE_NAMES = {"model", "icon"}
 
 
-def _build_path_subrecord_map() -> dict[str, set[str]]:
-    """Combine schema-derived and hardcoded path-subrecord knowledge
-    into ``{record_signature: {subrecord_signatures, ...}}``.
-
-    Schema-derived entries come from esplib's tes5 record schemas:
-    any subrecord member whose ``value_def`` is an ``EspString`` with
-    semantic name ``"model"`` or ``"icon"`` carries a file path.
-    """
-    out: dict[str, set[str]] = defaultdict(set)
-    path_value_names = {"model", "icon"}
-    for record_name in dir(tes5):
-        if (not record_name.isupper() or len(record_name) > 4
-                or record_name.startswith("_")):
+def _collect_path_subrecords(schema) -> set[str]:
+    """Recursively walk an EspRecord/EspGroup's members, returning
+    the set of subrecord signatures whose value is a path string —
+    detected by ``EspString`` with semantic name ``"model"`` or
+    ``"icon"``. Recurses through nested ``EspGroup`` members
+    (e.g. ARMA's "Male World Model" group wrapping MOD2)."""
+    out: set[str] = set()
+    for member in getattr(schema, "members", ()):
+        if hasattr(member, "members"):
+            out.update(_collect_path_subrecords(member))
             continue
-        schema = getattr(tes5, record_name, None)
+        if not hasattr(member, "signature") or not hasattr(member, "value_def"):
+            continue
+        v = member.value_def
+        if (isinstance(v, EspString)
+                and getattr(v, "name", None) in _PATH_VALUE_NAMES):
+            out.add(member.signature)
+    return out
+
+
+def _build_schema_index():
+    """Return ``(schemas_by_sig, path_subrecords)``.
+
+    schemas_by_sig: ``{record_signature: EspRecord}`` for every
+    record schema esplib's tes5 module exposes. Used to
+    ``record.bind_schema(...)`` before reading subrecord values.
+
+    path_subrecords: ``{record_signature: set(subrecord_signatures)}``
+    derived purely from those schemas — no hardcoded augment. If a
+    record type isn't in esplib's schemas, it's not scanned at all.
+    """
+    schemas: dict[str, "any"] = {}
+    paths: dict[str, set[str]] = {}
+    for name in dir(tes5):
+        if (not name.isupper() or len(name) > 4
+                or name.startswith("_")):
+            continue
+        schema = getattr(tes5, name, None)
         if schema is None or not hasattr(schema, "members"):
             continue
-        for member in schema.members:
-            if not hasattr(member, "value_def"):
-                continue
-            v = member.value_def
-            if (isinstance(v, EspString)
-                    and getattr(v, "name", None) in path_value_names):
-                out[record_name].add(member.signature)
+        # Filter out struct schemas (e.g. ACBS) that share a module-
+        # level name with their subrecord signature but aren't records
+        # themselves. EspRecord exposes a top-level signature equal to
+        # its record sig.
+        if getattr(schema, "signature", None) != name:
+            continue
+        schemas[name] = schema
+        sigs = _collect_path_subrecords(schema)
+        if sigs:
+            paths[name] = sigs
+    return schemas, paths
 
-    for rec_sig, sigs in _HARDCODED_PATH_SUBRECORDS.items():
-        out[rec_sig].update(sigs)
 
-    return dict(out)
-
-
-_PATH_SUBRECORDS = _build_path_subrecord_map()
+_SCHEMA_BY_SIG, _PATH_SUBRECORDS = _build_schema_index()
 
 
 # Bethesda's root prefixes by file extension. Some subrecords store
@@ -165,38 +138,32 @@ _IMPLICIT_PREFIXES = {
 }
 
 
-def _decode_zstring(data: bytes) -> str:
-    """Decode a single null-terminated cp1252 string from a subrecord's
-    payload bytes. Subrecords that carry a path always store one
-    string at offset 0; trailing bytes after the first NUL are padding
-    we ignore. Empty / oversized / control-char-laden values return ``''``."""
-    end = data.find(b"\x00")
-    raw = data if end < 0 else data[:end]
-    try:
-        s = raw.decode("cp1252")
-    except UnicodeDecodeError:
-        return ""
-    s = s.strip()
-    if not s or len(s) > 260:
-        return ""
-    return s.replace("/", "\\").lower()
-
-
 def extract_paths_from_record(record):
     """Yield ``(path, subrecord_signature)`` for every path-bearing
-    subrecord (per ``_PATH_SUBRECORDS``) on this record. Same path
-    referenced from multiple slots of the same record yields once
-    per subrecord signature — each location matters when you're
-    trying to fix references."""
+    subrecord on this record, using esplib's parsed-value access.
+
+    We bind the record to its schema (one-shot; idempotent thanks
+    to the ``record.schema`` check) and then read each known path
+    subrecord via ``record[sig]`` — esplib gives us back the
+    decoded string, no raw-byte handling here. Records whose
+    signature has no esplib schema return nothing.
+    """
     sig_set = _PATH_SUBRECORDS.get(record.signature)
     if not sig_set:
         return
-    for sr in record.subrecords:
-        if sr.signature not in sig_set:
+    schema = _SCHEMA_BY_SIG.get(record.signature)
+    if schema is None:
+        return
+    if record.schema is None:
+        record.bind_schema(schema)
+    for sig in sig_set:
+        try:
+            value = record[sig]
+        except KeyError:
             continue
-        path = _decode_zstring(sr.data)
-        if path:
-            yield (path, sr.signature)
+        if not value or not isinstance(value, str):
+            continue
+        yield (value.strip().replace("/", "\\").lower(), sig)
 
 
 def candidate_paths(rel: str) -> list[str]:
@@ -222,19 +189,30 @@ def resolve_any(resolver: AssetResolver, rel: str) -> bool:
 
 def scan(plugins, resolver: AssetResolver,
          ignore_re: re.Pattern | None = None,
-         verbose: bool = False) -> dict[str, list[tuple]]:
-    """Return ``{plugin_name: [(form_id, editor_id, subrec_sig, path), ...]}``
-    for the given iterable of plugins. Each missing reference is
-    listed with the record that made it and the subrecord signature
-    that carried the path. Resolver caches hits so the same path hit
-    from many plugins only costs one resolution."""
+         verbose: bool = False
+         ) -> tuple[dict[str, list[tuple]], dict[str, int]]:
+    """Return ``(by_plugin, unschemaed_counts)``.
+
+    ``by_plugin`` is ``{plugin_name: [(form_id, editor_id,
+    subrec_sig, path), ...]}`` of missing references per plugin.
+
+    ``unschemaed_counts`` is ``{record_signature: count}`` for record
+    types encountered in the scanned plugins that esplib has no
+    schema for — meaning the script can't read their paths. Use it
+    to decide whether a missing record type should grow an esplib
+    schema or be added to a script-side fallback.
+    """
     by_plugin: dict[str, list[tuple]] = defaultdict(list)
+    unschemaed: dict[str, int] = defaultdict(int)
     plugins = list(plugins)
     for i, plugin in enumerate(plugins, 1):
         name = plugin.file_path.name
         t0 = time.perf_counter()
         refs: list[tuple] = []  # (path, sig, form_id, editor_id)
         for record in plugin.records:
+            if record.signature not in _SCHEMA_BY_SIG:
+                unschemaed[record.signature] += 1
+                continue
             fid = int(record.form_id)
             edid = record.editor_id or ""
             for path, sig in extract_paths_from_record(record):
@@ -263,7 +241,7 @@ def scan(plugins, resolver: AssetResolver,
                      i, len(plugins), name,
                      len(refs), len(unique_paths),
                      len(missing_paths), len(by_plugin[name]), dt)
-    return by_plugin
+    return by_plugin, dict(unschemaed)
 
 
 def main() -> int:
@@ -325,8 +303,9 @@ def main() -> int:
     ignore_re = re.compile(args.ignore_regex) if args.ignore_regex else None
 
     with AssetResolver.for_data_dir(data_dir) as resolver:
-        by_plugin = scan(selected, resolver,
-                         ignore_re=ignore_re, verbose=args.verbose)
+        by_plugin, unschemaed = scan(
+            selected, resolver,
+            ignore_re=ignore_re, verbose=args.verbose)
 
     if args.output:
         sink = open(args.output, "w", encoding="utf-8")
@@ -334,28 +313,43 @@ def main() -> int:
         sink = sys.stdout
 
     try:
-        if not by_plugin:
+        if by_plugin:
+            for name in sorted(by_plugin):
+                items = sorted(by_plugin[name])
+                # Unique missing *paths* per plugin, for the header count.
+                unique = len({path for _, _, _, path in items})
+                print(f"\n=== {name} -- {len(items)} references "
+                      f"({unique} unique missing) ===", file=sink)
+                if args.summary:
+                    continue
+                # Column widths: form id is fixed 8 hex; edid adapts
+                # to the longest in this plugin (minimum 20 for
+                # readability).
+                edid_w = max([20] + [len(edid) for _, edid, _, _ in items])
+                for fid, edid, sig, path in items:
+                    print(f"  {fid:08X}  {(edid or '-'):<{edid_w}}  "
+                          f"{sig}  {path}", file=sink)
+
+            total = sum(len(v) for v in by_plugin.values())
+            print(f"\n{total} missing references across "
+                  f"{len(by_plugin)} plugins.", file=sink)
+        else:
             print("No missing references found.", file=sink)
-            return 0
 
-        for name in sorted(by_plugin):
-            items = sorted(by_plugin[name])
-            # Unique missing *paths* per plugin, for the header count.
-            unique = len({path for _, _, _, path in items})
-            print(f"\n=== {name} -- {len(items)} references "
-                  f"({unique} unique missing) ===", file=sink)
-            if args.summary:
-                continue
-            # Column widths: form id is fixed 8 hex; edid adapts to
-            # the longest in this plugin (minimum 20 for readability).
-            edid_w = max([20] + [len(edid) for _, edid, _, _ in items])
-            for fid, edid, sig, path in items:
-                print(f"  {fid:08X}  {(edid or '-'):<{edid_w}}  "
-                      f"{sig}  {path}", file=sink)
-
-        total = sum(len(v) for v in by_plugin.values())
-        print(f"\n{total} missing references across {len(by_plugin)} plugins.",
-              file=sink)
+        # Coverage report — record types we couldn't scan because
+        # esplib has no schema for them. Hugh decides per-type
+        # whether to grow esplib or work around in the script.
+        if unschemaed:
+            print(file=sink)
+            print("--- Record types skipped (no esplib schema) ---",
+                  file=sink)
+            ordered = sorted(unschemaed.items(),
+                             key=lambda kv: (-kv[1], kv[0]))
+            for sig, count in ordered:
+                print(f"  {sig:6s} {count}", file=sink)
+            print(f"  {'TOTAL':6s} {sum(unschemaed.values())} records "
+                  f"across {len(unschemaed)} record types",
+                  file=sink)
     finally:
         if sink is not sys.stdout:
             sink.close()
