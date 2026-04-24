@@ -94,9 +94,11 @@ _IMPLICIT_PREFIXES = {
 }
 
 
-def extract_paths_from_record(record) -> set[str]:
-    """Pull every path-like string out of a record's subrecord bytes."""
-    found: set[str] = set()
+def extract_paths_from_record(record):
+    """Yield ``(path, subrecord_signature)`` for every path-like
+    string found. Same path appearing in multiple subrecords of the
+    same record produces multiple yields — each location matters
+    when you're trying to fix references."""
     for sr in record.subrecords:
         for match in _PATH_RE.finditer(sr.data):
             raw = match.group(1)
@@ -107,8 +109,7 @@ def extract_paths_from_record(record) -> set[str]:
             s = s.strip("\x00").strip().replace("/", "\\").lower()
             if (not s) or "\x00" in s or len(s) > 260 or s.startswith("\\"):
                 continue
-            found.add(s)
-    return found
+            yield (s, sr.signature)
 
 
 def candidate_paths(rel: str) -> list[str]:
@@ -134,28 +135,47 @@ def resolve_any(resolver: AssetResolver, rel: str) -> bool:
 
 def scan(plugins, resolver: AssetResolver,
          ignore_re: re.Pattern | None = None,
-         verbose: bool = False) -> dict[str, set[str]]:
-    """Return ``{plugin_name: {missing_paths}}`` for the given
-    iterable of plugins. Resolver caches hits so the same path hit
+         verbose: bool = False) -> dict[str, list[tuple]]:
+    """Return ``{plugin_name: [(form_id, editor_id, subrec_sig, path), ...]}``
+    for the given iterable of plugins. Each missing reference is
+    listed with the record that made it and the subrecord signature
+    that carried the path. Resolver caches hits so the same path hit
     from many plugins only costs one resolution."""
-    by_plugin: dict[str, set[str]] = defaultdict(set)
+    by_plugin: dict[str, list[tuple]] = defaultdict(list)
     plugins = list(plugins)
     for i, plugin in enumerate(plugins, 1):
         name = plugin.file_path.name
         t0 = time.perf_counter()
-        all_refs: set[str] = set()
+        refs: list[tuple] = []  # (path, sig, form_id, editor_id)
         for record in plugin.records:
-            all_refs.update(extract_paths_from_record(record))
-        if ignore_re is not None:
-            all_refs = {p for p in all_refs if not ignore_re.search(p)}
-        for rel in all_refs:
-            if not resolve_any(resolver, rel):
-                by_plugin[name].add(rel)
+            fid = int(record.form_id)
+            edid = record.editor_id or ""
+            for path, sig in extract_paths_from_record(record):
+                if ignore_re is not None and ignore_re.search(path):
+                    continue
+                refs.append((path, sig, fid, edid))
+        unique_paths = {r[0] for r in refs}
+        missing_paths = {p for p in unique_paths
+                         if not resolve_any(resolver, p)}
+        if missing_paths:
+            # Dedupe on (path, sig, fid) — one line per distinct
+            # subrecord location that referenced the missing file.
+            seen: set[tuple] = set()
+            for path, sig, fid, edid in refs:
+                if path not in missing_paths:
+                    continue
+                key = (path, sig, fid)
+                if key in seen:
+                    continue
+                seen.add(key)
+                by_plugin[name].append((fid, edid, sig, path))
         if verbose:
             dt = time.perf_counter() - t0
-            log.info("%3d/%3d  %-40s %5d refs, %4d missing, %.1fs",
+            log.info("%3d/%3d  %-40s %5d refs (%d unique), "
+                     "%d missing (%d hits), %.1fs",
                      i, len(plugins), name,
-                     len(all_refs), len(by_plugin[name]), dt)
+                     len(refs), len(unique_paths),
+                     len(missing_paths), len(by_plugin[name]), dt)
     return by_plugin
 
 
@@ -233,10 +253,18 @@ def main() -> int:
 
         for name in sorted(by_plugin):
             items = sorted(by_plugin[name])
-            print(f"\n=== {name} -- {len(items)} missing ===", file=sink)
-            if not args.summary:
-                for p in items:
-                    print(f"  {p}", file=sink)
+            # Unique missing *paths* per plugin, for the header count.
+            unique = len({path for _, _, _, path in items})
+            print(f"\n=== {name} -- {len(items)} references "
+                  f"({unique} unique missing) ===", file=sink)
+            if args.summary:
+                continue
+            # Column widths: form id is fixed 8 hex; edid adapts to
+            # the longest in this plugin (minimum 20 for readability).
+            edid_w = max([20] + [len(edid) for _, edid, _, _ in items])
+            for fid, edid, sig, path in items:
+                print(f"  {fid:08X}  {(edid or '-'):<{edid_w}}  "
+                      f"{sig}  {path}", file=sink)
 
         total = sum(len(v) for v in by_plugin.values())
         print(f"\n{total} missing references across {len(by_plugin)} plugins.",
