@@ -492,10 +492,10 @@ class FurrifierWindow(QMainWindow):
         self.run_button.setText("Run")
         self.phase_label.setText("Done.")
         self._worker = None
-        # Run's patch injection + thousands of patch records polluted
-        # the shared plugin_set's override chain. Any subsequent
-        # preview must start from a fresh load.
-        self._session_cache.invalidate()
+        # Keep the cache — Run's session is a valid "already furrified"
+        # view of the world that the preview should reuse. The preview
+        # worker detects NPCs whose top-of-chain override lives in the
+        # shared patch and bakes them as-is (see worker._post_run_npc).
 
     def _on_failed(self, message: str) -> None:
         self._remove_log_handler()
@@ -505,6 +505,8 @@ class FurrifierWindow(QMainWindow):
         QMessageBox.critical(self, "Furrifier",
                              f"Furrification failed:\n{message}")
         self._worker = None
+        # Failure may have left the patch mid-populated. Drop the cache
+        # so the next Load NPCs gets a clean load.
         self._session_cache.invalidate()
 
     # --- log plumbing ------------------------------------------------------

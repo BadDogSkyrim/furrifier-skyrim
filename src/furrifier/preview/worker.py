@@ -168,13 +168,21 @@ class PreviewWorker(QObject):
                     "Preview: %s uses template traits — baking from %s",
                     npc.editor_id, face_npc.editor_id)
 
-            patched = self._session.context.furrify_npc(face_npc)
-            if patched is None:
-                self.bake_failed.emit(
-                    request_id,
-                    f"{npc.editor_id}: scheme doesn't furrify this NPC "
-                    f"(wrong race, or CharGen preset)")
-                return
+            # If the NPC's top-of-chain override lives in the shared
+            # patch, a previous Run already furrified it and baking
+            # again would re-furrify a furry race (which
+            # determine_npc_race can't match → returns None). Use the
+            # existing record directly in that case.
+            if face_npc.plugin is self._session.patch:
+                patched = face_npc
+            else:
+                patched = self._session.context.furrify_npc(face_npc)
+                if patched is None:
+                    self.bake_failed.emit(
+                        request_id,
+                        f"{npc.editor_id}: scheme doesn't furrify this NPC "
+                        f"(wrong race, or CharGen preset)")
+                    return
 
             # Before emitting, check we're still the latest request.
             # A newer request already overwrote us; the result would
