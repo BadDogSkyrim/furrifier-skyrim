@@ -63,13 +63,23 @@ _EXTENSIONS = [
 ]
 
 # Path-character class: alphanumerics, path separators, common
-# filename punctuation. Intentionally conservative — we don't want
-# stray binary bytes sliding into the capture.
+# filename punctuation. Minimum 4 chars before the extension so
+# binary garbage like "y.dds" embedded in a hash blob doesn't pass.
 _PATH_RE = re.compile(
-    (r"([A-Za-z0-9 _\-\\/.()]+?\."
+    (r"([A-Za-z0-9 _\-\\/.()]{4,}?\."
      r"(?:" + "|".join(_EXTENSIONS) + r"))\b").encode("ascii"),
     re.IGNORECASE,
 )
+
+
+# Subrecord signatures that carry binary data (hashes, FormIDs,
+# bounding boxes), never file paths. Scanning them produces false
+# positives — bytes that happen to match the path regex inside a
+# CRC or hash. The *T family is the model-texture-hash chain that
+# accompanies MODL / MOD2..MOD5 path subrecords.
+_BINARY_SUBRECORDS = frozenset({
+    "MODT", "MO2T", "MO3T", "MO4T", "MO5T",
+})
 
 # Bethesda's root prefixes by file extension. Some subrecords store
 # paths already rooted (e.g. "textures\actors\...") while others
@@ -100,6 +110,8 @@ def extract_paths_from_record(record):
     same record produces multiple yields — each location matters
     when you're trying to fix references."""
     for sr in record.subrecords:
+        if sr.signature in _BINARY_SUBRECORDS:
+            continue
         for match in _PATH_RE.finditer(sr.data):
             raw = match.group(1)
             try:
