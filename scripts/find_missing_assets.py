@@ -34,6 +34,7 @@ stays a dev-side tool.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import logging
 import re
 import sys
@@ -166,8 +167,10 @@ def main() -> int:
                              "omitted).")
     parser.add_argument("--plugin", action="append",
                         help="Restrict to these plugins (repeatable). "
-                             "Case-insensitive. Other plugins still load "
-                             "so override chains are intact.")
+                             "Case-insensitive; accepts fnmatch "
+                             "wildcards (e.g. 'BD*.esp', 'Cellan?.esp'). "
+                             "Other plugins still load so override "
+                             "chains are intact.")
     parser.add_argument("--summary", action="store_true",
                         help="Show only per-plugin counts, not the "
                              "missing paths themselves.")
@@ -198,9 +201,17 @@ def main() -> int:
     plugin_set.load_all()
 
     if args.plugin:
-        wanted = {p.lower() for p in args.plugin}
+        # fnmatch each pattern against every plugin's name so wildcards
+        # (`*.esp`, `BD*.esp`, `Cellan?.esp`) work regardless of shell.
+        # Windows cmd/PowerShell don't expand globs before exec, so the
+        # script has to handle them itself.
+        patterns = [p.lower() for p in args.plugin]
         selected = [p for p in plugin_set
-                    if p.file_path.name.lower() in wanted]
+                    if any(fnmatch.fnmatchcase(p.file_path.name.lower(), pat)
+                           for pat in patterns)]
+        if not selected:
+            print(f"No plugins match {args.plugin}", file=sys.stderr)
+            return 1
     else:
         selected = list(plugin_set)
 
