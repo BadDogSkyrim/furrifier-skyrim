@@ -456,8 +456,12 @@ class FacegenSceneWidget(QWidget):
             # result takes over. Partial alpha linearly crossfades.
             ta = tint[..., 3:4]
             out_rgb = a * (1.0 - ta) + overlay * ta
+            # Preserve the diffuse alpha — Skyrim's face shader uses it
+            # with the head's NiAlphaProperty threshold (~20/255) to
+            # carve out eye sockets, nostrils, and the neck seam. If we
+            # flatten it to 1.0 the preview paints those regions solid.
             out = np.concatenate(
-                [out_rgb, np.ones_like(ta)], axis=-1)
+                [out_rgb, diffuse[..., 3:4]], axis=-1)
             as_u8 = np.clip(out * 255.0, 0, 255).astype(np.uint8)
 
             # Stable filename per (diffuse, tint) pair. Tint DDS is
