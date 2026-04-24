@@ -455,18 +455,18 @@ class FacegenSceneWidget(QWidget):
     def _build_composited_head(
             self, diffuse_relpath: str, facetint_path: Path,
             resolver: AssetResolver) -> Optional[str]:
-        """For the head shape, Overlay-blend the FaceTint DDS onto
+        """For the head shape, Soft-Light-blend the FaceTint DDS onto
         the race's skin diffuse. Returns a file:// URL to the
         composited PNG cached in the widget's temp dir.
 
-        Overlay (per-channel) multiplies where the diffuse is dark
-        and screens where it's light, so the diffuse's tonal detail
-        (pores, muscle contour) survives while the tint's color /
-        warpaint / skin-tone shift imposes itself. Alpha-over would
-        flatten the detail — tint pixels would obliterate diffuse
-        texture underneath. Skyrim's face shader does something
-        similar (Soft Light-ish); Overlay is the closest single-
-        formula approximation for a preview.
+        Soft Light (Pegtop formulation) darkens where the tint is
+        dark and lightens where it's light, at roughly half the
+        amplitude of Overlay — close to what Skyrim's face shader
+        produces in-game. We started with Overlay and it came out
+        visibly more contrasty than CK's preview; Soft Light is the
+        gentler match. Alpha-over would flatten diffuse detail; we
+        still want pores and muscle contour surviving under the
+        tint color shift.
         """
         try:
             diffuse_path = resolver.resolve(
@@ -488,14 +488,15 @@ class FacegenSceneWidget(QWidget):
                     Image.Resampling.LANCZOS)
             tint = np.asarray(tint_img, dtype=np.float32) / 255.0
 
-            # Overlay blend, per-channel:
-            #   where base < 0.5:  2 * base * top        (multiply)
-            #   where base >= 0.5: 1 - 2*(1-base)*(1-top) (screen)
+            # Soft Light blend (Pegtop formulation, branchless):
+            #   result = (1 - 2*top) * base^2 + 2*top*base
+            # At top=0.5 this is the identity (base returns unchanged);
+            # as top moves away from 0.5 in either direction, the
+            # result darkens or lightens smoothly, much less harshly
+            # than Overlay's multiply/screen split at base=0.5.
             a = diffuse[..., :3]
             b = tint[..., :3]
-            low = 2.0 * a * b
-            high = 1.0 - 2.0 * (1.0 - a) * (1.0 - b)
-            overlay = np.where(a < 0.5, low, high)
+            overlay = (1.0 - 2.0 * b) * a * a + 2.0 * b * a
 
             # Respect the tint's alpha: where it's zero (empty regions),
             # leave the raw diffuse. Where it's one, the full Overlay
