@@ -176,6 +176,10 @@ def main() -> int:
     parser.add_argument("--ignore-regex",
                         help="Python regex; any matching path is "
                              "dropped from the output.")
+    parser.add_argument("-o", "--output", metavar="FILE",
+                        help="Write the report to FILE (UTF-8) "
+                             "instead of stdout. Progress and errors "
+                             "still go to stderr.")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -206,19 +210,30 @@ def main() -> int:
         by_plugin = scan(selected, resolver,
                          ignore_re=ignore_re, verbose=args.verbose)
 
-    if not by_plugin:
-        print("No missing references found.")
-        return 0
+    if args.output:
+        sink = open(args.output, "w", encoding="utf-8")
+    else:
+        sink = sys.stdout
 
-    for name in sorted(by_plugin):
-        items = sorted(by_plugin[name])
-        print(f"\n=== {name} — {len(items)} missing ===")
-        if not args.summary:
-            for p in items:
-                print(f"  {p}")
+    try:
+        if not by_plugin:
+            print("No missing references found.", file=sink)
+            return 0
 
-    total = sum(len(v) for v in by_plugin.values())
-    print(f"\n{total} missing references across {len(by_plugin)} plugins.")
+        for name in sorted(by_plugin):
+            items = sorted(by_plugin[name])
+            print(f"\n=== {name} -- {len(items)} missing ===", file=sink)
+            if not args.summary:
+                for p in items:
+                    print(f"  {p}", file=sink)
+
+        total = sum(len(v) for v in by_plugin.values())
+        print(f"\n{total} missing references across {len(by_plugin)} plugins.",
+              file=sink)
+    finally:
+        if sink is not sys.stdout:
+            sink.close()
+            log.info("Report written to %s", args.output)
     return 0
 
 
