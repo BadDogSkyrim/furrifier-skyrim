@@ -154,6 +154,34 @@ def _rigid_preview_xform(shape, nif):
     return combined_rot, combined_trans
 
 
+# Alpha-mode strings passed through to QML's PrincipledMaterial.alphaMode.
+# Kept as strings (not enum values) because the enum lives in Qt Quick 3D;
+# we map them at the QML side via a small lookup.
+ALPHA_DEFAULT = "Default"
+ALPHA_MASK = "Mask"
+ALPHA_BLEND = "Blend"
+
+
+def _alpha_from_nif_shape(shape) -> tuple[str, float]:
+    """Translate a NIF shape's NiAlphaProperty into a (mode, cutoff) pair
+    that QML's PrincipledMaterial understands.
+
+    - alpha_blend=True → Blend (covers hair, scars, hairlines — partial
+      transparency, sorted on render).
+    - alpha_test=True, alpha_blend=False → Mask with cutoff=threshold/255
+      (head, mouth, eyebrow cards — binary alpha).
+    - No alpha property, or both flags off → Default (opaque).
+    """
+    if not shape.has_alpha_property:
+        return (ALPHA_DEFAULT, 0.5)
+    props = shape.alpha_property.properties
+    if props.alpha_blend:
+        return (ALPHA_BLEND, 0.5)
+    if props.alpha_test:
+        return (ALPHA_MASK, max(0.0, min(1.0, props.threshold / 255.0)))
+    return (ALPHA_DEFAULT, 0.5)
+
+
 def load_nif_shapes(nif_path: Path) -> List[dict]:
     """Pull verts / tris / uvs / normals / diffuse path from every
     shape in a facegen nif. Returned dicts feed FacegenShapeGeometry."""
@@ -191,6 +219,7 @@ def load_nif_shapes(nif_path: Path) -> List[dict]:
             verts = verts @ rot.T + trans
             if raw_normals is not None:
                 raw_normals = raw_normals @ rot.T
+        alpha_mode, alpha_cutoff = _alpha_from_nif_shape(shape)
         shapes.append({
             "name": shape.name,
             "verts": verts,
@@ -201,6 +230,8 @@ def load_nif_shapes(nif_path: Path) -> List[dict]:
             # Slot 6 (FacegenDetail) is populated only on the Face
             # HDPT by our facegen bake; absence = non-face shape.
             "facegen_detail": shape.textures.get("FacegenDetail", ""),
+            "alpha_mode": alpha_mode,
+            "alpha_cutoff": alpha_cutoff,
         })
     return shapes
 
@@ -244,11 +275,16 @@ class ShapeModel(QObject):
     Python keeps strong refs; QML just reads."""
 
     def __init__(self, name: str, geometry: FacegenShapeGeometry,
-                 diffuse_url: str, parent: Optional[QObject] = None) -> None:
+                 diffuse_url: str,
+                 alpha_mode: str = ALPHA_DEFAULT,
+                 alpha_cutoff: float = 0.5,
+                 parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
         self._name = name
         self._geometry = geometry
         self._diffuse_url = diffuse_url
+        self._alpha_mode = alpha_mode
+        self._alpha_cutoff = float(alpha_cutoff)
 
     @Property(str, constant=True)
     def name(self) -> str:
@@ -261,6 +297,16 @@ class ShapeModel(QObject):
     @Property(str, constant=True)
     def diffuseUrl(self) -> str:
         return self._diffuse_url
+
+    @Property(str, constant=True)
+    def alphaMode(self) -> str:
+        """One of "Default", "Mask", "Blend" — mapped in QML to
+        PrincipledMaterial.alphaMode."""
+        return self._alpha_mode
+
+    @Property(float, constant=True)
+    def alphaCutoff(self) -> float:
+        return self._alpha_cutoff
 
 
 class PreviewContext(QObject):
@@ -529,7 +575,10 @@ class FacegenSceneWidget(QWidget):
             else:
                 diffuse_url = resolve_and_convert_diffuse(
                     s["diffuse"], resolver, self._temp_dir) or ""
-            shape_models.append(ShapeModel(s["name"], geom, diffuse_url))
+            shape_models.append(ShapeModel(
+                s["name"], geom, diffuse_url,
+                alpha_mode=s.get("alpha_mode", ALPHA_DEFAULT),
+                alpha_cutoff=s.get("alpha_cutoff", 0.5)))
             all_verts.append(s["verts"])
 
         if all_verts:

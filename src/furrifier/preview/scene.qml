@@ -116,8 +116,18 @@ Item {
                             }
                             roughness: 0.85
                             metalness: 0.0
-                            alphaMode: PrincipledMaterial.Mask
-                            alphaCutoff: 0.5
+                            // Per-shape alpha from the nif's NiAlphaProperty:
+                            // Blend for hair / scars / hairlines, Mask for
+                            // head / mouth / eyebrow cards, Default for
+                            // opaque shapes. Python side already mapped
+                            // NIF flags to the string; fall back to Mask if
+                            // the property is unset.
+                            alphaMode: modelData.alphaMode === "Blend"
+                                ? PrincipledMaterial.Blend
+                                : modelData.alphaMode === "Default"
+                                    ? PrincipledMaterial.Default
+                                    : PrincipledMaterial.Mask
+                            alphaCutoff: modelData.alphaCutoff
                         }
                     }
                 }
