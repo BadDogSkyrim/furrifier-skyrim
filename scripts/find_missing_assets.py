@@ -56,7 +56,12 @@ from furrifier.facegen.assets import AssetResolver
 log = logging.getLogger("find_missing_assets")
 
 
-_PATH_VALUE_NAMES = {"model", "icon"}
+# EspString.name values esplib uses to mean "this string is a file
+# path." Update when esplib gains a new path-bearing record schema
+# under a fresh semantic name. Today: 'model' (MODL, MOD2..MOD5),
+# 'icon' (ICON / MICO), 'filename' (HDPT NAM1 chargen morph),
+# 'texture' (TXST TX00..TX07).
+_PATH_VALUE_NAMES = {"model", "icon", "filename", "texture"}
 
 
 def _collect_path_subrecords(schema) -> set[str]:
