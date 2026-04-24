@@ -127,3 +127,35 @@ class TestConfig:
         parser = build_parser()
         with pytest.raises(SystemExit):
             parser.parse_args(['--facetint-size', '999'])
+
+
+    def test_scheme_choices_come_from_discovery(self, monkeypatch):
+        """Dropping a new scheme file in schemes/ should make it usable
+        without a code change."""
+        from furrifier import config as config_mod
+        monkeypatch.setattr(config_mod, "list_available_schemes",
+                            lambda: ["alpha", "beta"])
+        parser = config_mod.build_parser()
+        args = parser.parse_args(['--scheme', 'alpha'])
+        assert args.scheme == 'alpha'
+
+
+    def test_scheme_rejected_when_not_discovered(self, monkeypatch):
+        import pytest
+        from furrifier import config as config_mod
+        monkeypatch.setattr(config_mod, "list_available_schemes",
+                            lambda: ["alpha", "beta"])
+        parser = config_mod.build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(['--scheme', 'gamma'])
+
+
+    def test_scheme_unconstrained_when_discovery_empty(self, monkeypatch):
+        """If the schemes dir can't be located, argparse can't usefully
+        validate — pass anything through and let load_scheme raise its
+        own error later."""
+        from furrifier import config as config_mod
+        monkeypatch.setattr(config_mod, "list_available_schemes", lambda: [])
+        parser = config_mod.build_parser()
+        args = parser.parse_args(['--scheme', 'anything'])
+        assert args.scheme == 'anything'

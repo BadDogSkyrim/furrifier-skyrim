@@ -45,10 +45,10 @@ from esplib.utils import BinaryReader
 
 from .config import FurrifierConfig
 from .main import run_furrification
+from .race_defs import list_available_schemes
 
 
 PLUGIN_EXTS = {".esp", ".esm", ".esl"}
-SCHEMES = ["all_races", "cats_dogs", "legacy", "user"]
 
 
 def _read_plugin_masters(path: Path) -> list[str]:
@@ -245,7 +245,7 @@ class FurrifierWindow(QMainWindow):
         # Scheme
         grid.addWidget(QLabel("Scheme:"), row, 0)
         self.scheme_combo = QComboBox(frame)
-        self.scheme_combo.addItems(SCHEMES)
+        self.scheme_combo.addItems(list_available_schemes())
         self.scheme_combo.setCurrentText("all_races")
         grid.addWidget(self.scheme_combo, row, 1, 1, 2)
         row += 1

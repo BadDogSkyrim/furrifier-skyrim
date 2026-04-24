@@ -85,7 +85,7 @@ furrify_skyrim/
 ```
 
 These schemes provide a variety of ways to assign vanilla to furry races. The "user"
-scheme is for you to edit according to your preferences. No Python knowledge needed just
+scheme is for you to edit according to your preferences. No Python knowledge needed - just
 edit the text files.
 
 ## Two kinds of customization
@@ -106,9 +106,9 @@ Furrifier ships with four schemes:
 
 | Scheme       | Description                                                                                    |
 | ------------ | ---------------------------------------------------------------------------------------------- |
-| `all_races`  | Default. Maps every vanilla humanoid race to a Yiffy Age (YAS) furry race. Includes Sailors.   |
-| `cats_dogs`  | Same as `all_races` minus the Sailor subrace.                                                  |
-| `legacy`     | Original BDFurrySkyrim mappings (Imperial → Vaalsark instead of Kettu, Breton → Kettu, etc.).  |
+| `all_races`  | Default. Maps every vanilla humanoid race to a Yiffy Age (YAS) furry race. Includes Cellans (otters) and ungulates. Some NPCs are furrified outside Skyrim's races, e.g. Skaal are jackals, Falkreath is all deer, and so forth.   |
+| `cats_dogs`  | Cats and dogs only, like it says on the box. Canids are human, felines mer. |
+| `legacy`     | Original BDFurrySkyrim mappings (Imperial → Vaalsark, Breton → Kettu, etc.).  |
 | `user`       | A minimal starting point for your own customizations. Edit, run. Save a copy so it doesn't get overwritten when the furrifier updates. |
 
 ### Scheme file sections
@@ -177,7 +177,7 @@ context at load time, regardless of which scheme you pick. Furrifier ships with:
 
 | File               | Description                                                                                   |
 | ------------------ | --------------------------------------------------------------------------------------------- |
-| `yas_races.toml`   | The catalog for the Yiffy Age of Skyrim races. 231 headpart equivalents, 126 hair labels.     |
+| `yas_races.toml`   | The catalog for the Yiffy Age of Skyrim races. Cats, dogs, otters, ungulates.     |
 | `user_races.toml`  | An empty template for your own additions.                                                     |
 
 ### Race catalog file sections
@@ -221,7 +221,7 @@ or edit the shipped files. Just drop in new ones.
 ### Graceful fallback
 
 If a race referenced by your scheme has no catalog data, furrifier uses ESP-defined
-fallback paths for its headparts. It will first look for similar headparts by label (or
+paths for its headparts. It will first look for similar headparts by label (or
 blind/non-blind for eyes); failing that it chooses one randomly.
 
 ## What's NOT in these files

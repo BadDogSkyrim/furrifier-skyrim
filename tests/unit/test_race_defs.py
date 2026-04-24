@@ -4,14 +4,21 @@ from pathlib import Path
 
 import pytest
 from furrifier.race_defs import (
-    _parse_leveled_npcs, load_scheme, RaceDefContext, SCHEMES,
+    _parse_leveled_npcs, list_available_schemes, load_scheme, RaceDefContext,
 )
+
+
+# Canonical shipped schemes. Anything in `schemes/*.toml` beyond these
+# (e.g. the frozen test schemes) is filtered out at load time by the
+# _TEST_ONLY-marker convention — the tests below only care about the
+# four shipped ones.
+_SHIPPED_SCHEMES = ('all_races', 'cats_dogs', 'legacy', 'user')
 
 
 class TestLoadScheme:
     def test_all_schemes_load(self):
         """Every registered scheme loads without error."""
-        for name in SCHEMES:
+        for name in _SHIPPED_SCHEMES:
             ctx = load_scheme(name)
             assert len(ctx.assignments) > 0
 
@@ -61,7 +68,7 @@ class TestLoadScheme:
         from races/*.toml, not only the scheme file itself. A previous
         pass had a TOML-scoping bug that silently swallowed headpart_equivalents
         into [npc_races]; this test would have caught it."""
-        for scheme in SCHEMES:
+        for scheme in _SHIPPED_SCHEMES:
             ctx = load_scheme(scheme)
             assert len(ctx.headpart_equivalents) > 0, (
                 f"scheme {scheme!r} loaded with no headpart_equivalents — "
@@ -158,6 +165,54 @@ class TestRaceDefContext:
         # Deer male facial hair = 0.2.
         assert ctx.get_headpart_probability(
             'BDDeerRace', 'Male', 'FACIAL_HAIR') == 0.2
+
+
+class TestListAvailableSchemes:
+    def test_lists_shipped_schemes(self):
+        """The four shipped scheme files show up in discovery."""
+        names = list_available_schemes()
+        for expected in _SHIPPED_SCHEMES:
+            assert expected in names, (
+                f"{expected!r} missing from {names}")
+
+    def test_returns_sorted_lowercase_stems(self, monkeypatch, tmp_path):
+        """Discovery reads stems of *.toml files, lowercased and sorted,
+        so argparse's type=str.lower path matches regardless of source
+        case."""
+        schemes_dir = tmp_path / "schemes"
+        schemes_dir.mkdir()
+        (schemes_dir / "Zebra.toml").touch()
+        (schemes_dir / "alpha.toml").touch()
+        (schemes_dir / "Mango.toml").touch()
+        (schemes_dir / "readme.txt").touch()  # non-toml ignored
+
+        from furrifier import race_defs
+        monkeypatch.setattr(race_defs, "_find_resource_dir",
+                            lambda name: schemes_dir if name == "schemes" else None)
+        assert list_available_schemes() == ["alpha", "mango", "zebra"]
+
+    def test_hides_test_fixtures(self, monkeypatch, tmp_path):
+        """`_test`-suffixed stems are frozen fixtures — load_scheme can
+        still resolve them by name, but they don't appear in CLI /
+        GUI discovery."""
+        schemes_dir = tmp_path / "schemes"
+        schemes_dir.mkdir()
+        (schemes_dir / "all_races.toml").touch()
+        (schemes_dir / "all_races_test.toml").touch()
+        (schemes_dir / "ungulate_test.toml").touch()
+
+        from furrifier import race_defs
+        monkeypatch.setattr(race_defs, "_find_resource_dir",
+                            lambda name: schemes_dir if name == "schemes" else None)
+        assert list_available_schemes() == ["all_races"]
+
+    def test_empty_when_dir_missing(self, monkeypatch):
+        """If the schemes dir can't be located, return an empty list —
+        caller decides how to handle it (argparse skips choices, GUI
+        combo stays empty)."""
+        from furrifier import race_defs
+        monkeypatch.setattr(race_defs, "_find_resource_dir", lambda name: None)
+        assert list_available_schemes() == []
 
 
 class TestLeveledNpcsParsing:

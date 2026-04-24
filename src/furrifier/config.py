@@ -10,6 +10,8 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .race_defs import list_available_schemes
+
 
 @dataclass
 class FurrifierConfig:
@@ -93,10 +95,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument('--patch', default='YASNPCPatch.esp',
                         help='Output patch filename (default: YASNPCPatch.esp)')
+    scheme_kwargs = {}
+    discovered = list_available_schemes()
+    if discovered:
+        scheme_kwargs['choices'] = discovered
     parser.add_argument('--scheme', default='all_races',
                         type=str.lower,
-                        choices=['all_races', 'cats_dogs', 'legacy', 'user'],
-                        help='Race assignment scheme (default: all_races)')
+                        help='Race assignment scheme (default: all_races). '
+                             'Any *.toml file in schemes/ is selectable.',
+                        **scheme_kwargs)
     parser.add_argument('--no-armor', action='store_true',
                         help='Skip armor furrification')
     parser.add_argument('--no-schlongs', action='store_true',

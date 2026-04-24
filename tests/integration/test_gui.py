@@ -106,6 +106,21 @@ def test_config_from_fields_facegen_limit(qapp):
         window.deleteLater()
 
 
+def test_scheme_combo_populates_from_discovery(qapp, monkeypatch):
+    """The scheme combo lists whatever list_available_schemes() returns
+    — no hard-coded scheme names in the GUI module."""
+    from furrifier import gui as gui_mod
+    monkeypatch.setattr(gui_mod, "list_available_schemes",
+                        lambda: ["alpha", "beta", "gamma"])
+    window = gui_mod.FurrifierWindow()
+    try:
+        items = [window.scheme_combo.itemText(i)
+                 for i in range(window.scheme_combo.count())]
+        assert items == ["alpha", "beta", "gamma"]
+    finally:
+        window.deleteLater()
+
+
 def test_config_from_fields_facetint_size(qapp):
     """Tint-size combo: Auto → None; explicit size → int."""
     from furrifier.gui import FurrifierWindow

@@ -23,11 +23,6 @@ from .models import LeveledNpcEntry, LeveledNpcGroup, RaceAssignment, Subrace
 
 log = logging.getLogger(__name__)
 
-# Canonical list of schemes shipped with furrifier. Used by argparse
-# --choices and by the test suite. User-added scheme files aren't in
-# this tuple; they'd be added here (or discovered dynamically) in a
-# future pass.
-SCHEMES = ('all_races', 'cats_dogs', 'legacy', 'user')
 
 
 class RaceDefContext:
@@ -248,6 +243,27 @@ def _parse_leveled_npcs(data: dict, ctx: 'RaceDefContext',
             match_substrings=list(group.get('match_substrings', [])),
             races=races,
         ))
+
+
+def list_available_schemes() -> list[str]:
+    """Names of scheme TOMLs discovered in the shipped `schemes/` folder.
+
+    Returns a sorted list of lowercase stems so argparse's
+    ``type=str.lower`` path matches files regardless of source case.
+    Empty list if the directory can't be located — callers decide
+    whether that's a hard error (load_scheme raises) or a no-op
+    (argparse drops the choices constraint, GUI combo stays empty).
+
+    Stems ending in ``_test`` are frozen test fixtures (filtered out
+    of the kit by furrify_skyrim.spec) and are hidden from the CLI /
+    GUI even in dev mode. `load_scheme` itself can still load them —
+    they're only excluded from discovery.
+    """
+    schemes_dir = _find_resource_dir('schemes')
+    if schemes_dir is None:
+        return []
+    stems = (p.stem.lower() for p in schemes_dir.glob('*.toml'))
+    return sorted(s for s in stems if not s.endswith('_test'))
 
 
 def _find_resource_dir(name: str) -> Optional[Path]:
