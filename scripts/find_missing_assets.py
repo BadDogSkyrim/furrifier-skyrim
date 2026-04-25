@@ -218,7 +218,11 @@ def scan(plugins, resolver: AssetResolver,
             if record.signature not in _SCHEMA_BY_SIG:
                 unschemaed[record.signature] += 1
                 continue
-            fid = int(record.form_id)
+            # record.form_id is the plugin-local FormID with the
+            # master byte indexing into that plugin's master list.
+            # normalize_form_id remaps it to the active load order so
+            # the displayed high byte matches what xEdit/Vortex shows.
+            fid = int(record.normalize_form_id(record.form_id))
             edid = record.editor_id or ""
             for path, sig in extract_paths_from_record(record):
                 if ignore_re is not None and ignore_re.search(path):
