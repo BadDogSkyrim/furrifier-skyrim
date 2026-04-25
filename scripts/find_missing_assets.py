@@ -64,6 +64,14 @@ log = logging.getLogger("find_missing_assets")
 _PATH_VALUE_NAMES = {"model", "icon", "filename", "texture"}
 
 
+# File extensions we never report on. RACE.MODL stores an
+# `actors\character\upperbodyhumanmale.egt` reference on every
+# Skyrim race; the .egt format is a legacy LE morph file and SSE
+# doesn't ship them. Every RACE in every plugin would otherwise
+# show up as missing.
+_IGNORED_EXTENSIONS = {"egt"}
+
+
 def _collect_path_subrecords(schema) -> set[str]:
     """Recursively walk an EspRecord/EspGroup's members, returning
     the set of subrecord signatures whose value is a path string —
@@ -168,7 +176,11 @@ def extract_paths_from_record(record):
             continue
         if not value or not isinstance(value, str):
             continue
-        yield (value.strip().replace("/", "\\").lower(), sig)
+        path = value.strip().replace("/", "\\").lower()
+        ext = path.rsplit(".", 1)[-1] if "." in path else ""
+        if ext in _IGNORED_EXTENSIONS:
+            continue
+        yield (path, sig)
 
 
 def candidate_paths(rel: str) -> list[str]:
