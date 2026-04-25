@@ -192,14 +192,60 @@ def resolve_any(resolver: AssetResolver, rel: str) -> bool:
     return False
 
 
+def _build_load_order_remap(plugin_set):
+    """Build ``{plugin_name_lower: (is_esl, idx_among_kind)}`` so we
+    can format form ids the way xEdit / Vortex display them.
+
+    esplib's ``LoadOrder.index_of`` (and therefore
+    ``record.normalize_form_id``) treats ESLs as regular slots,
+    which produces high-byte indices that are off by however many
+    ESLs precede the plugin. ESLs actually live in the FE
+    namespace (``FE NNN ooo`` — 12-bit ESL index, 12-bit object
+    index). This helper computes the right counter for each kind.
+    """
+    remap: dict[str, tuple[bool, int]] = {}
+    regular_idx = 0
+    esl_idx = 0
+    for plugin in plugin_set:
+        name = plugin.file_path.name.lower()
+        if plugin.is_esl:
+            remap[name] = (True, esl_idx)
+            esl_idx += 1
+        else:
+            remap[name] = (False, regular_idx)
+            regular_idx += 1
+    return remap
+
+
+def _format_fid(record, remap: dict) -> str:
+    """xEdit-style form id for a record's self-defined entry.
+    Regular plugins → ``XXxxxxxx`` (8 hex chars). ESL plugins →
+    ``FENNNooo`` where NNN is the ESL load index and ooo is the
+    12-bit object index."""
+    if record.plugin is None:
+        return f"{int(record.form_id) & 0xFFFFFFFF:08X}"
+    name = record.plugin.file_path.name.lower()
+    info = remap.get(name)
+    raw = int(record.form_id)
+    if info is None:
+        return f"{raw & 0xFFFFFFFF:08X}"
+    is_esl, idx = info
+    if is_esl:
+        return f"FE{idx & 0xFFF:03X}{raw & 0xFFF:03X}"
+    return f"{idx & 0xFF:02X}{raw & 0xFFFFFF:06X}"
+
+
 def scan(plugins, resolver: AssetResolver,
+         lo_remap: dict,
          ignore_re: re.Pattern | None = None,
          verbose: bool = False
          ) -> tuple[dict[str, list[tuple]], dict[str, int]]:
     """Return ``(by_plugin, unschemaed_counts)``.
 
-    ``by_plugin`` is ``{plugin_name: [(form_id, editor_id,
+    ``by_plugin`` is ``{plugin_name: [(form_id_str, editor_id,
     subrec_sig, path), ...]}`` of missing references per plugin.
+    ``form_id_str`` is the xEdit-formatted hex id from
+    ``_format_fid`` (ESL-aware).
 
     ``unschemaed_counts`` is ``{record_signature: count}`` for record
     types encountered in the scanned plugins that esplib has no
@@ -213,16 +259,12 @@ def scan(plugins, resolver: AssetResolver,
     for i, plugin in enumerate(plugins, 1):
         name = plugin.file_path.name
         t0 = time.perf_counter()
-        refs: list[tuple] = []  # (path, sig, form_id, editor_id)
+        refs: list[tuple] = []  # (path, sig, fid_str, editor_id)
         for record in plugin.records:
             if record.signature not in _SCHEMA_BY_SIG:
                 unschemaed[record.signature] += 1
                 continue
-            # record.form_id is the plugin-local FormID with the
-            # master byte indexing into that plugin's master list.
-            # normalize_form_id remaps it to the active load order so
-            # the displayed high byte matches what xEdit/Vortex shows.
-            fid = int(record.normalize_form_id(record.form_id))
+            fid = _format_fid(record, lo_remap)
             edid = record.editor_id or ""
             for path, sig in extract_paths_from_record(record):
                 if ignore_re is not None and ignore_re.search(path):
@@ -311,9 +353,11 @@ def main() -> int:
 
     ignore_re = re.compile(args.ignore_regex) if args.ignore_regex else None
 
+    lo_remap = _build_load_order_remap(plugin_set)
+
     with AssetResolver.for_data_dir(data_dir) as resolver:
         by_plugin, unschemaed = scan(
-            selected, resolver,
+            selected, resolver, lo_remap=lo_remap,
             ignore_re=ignore_re, verbose=args.verbose)
 
     if args.output:
@@ -331,12 +375,13 @@ def main() -> int:
                       f"({unique} unique missing) ===", file=sink)
                 if args.summary:
                     continue
-                # Column widths: form id is fixed 8 hex; edid adapts
-                # to the longest in this plugin (minimum 20 for
-                # readability).
+                # Column widths: form id is the xEdit-style hex
+                # string (fixed 8 chars: XXxxxxxx for regular,
+                # FENNNooo for ESL); edid adapts to the longest in
+                # this plugin (minimum 20 for readability).
                 edid_w = max([20] + [len(edid) for _, edid, _, _ in items])
                 for fid, edid, sig, path in items:
-                    print(f"  {fid:08X}  {(edid or '-'):<{edid_w}}  "
+                    print(f"  {fid:>8}  {(edid or '-'):<{edid_w}}  "
                           f"{sig}  {path}", file=sink)
 
             total = sum(len(v) for v in by_plugin.values())
