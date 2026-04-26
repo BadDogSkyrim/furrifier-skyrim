@@ -101,7 +101,13 @@ Omluag       = "YASReachmanRace"
 Rondach      = "YASReachmanRace"
 Gralnach     = "YASReachmanRaceChild"
 
-# Leveled NPC list extension. Get more NPCs of races that don't have a vanilla couterpart in game.
+# Leveled NPC list extension. Adds occasional duplicates of vanilla
+# NPCs into LVLN leveled lists so furry races without a direct vanilla
+# pairing (Cellan, Vaalsark, Deer, Horse, Bagha) show up at low rates
+# in random encounters. See README.md, "How leveled-NPC extension
+# works." Listed races should NOT be ones already directly paired in
+# the `races = [...]` table above — those NPCs already appear with
+# their furry race in every leveled list by default.
 [leveled_npcs]
 exclude_substrings = ["LCharOrc", "Thalmor", "Alikir", "Forsworn"]
 

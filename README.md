@@ -144,7 +144,67 @@ DLC2SkaalVillageCitizenFaction = "YASSkaalRace"
 [npc_races]
 Ainethach = "YASReachmanRace"
 Gralnach  = "YASReachmanRaceChild"
+
+# 5. Leveled-NPC list extension (optional). For furry races that don't
+#    have a direct vanilla pairing in the `races =` table above, this
+#    section adds occasional duplicates of vanilla NPCs into existing
+#    LVLN leveled lists, so they show up at low rates in random
+#    encounters. Omit the whole `[leveled_npcs]` section to skip this
+#    pass entirely.
+[leveled_npcs]
+exclude_substrings = ["LCharOrc", "Thalmor"]  # LVLNs whose EditorID contains any of these are skipped
+
+# A group fires on LVLNs whose EditorID matches any of its substrings
+# (case-insensitive). First-match-wins across groups; a group with no
+# match_substrings is the catch-all.
+[[leveled_npcs.groups]]
+match_substrings = ["bandit"]
+races = [
+  {race = "BDDeerRace"     , probability = 0.01},  # 1% per LVLO entry
+  {race = "BDHorseRace"    , probability = 0.10},
+  {race = "YASVaalsarkRace", probability = 0.10},
+]
+
+# Catch-all (no match_substrings): applies to any LVLN that didn't match
+# any earlier group.
+[[leveled_npcs.groups]]
+races = [
+  {race = "BDDeerRace" , probability = 0.05},
+]
 ```
+
+### How leveled-NPC extension works
+
+For each entry in a matched LVLN, furrifier rolls one decision per
+listed `{race, probability}` pair. On a hit, it duplicates the source
+NPC, reassigns the duplicate to the target furry race, runs full
+furrification on it, and appends a new leveled-list entry pointing at
+the duplicate (preserving the source entry's level and count). The
+same `(source NPC, target race)` pair only generates one shared
+duplicate even if it hits in multiple lists.
+
+Rolls are **deterministic**: the same scheme + load order produces the
+same set of duplicates every run. Tweaking probabilities will reshuffle
+who gets added.
+
+Useful conventions:
+- **List races that don't already have a direct vanilla pairing.** If
+  `OrcRace → BDMinoRace` is in the top-of-file `races = [...]` table,
+  every Orc bandit is already a Mino bandit; listing `BDMinoRace` here
+  too just stacks duplicates of Nord bandits *also* turning into Minos.
+  Use this section for races that only show up via subraces or NPC
+  overrides (e.g. Cellan, Vaalsark, Deer, Horse, Bagha).
+- **`match_substrings` is case-insensitive substring matching** on the
+  LVLN's EditorID. Skyrim names them `LCharBanditMelee`,
+  `LCharNecromancer`, etc., so `["bandit"]` is enough to catch the
+  whole bandit family.
+- **`exclude_substrings`** at the section root applies before group
+  matching — a useful escape hatch for LVLNs whose names happen to
+  collide with one of your group rules but shouldn't be touched
+  (vanilla example: skipping Thalmor lists so they stay all-Altmer).
+- Omit the `[leveled_npcs]` section entirely to skip the whole pass.
+  `cats_dogs.toml` and `user.toml` ship without it; `all_races.toml`
+  uses it for ungulate / sailor / Skaal diversity.
 
 ### Where to put your own preferences
 
