@@ -2,10 +2,9 @@
 
 The furrifier furrifies every NPC in your active load order. Vanilla races are given a
 furry appearance; headpart and armor races are reassigned so furrified races get furry
-variants of armor and headparts.
+variants of armor and headparts; schlongs (if present) are reassigned to apply or not apply appropriately; and optionally NPCs of new races are added to leveled lists.
 
-It operates on your entire active load order — change what's included by changing what mods
-are active.
+It operates on your entire active load order by default — change what's included by changing what mods are active, or by selecting them explictly at run time.
 
 The kit ships two executables:
 
@@ -33,9 +32,9 @@ Options:
 | `--data-dir PATH` | Skyrim Data dir for READING source assets | auto-detected |
 | `-o`, `--output DIR` | Directory to WRITE patch + FaceGenData | same as `--data-dir` |
 | `--no-armor` | Skip armor furrification | |
-| `--no-schlongs` | Disable SOS (schlong) compatibility | ignored if SOS not loaded |
+| `--no-schlongs` | Don't alter SOS (schlong) compatibility | ignored if SOS not loaded |
 | `--no-facegen` | Skip building per-NPC FaceGen nif + DDS | |
-| `--facetint-size N` | Square edge length (pixels) for baked face-tint DDS. One of 256, 512, 1024, 2048, 4096 | match first mask's native size (vanilla = 512) |
+| `--facetint-size N` | Baked face-tint size. One of 256, 512, 1024, 2048, 4096 | match first mask's native size (vanilla = 512) |
 | `--limit N` | Cap FaceGen to the first N NPCs — useful for previewing | no cap |
 | `--debug` | Enable debug logging | |
 | `--log FILE` | Write log to file | |
@@ -102,7 +101,10 @@ touching race data. If you're providing a race you don't need to specify how it 
 
 ## Schemes
 
-Furrifier ships with four schemes:
+`--scheme NAME` matches against any `.toml` file in the `schemes/`
+folder next to the exe — drop a new file in there and it's
+selectable next launch (CLI tab-completion + the GUI's scheme
+combo both pick it up automatically). Furrifier ships with four:
 
 | Scheme       | Description                                                                                    |
 | ------------ | ---------------------------------------------------------------------------------------------- |
@@ -208,15 +210,19 @@ Useful conventions:
 
 ### Where to put your own preferences
 
-The `--scheme` flag accepts exactly four values: `all_races`, `cats_dogs`, `legacy`, and
-`user`. **`schemes/user.toml` is the one you're meant to edit.** It ships as a
+Easiest path: edit **`schemes/user.toml`**. It ships as a
 Reachman-and-Skaal-only subset of `all_races` — simple enough to read in one sitting and
-then reshape to your taste. Edit it and run `furrify_skyrim --scheme user`.
+then reshape to your taste. Save your edits, run `furrify_skyrim --scheme user`.
 
-The other three (`all_races`, `cats_dogs`, `legacy`) are furrifier's shipped defaults. You
+Want to keep multiple of your own variants? Drop them in as new files —
+`schemes/my_minoraids.toml`, `schemes/my_canines_only.toml`, whatever — and select with
+`--scheme my_minoraids` etc. The folder is scanned at startup so any `.toml` in there
+becomes a valid `--scheme` value. The GUI's scheme combo populates from the same scan.
+
+The shipped four (`all_races`, `cats_dogs`, `legacy`, `user`) are furrifier's defaults. You
 can edit them directly, but your edits will be overwritten the next time you update
-furrifier. (`user.toml` may get overwritten too, but not with anything important. Just
-make sure you save a copy of your changes.)
+furrifier. (`user.toml` may get overwritten too, but not with anything important. Save
+copies of files you don't want to lose.)
 
 ## Races: furry headpart catalogs
 
