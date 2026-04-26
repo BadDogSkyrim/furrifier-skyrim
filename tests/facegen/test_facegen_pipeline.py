@@ -348,28 +348,6 @@ def test_manifest_tint_entries_carry_tinp():
             assert "tinp" in tint, f"{npc['label']} tini={tint['tini']} no tinp"
 
 
-# ------------------------------------------------------------- TEXCONV SMOKE --
-
-
-def test_texconv_wrapper_produces_bc7():
-    _ensure_paths()
-    from furrifier.facegen.texconv import encode_bc7, TEXCONV_EXE
-    assert TEXCONV_EXE.is_file()
-    tmp_dir = HERE / "out_tints"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    tmp_png = tmp_dir / "_texconv_smoke.png"
-    Image.new("RGBA", (64, 64), (128, 64, 32, 255)).save(tmp_png)
-    dds = encode_bc7(tmp_png, tmp_dir)
-    try:
-        with open(dds, "rb") as f:
-            data = f.read(148)
-        dxgi = struct.unpack("<I", data[128:132])[0]
-        assert dxgi == 98, f"dxgiFormat={dxgi}, expected 98 (BC7_UNORM)"
-    finally:
-        tmp_png.unlink(missing_ok=True)
-        dds.unlink(missing_ok=True)
-
-
 # ----------------------------------------------------------------- DDS TINT --
 
 

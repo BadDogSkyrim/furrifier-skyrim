@@ -2,8 +2,9 @@
 Phase 2b: composite an NPC's tint layers into one RGBA overlay.
 
 Alpha-composites each tint layer (mask grayscale x TINC color x TINV
-intensity) onto an accumulator. Saves as PNG, then encodes to BC7 DDS
-via texconv.
+intensity) onto an accumulator. The result feeds the in-process BC7
+encoder (``dds.write_bc7_dds``) for the final FaceTint DDS — no PNG
+intermediate, no subprocess.
 
 Missing mask files (mod references a path we can't resolve loose or
 from any BSA) are skipped with a warning — losing a layer's detail
@@ -33,7 +34,6 @@ import numpy as np
 from PIL import Image
 
 from .assets import AssetResolver
-from .texconv import encode_bc7
 
 
 log = logging.getLogger("furrifier.facegen.composite")
