@@ -75,7 +75,7 @@ def live_output(tmp_path_factory):
     # nifs / tri files / tint masks all resolve as loose files.
     with AssetResolver(VANILLA_ASSETS, bsa_readers=[]) as resolver:
         build_facegen_nif(info, resolver, nif_path)
-        png_path, dds_path = build_facetint_dds(info, resolver, out_dir)
+        dds_path = build_facetint_dds(info, resolver, out_dir)
 
     return {
         "info": info,

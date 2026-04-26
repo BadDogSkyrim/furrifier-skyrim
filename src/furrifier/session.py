@@ -297,7 +297,7 @@ def bake_facegen_for(
         nif_path = facegeom_dir / f"{form_id}.nif"
         build_facegen_nif(info, resolver, nif_path)
         if info.get("tints"):
-            _, dds_path = build_facetint_dds(info, resolver, facetint_dir)
+            dds_path = build_facetint_dds(info, resolver, facetint_dir)
         else:
             dds_path = None
     return nif_path, dds_path

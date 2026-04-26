@@ -4,3 +4,12 @@ __pycache__/
 .pytest_cache/
 dist/
 build/
+
+# bc7enc native build intermediates. The vendored sources are checked
+# in under native/bc7enc/, but cl.exe leaves .obj/.exp/.lib/.dll there
+# during builds. The "shipped" DLL is src/furrifier/facegen/_bc7enc.dll,
+# copied there by native/build_bc7enc.cmd.
+native/bc7enc/*.obj
+native/bc7enc/*.exp
+native/bc7enc/*.lib
+native/bc7enc/*.dll

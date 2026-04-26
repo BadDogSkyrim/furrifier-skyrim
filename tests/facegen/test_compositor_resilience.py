@@ -116,7 +116,6 @@ def test_build_facetint_dds_still_writes_when_some_masks_missing(data_dir):
     }
     out_dir = data_dir / "facetint_out"
     with AssetResolver(data_dir, bsa_readers=[]) as resolver:
-        png, dds = build_facetint_dds(npc_info, resolver, out_dir,
-                                      output_size=256)
-    assert png.is_file() and png.stat().st_size > 0
+        dds = build_facetint_dds(npc_info, resolver, out_dir,
+                                 output_size=256)
     assert dds.is_file() and dds.stat().st_size > 0

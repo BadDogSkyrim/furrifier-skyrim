@@ -391,11 +391,16 @@ def test_dds_dimensions_match_reference(npc_output):
 
 def test_dds_mean_pixel_diff_within_tolerance(npc_output):
     """BC7 compression noise + our approximation of CK's exact blend
-    math; tolerance of 5/255 mean."""
+    math; tolerance of 5/255 mean on RGB. Alpha tolerance bumped to
+    1.5 in the bc7enc switchover (2026-04-25): texconv and bc7enc
+    make different per-block mode choices for alpha and bc7enc lands
+    ~0.75 mean alpha diff against the CK reference vs texconv's
+    ~0.25. RGB quality is unchanged or slightly better; alpha drift
+    is well below visible threshold."""
     ours = np.asarray(Image.open(npc_output["our_dds"]).convert("RGBA"), dtype=np.int16)
     ref = np.asarray(Image.open(npc_output["ref_dds"]).convert("RGBA"), dtype=np.int16)
     diff = np.abs(ours - ref)
-    for ch, name, tol in [(0, "R", 5.0), (1, "G", 5.0), (2, "B", 5.0), (3, "A", 0.5)]:
+    for ch, name, tol in [(0, "R", 5.0), (1, "G", 5.0), (2, "B", 5.0), (3, "A", 1.5)]:
         mean = diff[..., ch].mean()
         assert mean < tol, f"{name} mean {mean:.2f} exceeds {tol}"
 

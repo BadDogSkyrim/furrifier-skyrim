@@ -221,49 +221,51 @@ def composite_layers(resolver: AssetResolver, tints: list[dict],
     return acc
 
 
+def _composite_to_uint8(npc_info: dict, resolver: AssetResolver,
+                        output_size: Optional[int]) -> np.ndarray:
+    """Composite the NPC's tint layers and return a uint8 RGBA array
+    ready for either PNG save or in-process BC7 encode."""
+    form_id = npc_info["form_id"]
+    if output_size is not None and output_size not in VALID_OUTPUT_SIZES:
+        raise ValueError(
+            f"output_size {output_size} not in {VALID_OUTPUT_SIZES}")
+    tints = npc_info.get("tints") or []
+    if not tints:
+        raise ValueError(f"NPC {form_id} has no tint layers to composite")
+    acc = composite_layers(resolver, tints,
+                           base_color=npc_info.get("qnam_color"),
+                           output_size=output_size)
+    return np.clip(acc * 255.0, 0, 255).astype(np.uint8)
+
+
 def build_facetint_png(npc_info: dict, resolver: AssetResolver,
                        out_dir: Path,
                        output_size: Optional[int] = None) -> Path:
     """Composite an NPC's tint layers and save the result as PNG.
-
-    Same shape as `build_facetint_dds` but stops before the BC7 encode
-    step. The live furrifier pipeline uses this to emit PNGs for all
-    NPCs first, then batches a single texconv call per output folder
-    — amortizes the subprocess spawn cost, which otherwise dominates
-    run time for large patches.
-    """
-    form_id = npc_info["form_id"]
-
-    if output_size is not None and output_size not in VALID_OUTPUT_SIZES:
-        raise ValueError(
-            f"output_size {output_size} not in {VALID_OUTPUT_SIZES}"
-        )
-
-    tints = npc_info.get("tints") or []
-    if not tints:
-        raise ValueError(f"NPC {form_id} has no tint layers to composite")
-
-    acc = composite_layers(resolver, tints,
-                           base_color=npc_info.get("qnam_color"),
-                           output_size=output_size)
-    as_u8 = np.clip(acc * 255.0, 0, 255).astype(np.uint8)
-
+    Kept for tests and any caller that still wants the intermediate
+    PNG (single-NPC CLI, debugging). Production runs use
+    ``build_facetint_dds`` to skip the PNG round-trip entirely."""
+    as_u8 = _composite_to_uint8(npc_info, resolver, output_size)
     out_dir.mkdir(parents=True, exist_ok=True)
-    png_path = out_dir / f"{form_id}.png"
+    png_path = out_dir / f"{npc_info['form_id']}.png"
     Image.fromarray(as_u8, "RGBA").save(png_path)
     return png_path
 
 
 def build_facetint_dds(npc_info: dict, resolver: AssetResolver,
                        out_dir: Path,
-                       output_size: Optional[int] = None) -> tuple[Path, Path]:
-    """Composite + BC7-encode one NPC's face tint. Used for single-NPC
-    callers (tests, CLI); the batch pipeline uses `build_facetint_png`
-    plus a trailing `encode_bc7_batch` for the spawn-cost amortization."""
-    png_path = build_facetint_png(npc_info, resolver, out_dir,
-                                  output_size=output_size)
-    dds_path = encode_bc7(png_path, out_dir)
-    return png_path, dds_path
+                       output_size: Optional[int] = None) -> Path:
+    """Composite + BC7-encode one NPC's face tint directly to disk,
+    no PNG round-trip. Replaces the old PNG → texconv subprocess path:
+    encode happens in-process via the vendored ``bc7enc`` library
+    (``furrifier/native/bc7enc/``). Returns the DDS path."""
+    from .dds import write_bc7_dds
+
+    as_u8 = _composite_to_uint8(npc_info, resolver, output_size)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dds_path = out_dir / f"{npc_info['form_id']}.dds"
+    write_bc7_dds(dds_path, as_u8)
+    return dds_path
 
 
 def composite_to_png_and_dds(data_root: Path, form_id: str,
@@ -287,7 +289,9 @@ def composite_to_png_and_dds(data_root: Path, form_id: str,
               f"v={t['intensity']:.2f}  {name}")
 
     with AssetResolver(data_root, bsa_readers=[]) as resolver:
-        png_path, dds_path = build_facetint_dds(
+        png_path = build_facetint_png(
+            entry, resolver, out_dir, output_size=output_size)
+        dds_path = build_facetint_dds(
             entry, resolver, out_dir, output_size=output_size)
     print(f"[png]  {png_path} ({png_path.stat().st_size} bytes)")
     print(f"[dds]  {dds_path} ({dds_path.stat().st_size} bytes)")

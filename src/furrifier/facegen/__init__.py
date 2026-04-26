@@ -27,7 +27,6 @@ from .assets import AssetResolver
 from .assemble import build_facegen_nif
 from .composite import build_facetint_dds, build_facetint_png
 from .extract import extract_npc_info
-from .texconv import encode_bc7_batch
 
 
 log = logging.getLogger("furrifier.facegen")
@@ -190,13 +189,9 @@ def build_facegen_for_patch(
     # goes for 1000+ NPCs. Cheap to track; printed at the end.
     t_extract = 0.0
     t_nif = 0.0
-    t_png = 0.0
+    t_tint = 0.0
     t_run_start = time.perf_counter()
-
-    # Collected PNGs for a batched texconv pass at the end. Keyed by
-    # the final output directory so we encode each base-plugin folder
-    # independently — BC7 output lands next to the PNG input.
-    pngs_by_dir: dict[Path, list[Path]] = {}
+    dds_count = 0
 
     # One resolver for the run — the BSA extraction cache builds up
     # across NPCs, so shared vanilla headpart nifs only get pulled once.
@@ -216,44 +211,27 @@ def build_facegen_for_patch(
                 t2 = time.perf_counter()
                 if info.get("tints"):
                     tint_dir = facetint_root / base_plugin
-                    png = build_facetint_png(info, resolver, tint_dir,
-                                             output_size=facetint_size)
-                    pngs_by_dir.setdefault(tint_dir, []).append(png)
+                    build_facetint_dds(info, resolver, tint_dir,
+                                       output_size=facetint_size)
+                    dds_count += 1
                 t3 = time.perf_counter()
                 t_extract += t1 - t0
                 t_nif += t2 - t1
-                t_png += t3 - t2
+                t_tint += t3 - t2
                 succeeded += 1
             except Exception as exc:
                 log.warning("FaceGen skipped %s: %s", edid_for_log, exc)
                 failed += 1
 
-        # Batch BC7-encode every folder's PNGs. One texconv.exe spawn
-        # per base-plugin folder (with chunking for CLI length limits)
-        # instead of one per NPC — this is the big speedup.
-        t_tex_start = time.perf_counter()
-        total_pngs = sum(len(v) for v in pngs_by_dir.values())
-        for folder, pngs in pngs_by_dir.items():
-            log.info("FaceGen: batch-encoding %d DDSes under %s/",
-                     len(pngs), folder.name)
-            # Chunk ~200 files per spawn to stay safely under the
-            # Windows CreateProcess command-line limit even with long
-            # paths.
-            _CHUNK = 200
-            for start in range(0, len(pngs), _CHUNK):
-                encode_bc7_batch(pngs[start:start + _CHUNK], folder)
-        t_encode = time.perf_counter() - t_tex_start
-
     t_total = time.perf_counter() - t_run_start
     log.info("FaceGen: %d succeeded, %d failed in %.1fs (%d DDSes encoded)",
-             succeeded, failed, t_total, total_pngs)
+             succeeded, failed, t_total, dds_count)
     if succeeded:
         log.info("FaceGen phase totals (avg/NPC ms):  "
-                 "extract=%.0f  nif=%.0f  tint_png=%.0f  tex_batch=%.0f  total=%.0f",
+                 "extract=%.0f  nif=%.0f  tint_dds=%.0f  total=%.0f",
                  1000 * t_extract / succeeded,
                  1000 * t_nif / succeeded,
-                 1000 * t_png / succeeded,
-                 1000 * t_encode / succeeded,
+                 1000 * t_tint / succeeded,
                  1000 * t_total / succeeded)
     return succeeded, failed
 
