@@ -142,7 +142,8 @@ DLC2SkaalVillageCitizenFaction = "YASSkaalRace"
 
 # 4. Per-NPC overrides (by NPC EditorID). These beat everything above.
 #    Useful for NPCs whose vanilla race tag is wrong for the character
-#    (e.g. Forsworn who are tagged Breton but should be Reachmen).
+#    (e.g. Ainethach is clearly a Reachman but has no identifier other than
+#    his name that we could trigger on).
 [npc_races]
 Ainethach = "YASReachmanRace"
 Gralnach  = "YASReachmanRaceChild"
@@ -171,7 +172,7 @@ races = [
 # any earlier group.
 [[leveled_npcs.groups]]
 races = [
-  {race = "BDDeerRace" , probability = 0.05},
+  {race = "YASShanRace" , probability = 0.05},
 ]
 ```
 
@@ -210,19 +211,14 @@ Useful conventions:
 
 ### Where to put your own preferences
 
-Easiest path: edit **`schemes/user.toml`**. It ships as a
+Easiest path: Use **`schemes/user.toml`** as a template. It ships as a
 Reachman-and-Skaal-only subset of `all_races` — simple enough to read in one sitting and
-then reshape to your taste. Save your edits, run `furrify_skyrim --scheme user`.
-
-Want to keep multiple of your own variants? Drop them in as new files —
-`schemes/my_minoraids.toml`, `schemes/my_canines_only.toml`, whatever — and select with
-`--scheme my_minoraids` etc. The folder is scanned at startup so any `.toml` in there
-becomes a valid `--scheme` value. The GUI's scheme combo populates from the same scan.
+then reshape to your taste. Save your edits as a new file, e.g. `my_scheme.toml`, run `furrify_skyrim --scheme my_scheme`. Any `.toml` in the `schemes` folder is considered
+a valid `--scheme` value. The GUI's scheme combo populates from the same scan.
 
 The shipped four (`all_races`, `cats_dogs`, `legacy`, `user`) are furrifier's defaults. You
 can edit them directly, but your edits will be overwritten the next time you update
-furrifier. (`user.toml` may get overwritten too, but not with anything important. Save
-copies of files you don't want to lose.)
+furrifier.
 
 ## Races: furry headpart catalogs
 
@@ -266,6 +262,8 @@ headpart_equivalents = [
 YASDogMaleHairDreads001 = "DREADS,BOLD,FUNKY,LONG"
 YASCatMaleHairDreads001 = "DREADS,BOLD,FUNKY,LONG"
 ```
+
+The headpart_labels attempt to prevent an NPC from getting wholly inappropriate headparts, primarily hair. The NPC is given a set of labels derived from their current hair, outfit, and other data. Hair is selected for their furry model that best matches those labels.
 
 ### Adding your own race catalog
 
