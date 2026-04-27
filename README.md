@@ -66,6 +66,54 @@ scheme or plugin set refreshes the preview automatically. Buttons on the preview
 - **◀ / ▶** — browse the NPCs you've previewed.
 - **Reframe** — reset the camera to its default framing if you've orbited off the head.
 
+## Troubleshooting
+
+### "Failed to start embedded Python interpreter" under Mod Organizer 2
+
+The most common cause is **installing the furrifier kit as a managed
+mod inside MO2's mods folder**. MO2's virtual filesystem (USVFS)
+interferes with PyInstaller's bootloader when it tries to load
+`python313.dll` and the rest of the bundled runtime from
+`_internal/`.
+
+**Fix:** unzip the furrifier kit somewhere *outside* MO2's mod
+tree — e.g. `C:\Tools\furrify_skyrim\`. Then in MO2, add it as an
+external executable pointing at that path:
+
+> Tools menu → "Executables…" → Add → Title: "Furrifier",
+> Binary: `C:\Tools\furrify_skyrim\furrify_skyrim_gui.exe`
+
+Launching from MO2 still hooks the running process so the
+furrifier reads MO2's virtual Data view (correct behaviour — that's
+the whole reason to launch from MO2). The kit's own files stay on
+the real filesystem where the PyInstaller bootloader can find them.
+
+If it still fails:
+
+- **Try double-clicking the exe from Explorer.** If it works
+  outside MO2 but fails when launched from MO2, you've confirmed
+  it's an MO2 configuration issue and not the kit.
+- **Check Windows Defender's Protection History.** First-run
+  heuristics occasionally quarantine `python313.dll` from
+  PyInstaller bundles. Restore it and add the kit's install
+  folder to your AV exclusions.
+- **MO2 version:** older MO2 2.4.x builds had USVFS bugs that
+  broke PyInstaller bundles more often. 2.5+ is much better.
+
+### Windows SmartScreen warning on first launch
+
+The exe isn't code-signed yet, so SmartScreen warns "Windows
+protected your PC" the first time you run it. Click **More info →
+Run anyway**. Subsequent launches don't prompt.
+
+### Scheme changes aren't taking effect
+
+If you edit a scheme TOML and don't see the change in the next run,
+make sure you're editing the file **next to the exe**
+(`furrify_skyrim/schemes/*.toml`), not the source-tree copy under
+your dev checkout. The kit-bundled copies are stamped at build
+time; the live exe reads from the loose `schemes/` folder beside it.
+
 # Customizing the furrification
 
 Furrifier is configured via two folders of TOML files next to the executable:
