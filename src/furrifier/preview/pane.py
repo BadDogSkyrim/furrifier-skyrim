@@ -457,10 +457,8 @@ class PreviewPane(QWidget):
         them under the viewer. Each shape's `name` is the HDPT
         editor id our bake stamped in — useful for confirming which
         headparts the furrifier picked for this NPC."""
-        import sys
-        pynifly_dev = r"C:\Modding\PyNifly\io_scene_nifly"
-        if pynifly_dev not in sys.path:
-            sys.path.insert(0, pynifly_dev)
+        from .._pyn import ensure_dev_path
+        ensure_dev_path()
         try:
             from pyn.pynifly import NifFile
             nif = NifFile(str(nif_path))

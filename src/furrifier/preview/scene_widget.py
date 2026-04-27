@@ -20,10 +20,12 @@ from typing import List, Optional
 import numpy as np
 from PIL import Image
 
-# PyNifly package __init__ imports bpy; bypass it for standalone use.
-_PYNIFLY_DEV = r"C:\Modding\PyNifly\io_scene_nifly"
-if _PYNIFLY_DEV not in sys.path:
-    sys.path.insert(0, _PYNIFLY_DEV)
+# PyNifly package __init__ imports bpy; pyn/ has no such taint.
+# `ensure_dev_path` adds Hugh's PyNifly checkout to sys.path in dev
+# mode and no-ops in a frozen kit (where PyInstaller already bundled
+# the package via spec pathex).
+from .._pyn import ensure_dev_path
+ensure_dev_path()
 
 from PySide6.QtCore import QByteArray, QObject, QUrl, Property
 from PySide6.QtGui import QVector3D

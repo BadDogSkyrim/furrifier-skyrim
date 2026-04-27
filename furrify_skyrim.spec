@@ -35,17 +35,38 @@
 #     data-dir bundling is required.
 
 
+# --- PyNifly bundling ----------------------------------------------------
+#
+# `pyn` is the PyNifly Python package — not a pip dependency, just a
+# folder Hugh has alongside the furrifier checkout. We add its parent to
+# pathex so PyInstaller's analyzer discovers `from pyn.pynifly import …`
+# imports; ship NiflyDLL.dll (its native counterpart) at the install-mode
+# location pyn/niflydll.py expects (one level above the pyn package); and
+# ship pyn/../tri/trifile.py because facegen/morph.py loads it via
+# importlib to bypass tri/__init__.py's bpy import.
+PYNIFLY_ROOT = r'C:\Modding\PyNifly\io_scene_nifly'
+NIFLY_DLL = r'C:\Modding\PyNifly\NiflyDLL\x64\Release\NiflyDLL.dll'
+
+_PYNIFLY_DATAS = [
+    (PYNIFLY_ROOT + r'\tri\trifile.py', 'tri'),
+]
+_PYNIFLY_BINARIES = [
+    (NIFLY_DLL, '.'),
+]
+
+
 # --- CLI exe (console) ---------------------------------------------------
 
 a_cli = Analysis(
     ['launcher.py'],
-    pathex=[],
-    binaries=[],
+    pathex=[PYNIFLY_ROOT],
+    binaries=_PYNIFLY_BINARIES,
     datas=[('src/furrifier/assets/*.png', 'furrifier/assets'),
            ('src/furrifier/assets/*.ico', 'furrifier/assets'),
            ('src/furrifier/assets/*.svg', 'furrifier/assets'),
            ('src/furrifier/preview/scene.qml', 'furrifier/preview'),
-           ('src/furrifier/facegen/_bc7enc.dll', 'furrifier/facegen')],
+           ('src/furrifier/facegen/_bc7enc.dll', 'furrifier/facegen')]
+          + _PYNIFLY_DATAS,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -79,13 +100,14 @@ exe_cli = EXE(
 
 a_gui = Analysis(
     ['launcher_gui.py'],
-    pathex=[],
-    binaries=[],
+    pathex=[PYNIFLY_ROOT],
+    binaries=_PYNIFLY_BINARIES,
     datas=[('src/furrifier/assets/*.png', 'furrifier/assets'),
            ('src/furrifier/assets/*.ico', 'furrifier/assets'),
            ('src/furrifier/assets/*.svg', 'furrifier/assets'),
            ('src/furrifier/preview/scene.qml', 'furrifier/preview'),
-           ('src/furrifier/facegen/_bc7enc.dll', 'furrifier/facegen')],
+           ('src/furrifier/facegen/_bc7enc.dll', 'furrifier/facegen')]
+          + _PYNIFLY_DATAS,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

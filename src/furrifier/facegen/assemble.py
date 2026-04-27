@@ -27,7 +27,8 @@ from typing import Optional
 
 import numpy as np
 
-sys.path.insert(0, r"C:\Modding\PyNifly\io_scene_nifly")
+from .._pyn import ensure_dev_path
+ensure_dev_path()
 from pyn.pynifly import NifFile
 from pyn.structs import TransformBuf
 from pyn.nifdefs import PynBufferTypes

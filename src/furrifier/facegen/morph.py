@@ -41,9 +41,10 @@ log = logging.getLogger("furrifier.facegen.morph")
 # Load PyNifly's TriFile module once at import time — bypassing the
 # package's bpy-tainted __init__. Previously happened per-call, which
 # dominated the tri-load cost when many NPCs share headparts.
+from .._pyn import trifile_path
 _tri_spec = importlib.util.spec_from_file_location(
     "_furrifier_trifile",
-    r"C:\Modding\PyNifly\io_scene_nifly\tri\trifile.py",
+    trifile_path(),
 )
 _tri_module = importlib.util.module_from_spec(_tri_spec)
 _tri_spec.loader.exec_module(_tri_module)

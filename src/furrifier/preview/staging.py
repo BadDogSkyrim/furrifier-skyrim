@@ -25,10 +25,9 @@ import sys
 from pathlib import Path
 from typing import Set
 
-# PyNifly package __init__ imports bpy; bypass it.
-_PYNIFLY_DEV = r"C:\Modding\PyNifly\io_scene_nifly"
-if _PYNIFLY_DEV not in sys.path:
-    sys.path.insert(0, _PYNIFLY_DEV)
+# PyNifly package __init__ imports bpy; pyn/ has no such taint.
+from .._pyn import ensure_dev_path
+ensure_dev_path()
 
 from ..facegen import AssetResolver
 

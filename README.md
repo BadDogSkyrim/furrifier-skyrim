@@ -71,10 +71,7 @@ scheme or plugin set refreshes the preview automatically. Buttons on the preview
 ### "Failed to start embedded Python interpreter" under Mod Organizer 2
 
 The most common cause is **installing the furrifier kit as a managed
-mod inside MO2's mods folder**. MO2's virtual filesystem (USVFS)
-interferes with PyInstaller's bootloader when it tries to load
-`python313.dll` and the rest of the bundled runtime from
-`_internal/`.
+mod inside MO2's mods folder**. Don't do that.
 
 **Fix:** unzip the furrifier kit somewhere *outside* MO2's mod
 tree — e.g. `C:\Tools\furrify_skyrim\`. Then in MO2, add it as an
@@ -84,9 +81,7 @@ external executable pointing at that path:
 > Binary: `C:\Tools\furrify_skyrim\furrify_skyrim_gui.exe`
 
 Launching from MO2 still hooks the running process so the
-furrifier reads MO2's virtual Data view (correct behaviour — that's
-the whole reason to launch from MO2). The kit's own files stay on
-the real filesystem where the PyInstaller bootloader can find them.
+furrifier reads MO2's virtual Data view.
 
 If it still fails:
 
