@@ -197,3 +197,11 @@ if _readme_src.is_file():
     print(f"Copied {_readme_src} -> {_readme_dst}")
 else:
     print(f"WARNING: README.md not found at {_readme_src}")
+
+# Images referenced by README.md (e.g. the GUI screenshot at the top).
+# Without these, markdown viewers in the unzipped kit show broken links.
+_images_src = _spec_dir / 'images'
+_images_dst = _dist_dir / 'images'
+if _images_src.is_dir():
+    shutil.copytree(_images_src, _images_dst, dirs_exist_ok=True)
+    print(f"Copied {_images_src} -> {_images_dst}")

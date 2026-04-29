@@ -1,5 +1,7 @@
 # Furrifier
 
+![Furrifier GUI](images/Screenshot.png)
+
 The furrifier furrifies every NPC in your active load order. Vanilla races are given a
 furry appearance; headpart and armor races are reassigned so furrified races get furry
 variants of armor and headparts; schlongs (if present) are reassigned to apply or not apply appropriately; and optionally NPCs of new races are added to leveled lists.
