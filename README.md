@@ -1,4 +1,4 @@
-# Furrifier
+# Skyrim Furrifier
 
 ![Furrifier GUI](images/Screenshot.png)
 
