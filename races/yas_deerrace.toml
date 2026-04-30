@@ -110,3 +110,4 @@ BDDeerMaleMohawkFeathers       = "MOHAWK,FUNKY,BOLD"
 BDDeerMaleShaggy001            = "MESSY,LONG"
 BDDeerMane                     = "BOLD,LONG,MANE"
 BDDeerNoHair                   = "NEAT,BOLD,BALD,BUZZ"
+BDDeerHorns9                   = "EXCLUDE" # Giraffe
