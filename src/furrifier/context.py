@@ -419,13 +419,18 @@ class FurryContext:
         record.add_subrecord('QNAM', struct.pack('<fff',
                              qr / 255.0, qg / 255.0, qb / 255.0))
 
-    def furrify_all_npcs(self, plugins) -> int:
+    def furrify_all_npcs(self, plugins, only_npc: Optional[str] = None) -> int:
         """Furrify all NPCs across the load order. Returns count.
 
         Only processes the winning override of each NPC (last in load
         order). Skips NPCs that have already been overridden by plugins
         loaded after the ones we're processing.
+
+        `only_npc` (when set) restricts patching to a single NPC matched
+        by EditorID (case-insensitive) or hex form-id object index.
         """
+        from .facegen import _matches_only_npc
+
         # Build a map of FormID -> winning record across all plugins.
         # Last occurrence wins (plugins are in load order).
         winning: dict[int, Record] = {}
@@ -433,6 +438,12 @@ class FurryContext:
             for npc in plugin.get_records_by_signature('NPC_'):
                 obj_id = npc.form_id.value & 0x00FFFFFF
                 winning[obj_id] = npc
+
+        if only_npc is not None:
+            winning = {oid: npc for oid, npc in winning.items()
+                       if _matches_only_npc(npc, only_npc)}
+            if not winning:
+                log.warning(f"--only={only_npc!r} matched no NPC")
 
         count = 0
         processed = 0

@@ -106,7 +106,11 @@ Item {
                     delegate: Model {
                         geometry: modelData.geometry
                         materials: PrincipledMaterial {
-                            baseColor: "white"
+                            // Skyrim Skin_Tint(5) shapes carry a per-shape
+                            // tint baked into the nif (e.g. BDMino horn
+                            // base — issue #11). Non-Skin_Tint shapes get
+                            // neutral white so the diffuse passes through.
+                            baseColor: modelData.baseColor
                             baseColorMap: Texture {
                                 source: modelData.diffuseUrl
                                 minFilter: Texture.Linear

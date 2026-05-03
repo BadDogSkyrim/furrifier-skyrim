@@ -112,6 +112,24 @@ def _inject_patch_into_plugin_set(plugin_set: PluginSet, patch) -> None:
     plugin_set._override_index = None
 
 
+def _matches_only_npc(npc, only_npc: str) -> bool:
+    """True if `npc` is the one targeted by --only.
+
+    Match against EDID (case-insensitive) first; if `only_npc` parses
+    as hex, also match against the form-id object index (low 24 bits).
+    Accepts plain hex, `0x`-prefixed, full 8-digit or 6-digit forms.
+    """
+    edid = (npc.editor_id or "").lower()
+    if edid and edid == only_npc.lower():
+        return True
+    cleaned = only_npc.lower().removeprefix("0x")
+    try:
+        target_obj_id = int(cleaned, 16) & 0xFFFFFF
+    except ValueError:
+        return False
+    return (int(npc.form_id) & 0xFFFFFF) == target_obj_id
+
+
 def build_facegen_for_patch(
         patch,
         plugin_set: PluginSet,
@@ -119,7 +137,8 @@ def build_facegen_for_patch(
         output_dir: Optional[Path] = None,
         progress: Optional[ProgressCallback] = None,
         limit: Optional[int] = None,
-        facetint_size: Optional[int] = None) -> tuple[int, int]:
+        facetint_size: Optional[int] = None,
+        only_npc: Optional[str] = None) -> tuple[int, int]:
     """Build FaceGen files for every NPC override in `patch`.
 
     `data_dir` is the Skyrim install Data folder — source of headpart
@@ -171,6 +190,17 @@ def build_facegen_for_patch(
     skipped_trait = before_trait_filter - len(npcs)
     if skipped_trait:
         log.info("FaceGen: skipping %d trait-templated NPCs", skipped_trait)
+    # --only filter: bake exactly one NPC matched by EDID or hex form-id.
+    # Used for visual debugging where a full bake is overkill.
+    if only_npc is not None:
+        matched = [n for n in npcs if _matches_only_npc(n, only_npc)]
+        if not matched:
+            log.warning("FaceGen: --only=%r matched no NPC in patch", only_npc)
+        else:
+            edid = matched[0].editor_id or f"0x{int(matched[0].form_id):08X}"
+            log.info("FaceGen: --only=%r → baking %s", only_npc, edid)
+        npcs = matched
+
     # Apply user-requested cap. Default (None) runs everything.
     if limit is not None and len(npcs) > limit:
         log.info("FaceGen: limit=%d — baking first %d of %d NPCs",

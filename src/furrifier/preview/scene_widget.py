@@ -222,6 +222,16 @@ def load_nif_shapes(nif_path: Path) -> List[dict]:
             if raw_normals is not None:
                 raw_normals = raw_normals @ rot.T
         alpha_mode, alpha_cutoff = _alpha_from_nif_shape(shape)
+        # Skyrim's Skin_Tint(5) shader multiplies the diffuse by the
+        # baked skinTintColor at render time. Mirror that in the
+        # preview's PrincipledMaterial.baseColor (issue #11). Other
+        # shader types render with neutral white = no tint.
+        sh = shape.shader
+        sh.properties
+        if sh._properties.Shader_Type == 5:
+            tint = tuple(float(c) for c in sh._properties.skinTintColor)
+        else:
+            tint = (1.0, 1.0, 1.0)
         shapes.append({
             "name": shape.name,
             "verts": verts,
@@ -234,6 +244,7 @@ def load_nif_shapes(nif_path: Path) -> List[dict]:
             "facegen_detail": shape.textures.get("FacegenDetail", ""),
             "alpha_mode": alpha_mode,
             "alpha_cutoff": alpha_cutoff,
+            "skin_tint_color": tint,
         })
     return shapes
 
@@ -280,6 +291,7 @@ class ShapeModel(QObject):
                  diffuse_url: str,
                  alpha_mode: str = ALPHA_DEFAULT,
                  alpha_cutoff: float = 0.5,
+                 skin_tint_color: tuple[float, float, float] = (1.0, 1.0, 1.0),
                  parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
         self._name = name
@@ -287,6 +299,8 @@ class ShapeModel(QObject):
         self._diffuse_url = diffuse_url
         self._alpha_mode = alpha_mode
         self._alpha_cutoff = float(alpha_cutoff)
+        r, g, b = (max(0, min(255, int(round(c * 255)))) for c in skin_tint_color)
+        self._base_color = f"#{r:02x}{g:02x}{b:02x}"
 
     @Property(str, constant=True)
     def name(self) -> str:
@@ -309,6 +323,13 @@ class ShapeModel(QObject):
     @Property(float, constant=True)
     def alphaCutoff(self) -> float:
         return self._alpha_cutoff
+
+    @Property(str, constant=True)
+    def baseColor(self) -> str:
+        """Hex `#rrggbb` for QML's PrincipledMaterial.baseColor.
+        Encodes the nif's skinTintColor for Skin_Tint shapes; neutral
+        white for everything else."""
+        return self._base_color
 
 
 class PreviewContext(QObject):
@@ -581,7 +602,8 @@ class FacegenSceneWidget(QWidget):
             shape_models.append(ShapeModel(
                 s["name"], geom, diffuse_url,
                 alpha_mode=s.get("alpha_mode", ALPHA_DEFAULT),
-                alpha_cutoff=s.get("alpha_cutoff", 0.5)))
+                alpha_cutoff=s.get("alpha_cutoff", 0.5),
+                skin_tint_color=s.get("skin_tint_color", (1.0, 1.0, 1.0))))
             all_verts.append(s["verts"])
 
         if all_verts:

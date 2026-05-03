@@ -98,18 +98,22 @@ def _run_furrification_body(
     # Furrify NPCs
     emit("Furrifying NPCs")
     log.info("Furrifying NPCs...")
-    npc_count = furry.furrify_all_npcs(plugin_set)
+    npc_count = furry.furrify_all_npcs(plugin_set, only_npc=config.only_npc)
     log.info(f"Furrified {npc_count} NPCs")
 
-    # Extend leveled NPC lists with furry duplicates
-    if ctx.leveled_npc_groups:
+    # Extend leveled NPC lists with furry duplicates. --only mode skips
+    # this — leveled-list extension creates NPC duplicates across the
+    # whole load order, which defeats the "one NPC for visual diffing"
+    # purpose of --only.
+    if ctx.leveled_npc_groups and config.only_npc is None:
         log.info("Extending leveled NPC lists...")
         new_count, list_count = furry.extend_leveled_npcs(plugin_set)
         log.info(
             f"Created {new_count} leveled-list NPCs across {list_count} lists")
 
-    # Furrify armor
-    if config.furrify_armor:
+    # Furrify armor (skipped under --only — armor is a load-order-wide
+    # transform unrelated to a single NPC's facegen).
+    if config.furrify_armor and config.only_npc is None:
         emit("Merging armor overrides")
         log.info("Merging armor overrides...")
         merge_count = furry.merge_armor_overrides(plugin_set)
@@ -120,8 +124,8 @@ def _run_furrification_body(
         armor_count = furry.furrify_all_armor(plugin_set)
         log.info(f"Modified {armor_count} armor records")
 
-    # Furrify schlongs
-    if config.furrify_schlongs:
+    # Furrify schlongs (skipped under --only).
+    if config.furrify_schlongs and config.only_npc is None:
         from .schlongs import furrify_all_schlongs
         emit("Furrifying schlongs")
         log.info("Furrifying schlongs...")
@@ -206,7 +210,8 @@ def _run_facegen(config, patch, plugin_set, data_dir, output_dir, progress):
                                 output_dir=output_dir,
                                 progress=progress,
                                 limit=config.facegen_limit,
-                                facetint_size=config.facetint_size)
+                                facetint_size=config.facetint_size,
+                                only_npc=config.only_npc)
 
     if not config.profile_file:
         _run()

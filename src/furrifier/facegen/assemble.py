@@ -91,10 +91,14 @@ HDPT_TYPE_FACE = 1  # Only Face-type headparts get the per-NPC FacegenDetail.
 HDPT_TYPE_EYES = 2  # Must use NiSkinInstance — see _should_demote.
 
 
+_SHADER_TYPE_SKIN_TINT = 5
+
+
 def copy_shape(dst: NifFile, fg: "NiNode", src_shape, rename_to: str,
                facegen_detail_path: str | None = None,
                verts_override=None,
-               texture_overrides: dict[str, str] | None = None) -> "NiShape":
+               texture_overrides: dict[str, str] | None = None,
+               skin_tint_color: tuple[float, float, float] | None = None) -> "NiShape":
     """Copy one shape from its source nif into `dst` under `fg`, renamed.
 
     Preserves: verts, tris, uvs, normals, vertex colors, local xform,
@@ -173,6 +177,15 @@ def copy_shape(dst: NifFile, fg: "NiNode", src_shape, rename_to: str,
     new_sh = new_shape.shader
     if src_sh._properties is not None:
         new_sh._properties = src_sh._properties.copy()
+        # Skin_Tint shaders multiply the shape's diffuse by skinTintColor
+        # at render time. CK's Ctrl-F4 stamps the NPC's QNAM into this
+        # field; without it the source headpart's neutral [1,1,1] would
+        # leave the shape uncolored (issue #11: BDMino horn base gray
+        # instead of the intended dark base).
+        if (skin_tint_color is not None
+                and new_sh._properties.Shader_Type == _SHADER_TYPE_SKIN_TINT):
+            new_sh._properties.skinTintColor = (
+                tuple(skin_tint_color))
     new_shape.save_shader_attributes()
 
     for slot, path in src_shape.textures.items():
@@ -328,6 +341,9 @@ def build_facegen_nif(npc_info: dict, resolver: AssetResolver,
         f"textures\\actors\\character\\FaceGenData\\FaceTint\\"
         f"{base_plugin}\\{form_id}.dds"
     )
+    qnam_color = npc_info.get("qnam_color")
+    skin_tint_color = (tuple(c / 255.0 for c in qnam_color)
+                       if qnam_color else None)
     for edid, hdpt_type, _src_nif, src_shape, morphed_verts, tex_over in sources:
         print(f"[copy] {edid} (type={hdpt_type}, source shape "
               f"'{src_shape.name}', {len(src_shape.verts)} verts)")
@@ -335,7 +351,8 @@ def build_facegen_nif(npc_info: dict, resolver: AssetResolver,
         copy_shape(dst, fg, src_shape, rename_to=edid,
                    facegen_detail_path=face_tint,
                    verts_override=morphed_verts,
-                   texture_overrides=tex_over)
+                   texture_overrides=tex_over,
+                   skin_tint_color=skin_tint_color)
 
     # Demote pass — PyNifly's `skin()` always creates
     # BSDismemberSkinInstance, but eyes and other non-dismemberable

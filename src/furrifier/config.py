@@ -47,6 +47,12 @@ class FurrifierConfig:
     # None = match the first resolvable mask's native size (vanilla = 512).
     facetint_size: Optional[int] = None
 
+    # Bake exactly one NPC, matched by EditorID (case-insensitive) or
+    # hex form-id object index. Skips leveled-list extension, armor, and
+    # schlongs so a single-NPC export takes seconds, not minutes. Used
+    # for visual diffing against a CK-baked reference.
+    only_npc: Optional[str] = None
+
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> FurrifierConfig:
         patch = args.patch or cls.patch_filename
@@ -65,6 +71,7 @@ class FurrifierConfig:
             profile_file=args.profile,
             facegen_limit=args.facegen_limit,
             facetint_size=args.facetint_size,
+            only_npc=args.only_npc,
         )
 
 
@@ -138,6 +145,11 @@ def build_parser() -> argparse.ArgumentParser:
                         help='Square edge length (pixels) for baked face-tint '
                              'DDS output. Default: match first mask\'s native '
                              'size (vanilla = 512).')
+    parser.add_argument('--only', dest='only_npc', metavar='EDID_OR_FID',
+                        help='Bake exactly one NPC (matched by EditorID '
+                             "case-insensitively, or hex form-id object "
+                             'index). Skips armor, schlongs, and leveled-'
+                             'list extension; useful for visual diffing.')
     return parser
 
 
