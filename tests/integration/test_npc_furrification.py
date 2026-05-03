@@ -1010,7 +1010,7 @@ class TestDetermineNPCRace:
         assert npc is not None
         result = furry_ctx.determine_npc_race(npc)
         assert result is not None
-        orig, assigned, furry = result
+        orig, assigned, furry, _breed = result
         assert orig == 'NordRace'
         assert furry == 'YASLykaiosRace'
 
@@ -1027,7 +1027,7 @@ class TestDetermineNPCRace:
         assert npc is not None
         result = furry_ctx.determine_npc_race(npc)
         assert result is not None
-        orig, assigned, furry = result
+        orig, assigned, furry, _breed = result
         assert assigned == 'YASReachmanRace'
         assert furry == 'YASKonoiRace'
 
@@ -1037,7 +1037,7 @@ class TestDetermineNPCRace:
         assert npc is not None
         result = furry_ctx.determine_npc_race(npc)
         assert result is not None
-        orig, assigned, furry = result
+        orig, assigned, furry, _breed = result
         assert orig == 'DarkElfRace'
         assert furry == 'YASKaloRace'
 
@@ -1047,7 +1047,7 @@ class TestDetermineNPCRace:
         assert npc is not None
         result = furry_ctx.determine_npc_race(npc)
         assert result is not None
-        orig, assigned, furry = result
+        orig, assigned, furry, _breed = result
         assert orig == 'BretonRace'
         assert furry == 'YASKygarraRace'
 
@@ -1061,7 +1061,7 @@ class TestNPCChildRace:
         race_result = furry_ctx.determine_npc_race(npc)
         if race_result is None:
             pytest.skip("Eirid's race not in furrification context")
-        orig, assigned, furry = race_result
+        orig, assigned, furry, _breed = race_result
         assert 'Child' in furry or 'Child' in assigned, \
             f"Eirid should stay a child race, got {furry}"
 

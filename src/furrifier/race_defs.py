@@ -19,7 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from .models import LeveledNpcEntry, LeveledNpcGroup, RaceAssignment, Subrace
+from .models import Breed, LeveledNpcEntry, LeveledNpcGroup, RaceAssignment, Subrace
+from .util import hash_string
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +65,11 @@ class RaceDefContext:
         # specific lists like Thalmor where lore-bound races shouldn't
         # gain furry duplicates)
         self.leveled_npc_exclusions: list[str] = []
+        # Breed registry — see PLAN_FURRIFIER_BREEDS.md.
+        # breeds: name -> Breed; breeds_by_parent: parent_race_edid ->
+        # ordered list (definition order matters for the deterministic roll).
+        self.breeds: dict[str, Breed] = {}
+        self.breeds_by_parent: dict[str, list[Breed]] = {}
 
 
     def set_race(self, vanilla_id: str, furry_id: str) -> None:
@@ -83,6 +89,70 @@ class RaceDefContext:
             vanilla_basis=vanilla_basis,
             furry_id=furry_id,
         )
+
+
+    def set_breed(self, name: str, parent_race_edid: str,
+                  probability: float = 0.0) -> None:
+        """Register a breed under its parent race.
+
+        Probabilities for any single parent must sum to ≤ 1.0; the
+        remainder is the breed-less slice (NPC drawn from parent's
+        unconstrained pool). Raises ValueError on overflow.
+        """
+        existing_total = sum(b.probability for b in
+                             self.breeds_by_parent.get(parent_race_edid, []))
+        if existing_total + probability > 1.0 + 1e-9:
+            raise ValueError(
+                f"breed {name!r}: total probability for parent race "
+                f"{parent_race_edid!r} would exceed 1.0 "
+                f"({existing_total + probability:.3f} = "
+                f"{existing_total:.3f} existing + {probability:.3f} new)")
+        breed = Breed(name=name, parent_race_edid=parent_race_edid,
+                      probability=probability)
+        self.breeds[name] = breed
+        self.breeds_by_parent.setdefault(parent_race_edid, []).append(breed)
+
+
+    def resolve_race_or_breed(self, name: str) -> tuple[str, Optional[Breed]]:
+        """Resolve a name (from a scheme entry) to (engine_race_edid, breed).
+
+        If `name` is a registered breed, returns its parent race EDID and
+        the Breed object. Otherwise the name is assumed to be a race
+        EDID and returned as-is with breed=None — race-existence
+        validation happens later at session setup, when actual RACE
+        records get loaded from the plugin set.
+        """
+        breed = self.breeds.get(name)
+        if breed is not None:
+            return breed.parent_race_edid, breed
+        return name, None
+
+
+    def roll_breed(self, npc_alias: str,
+                   parent_race_edid: str) -> Optional[Breed]:
+        """Hash-roll across the breeds defined for `parent_race_edid`.
+
+        Returns the picked breed, or None if the roll lands in the
+        breed-less slice (always the case for races with no breeds, or
+        when the sum of breed probabilities is < 1.0 and the hash falls
+        outside any slice). probability=0 breeds are never auto-picked.
+        """
+        breeds = self.breeds_by_parent.get(parent_race_edid)
+        if not breeds:
+            return None
+        # 10000 buckets gives 0.0001 resolution — enough for the 0.01
+        # granularity scheme authors will reasonably use.
+        BUCKETS = 10000
+        roll = hash_string(npc_alias, 7919, BUCKETS)
+        cumulative = 0
+        for breed in breeds:
+            slice_width = int(round(breed.probability * BUCKETS))
+            if slice_width == 0:
+                continue
+            if roll < cumulative + slice_width:
+                return breed
+            cumulative += slice_width
+        return None
 
 
     def set_faction_race(self, faction_id: str, race_id: str) -> None:
@@ -304,6 +374,12 @@ def _apply_race_catalog(ctx: RaceDefContext, data: dict) -> None:
             if hp_type_name in ('race', 'sex'):
                 continue
             ctx.set_headpart_probability(race, sex, hp_type_name, probability)
+    for entry in data.get('breeds', []):
+        ctx.set_breed(
+            name=entry['breed'],
+            parent_race_edid=entry['race'],
+            probability=float(entry.get('probability', 0.0)),
+        )
 
 
 def _load_race_catalogs(ctx: RaceDefContext) -> None:

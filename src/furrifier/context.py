@@ -14,7 +14,7 @@ from typing import Optional
 from esplib import Plugin, PluginSet, Record
 from esplib.utils import FormID
 
-from .models import Sex, HeadpartType, HeadpartInfo, Bodypart
+from .models import Breed, Sex, HeadpartType, HeadpartInfo, Bodypart
 from .race_defs import RaceDefContext
 from .vanilla_setup import unalias
 from .furry_load import is_npc_female, is_child_race
@@ -107,11 +107,23 @@ class FurryContext:
 
 
     def determine_npc_race(self, npc: Record,
-                           ) -> Optional[tuple[str, str, str]]:
-        """Determine vanilla, assigned, and furry race for an NPC.
+                           ) -> Optional[tuple[str, str, str, Optional[Breed]]]:
+        """Determine vanilla, assigned, and furry race + breed for an NPC.
 
-        Returns (original_race_id, assigned_race_id, furry_race_id) or None
-        if the NPC's race isn't furrifiable.
+        Returns (original_race_id, assigned_race_id, furry_race_id,
+        breed) or None if the NPC's race isn't furrifiable.
+
+        `furry_race_id` is the engine-level race EDID (used for RNAM
+        and headpart pool lookups). `breed`, if non-None, constrains
+        which headparts/tints get picked at patch time without changing
+        the engine race. See PLAN_FURRIFIER_BREEDS.md.
+
+        Breed assignment rules:
+        - When a `[npc_races]` / `[faction_races]` / `vanilla→furry`
+          mapping resolves directly to a breed name, that breed is used
+          (no probability roll).
+        - Otherwise, when the resolved race has breeds with non-zero
+          probability, hash-roll across them to pick a breed (or none).
         """
         rnam = npc.get_subrecord('RNAM')
         if rnam is None:
@@ -153,14 +165,28 @@ class FurryContext:
                 assigned_race_id = race_id
                 break
 
+        # Resolve assigned_race_id (which may be a vanilla race, subrace,
+        # or breed name) into a furry-race name string. The string itself
+        # may still be a race or a breed; resolve_race_or_breed splits.
         if assigned_race_id in self.ctx.assignments:
-            furry_race_id = self.ctx.assignments[assigned_race_id].furry_id
+            furry_name = self.ctx.assignments[assigned_race_id].furry_id
         elif assigned_race_id in self.ctx.subraces:
-            furry_race_id = self.ctx.subraces[assigned_race_id].furry_id
+            furry_name = self.ctx.subraces[assigned_race_id].furry_id
+        elif assigned_race_id in self.ctx.breeds:
+            # Direct breed assignment via [npc_races] / [faction_races].
+            furry_name = assigned_race_id
         else:
             return None
 
-        return (original_race_id, assigned_race_id, furry_race_id)
+        furry_race_id, breed = self.ctx.resolve_race_or_breed(furry_name)
+
+        # If no breed yet and the engine race has breeds with
+        # probability > 0, hash-roll for one.
+        if breed is None:
+            npc_alias = unalias(npc.editor_id or str(npc.form_id))
+            breed = self.ctx.roll_breed(npc_alias, furry_race_id)
+
+        return (original_race_id, assigned_race_id, furry_race_id, breed)
 
     def furrify_npc(self, npc: Record,
                     override_furry_race: Optional[str] = None,
@@ -196,11 +222,15 @@ class FurryContext:
             # gets rewritten) and the visual furry race.
             assigned_race_id = override_furry_race
             furry_race_id = override_furry_race
+            # Leveled-list breed support is Phase 5 — for now the
+            # override path is breed-less even if override_furry_race
+            # happens to name a breed.
+            breed = None
         else:
             race_result = self.determine_npc_race(npc)
             if race_result is None:
                 return None
-            original_race_id, assigned_race_id, furry_race_id = race_result
+            original_race_id, assigned_race_id, furry_race_id, breed = race_result
         race_record = self.races.get(original_race_id)
         npc_sex = self.determine_npc_sex(npc, race_record)
         npc_alias = unalias(npc.editor_id or str(npc.form_id))

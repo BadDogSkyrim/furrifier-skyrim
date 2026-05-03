@@ -75,6 +75,10 @@ BYOHHousecarlFalkreathCrimeFaction = "YASFalkreathRace"
 [npc_races]
 Jolf         = "YASSailorRace"
 
+# Breed override for UraggroShub — exercises the breed-via-npc_races path.
+# CapeBuffalo is a BDMinoRace breed defined in races/yas_minorace.toml.
+UraggroShub  = "CapeBuffalo"
+
 # Reachmen (Forsworn) — forced to the Reachman subrace regardless of their
 # vanilla tag. Requires that this scheme defines the Reachman subrace above.
 Ainethach    = "YASReachmanRace"

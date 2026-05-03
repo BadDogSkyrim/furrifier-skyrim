@@ -149,6 +149,21 @@ class Subrace:
 
 
 @dataclass
+class Breed:
+    """A constrained visual flavor of a parent furry race.
+
+    Reuses the parent's RACE record at the engine level — the breed
+    only affects which headparts/tints the furrifier picks. Phase 1
+    just registers the breed and exposes it through scheme resolution;
+    Phase 2/3 add headpart_rules and tint_rules. See
+    PLAN_FURRIFIER_BREEDS.md.
+    """
+    name: str                       # e.g. 'Cougar'
+    parent_race_edid: str           # e.g. 'YASKaloRace'
+    probability: float = 0.0        # auto-roll weight; 0.0 = explicit-only
+
+
+@dataclass
 class LeveledNpcEntry:
     """Per-race rule inside a leveled-list group.
 
