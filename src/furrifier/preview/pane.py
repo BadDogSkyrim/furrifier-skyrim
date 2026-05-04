@@ -508,15 +508,19 @@ class PreviewPane(QWidget):
                 # Scheme filter — skips NPCs whose race has no
                 # furry assignment (child races, creature-only races,
                 # etc.). determine_npc_race is cheap: just a race
-                # FormID lookup + dict hits.
+                # FormID lookup + dict hits. The breed (4th tuple
+                # element) surfaces in the picker label when set.
                 try:
-                    if furry.determine_npc_race(npc) is None:
-                        continue
+                    race_result = furry.determine_npc_race(npc)
                 except Exception:
                     continue
+                if race_result is None:
+                    continue
+                breed = race_result[3]
                 edid = npc.editor_id or f"NPC_{obj_id:06X}"
                 entries.append(NpcEntry(
-                    form_id=int(abs_fid), editor_id=edid))
+                    form_id=int(abs_fid), editor_id=edid,
+                    breed_name=breed.name if breed is not None else None))
         entries.sort(key=lambda e: e.editor_id.lower())
         return entries
 

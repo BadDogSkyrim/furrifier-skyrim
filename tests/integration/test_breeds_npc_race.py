@@ -258,3 +258,53 @@ def test_capebuffalo_skintone_color_from_whitelist(
         f"TINC color {rgba} not in CapeBuffalo whitelist {allowed} — "
         f"either color resolution is wrong or the parent-preset filter "
         f"silently picked something else")
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — leveled-list breeds + override_furry_race breed support
+# ---------------------------------------------------------------------------
+
+
+def test_override_furry_race_resolves_breed_to_parent(
+        breed_furry, mino_plugin_set):
+    """furrify_npc(override_furry_race='CapeBuffalo') must resolve the
+    breed name to its parent race (BDMinoRace) for RNAM, and still
+    apply CapeBuffalo's headpart whitelist. This is the path taken by
+    the leveled-list extender when its rule names a breed."""
+    npc = mino_plugin_set.get_record_by_edid('NPC_', 'Borkul')
+    assert npc is not None
+    patched = breed_furry.furrify_npc(
+        npc, override_furry_race='CapeBuffalo')
+    assert patched is not None
+    eyebrows = _pnam_edids_of_type(
+        patched, breed_furry.all_headparts, HeadpartType.EYEBROWS)
+    assert eyebrows == ['BDMinoCapeHorns'], (
+        f"override-to-breed should pick the breed-whitelisted horn; "
+        f"got {eyebrows}")
+
+
+def test_extend_leveled_npcs_creates_breed_duplicate(
+        breed_furry, mino_plugin_set):
+    """The ungulate_test scheme has a `bandit` leveled-NPCs group with
+    CapeBuffalo at probability=0.5. Running the extender against the
+    real load order must produce at least one CapeBuffalo duplicate
+    (RNAM = BDMinoRace, breed-whitelisted horn)."""
+    breed_furry.furrify_all_npcs(list(mino_plugin_set))
+    new_count, list_count = breed_furry.extend_leveled_npcs(
+        list(mino_plugin_set))
+    assert new_count > 0, "leveled-list extender produced no duplicates"
+    assert list_count > 0
+    # Find a CapeBuffalo duplicate by EditorID convention
+    # (`YAS_<src>_<short_race>`); short_race_name strips the 'Race'
+    # suffix but breed names don't have one, so it surfaces verbatim.
+    dups = [r for r in breed_furry.patch.get_records_by_signature('NPC_')
+            if (r.editor_id or '').endswith('_CapeBuffalo')]
+    assert dups, (
+        "no CapeBuffalo leveled duplicates created — breed-as-race "
+        "wiring missing somewhere in extend_leveled_npcs")
+    # And the duplicate must carry the breed's headpart constraint.
+    eyebrows = _pnam_edids_of_type(
+        dups[0], breed_furry.all_headparts, HeadpartType.EYEBROWS)
+    assert eyebrows == ['BDMinoCapeHorns'], (
+        f"CapeBuffalo duplicate {dups[0].editor_id!r} has eyebrows "
+        f"{eyebrows}; expected the breed-whitelisted BDMinoCapeHorns")

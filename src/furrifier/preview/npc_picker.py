@@ -21,11 +21,16 @@ from PySide6.QtWidgets import QComboBox, QCompleter
 @dataclass(frozen=True)
 class NpcEntry:
     """A pickable NPC: form_id for identification, editor_id for
-    filtering + display. Equality is by form_id."""
+    filtering + display, optional breed for visual flavor disambiguation.
+    Equality is by form_id."""
     form_id: int
     editor_id: str
+    breed_name: Optional[str] = None
 
     def label(self) -> str:
+        if self.breed_name:
+            return (f"{self.editor_id} — {self.breed_name}  "
+                    f"({self.form_id:08X})")
         return f"{self.editor_id}  ({self.form_id:08X})"
 
 

@@ -218,14 +218,13 @@ class FurryContext:
                     break
             if original_race_id is None:
                 return None
-            # Treat the override race as both the assigned race (so RNAM
-            # gets rewritten) and the visual furry race.
+            # Resolve the override name — may be a race EDID or a
+            # breed name. Breeds inherit the parent race's RNAM
+            # (engine-level identity) and contribute their headpart /
+            # tint constraints via the standard breed plumbing.
             assigned_race_id = override_furry_race
-            furry_race_id = override_furry_race
-            # Leveled-list breed support is Phase 5 — for now the
-            # override path is breed-less even if override_furry_race
-            # happens to name a breed.
-            breed = None
+            furry_race_id, breed = self.ctx.resolve_race_or_breed(
+                override_furry_race)
         else:
             race_result = self.determine_npc_race(npc)
             if race_result is None:
@@ -603,15 +602,31 @@ class FurryContext:
         # Strip vampire/child suffixes from each rule's target so we can
         # re-append the suffix that matches the source NPC's variant.
         # User-facing convention: specify the BASE adult race name.
-        # Pre-compute (rule, base_race) for each group, dropping rules
-        # whose target race isn't loaded.
+        # Breeds bypass variant handling — they reuse the parent race's
+        # engine identity, so the parent race's variants are what get
+        # selected at duplicate time.
+        # Pre-compute (rule, base_race, breed_name_or_none) per group,
+        # dropping rules whose target isn't a loaded race or breed.
         active_by_group: list[list[tuple]] = []
         for group in groups:
             active_rules: list[tuple] = []
             for rule in group.races:
+                breed = self.ctx.breeds.get(rule.race)
+                if breed is not None:
+                    # Breed: variant comes from the parent race family.
+                    if any(v in self.races
+                           for v in _variant_names(breed.parent_race_edid)):
+                        active_rules.append((rule, breed.parent_race_edid,
+                                             rule.race))
+                    else:
+                        log.warning(
+                            f"Leveled NPC breed {rule.race!r}'s parent "
+                            f"race {breed.parent_race_edid!r} is not "
+                            f"loaded; skipping rule")
+                    continue
                 base = _strip_variant_suffix(rule.race)
                 if any(v in self.races for v in _variant_names(base)):
-                    active_rules.append((rule, base))
+                    active_rules.append((rule, base, None))
                 else:
                     log.warning(
                         f"Leveled NPC race {rule.race!r} is not loaded; "
@@ -678,10 +693,20 @@ class FurryContext:
 
                 src_alias = unalias(
                     src_npc.editor_id or str(src_npc.form_id))
-                for rule, base_race in active_rules:
-                    target_race = base_race + variant_suffix
-                    if target_race not in self.races:
-                        continue  # variant not defined for this family
+                for rule, base_race, breed_name in active_rules:
+                    # For breeds, override target stays the breed name
+                    # — the breed-aware override_furry_race path picks
+                    # the parent race for RNAM. For races, append the
+                    # source NPC's variant suffix (Vampire/Child).
+                    if breed_name is not None:
+                        target_race = breed_name
+                        engine_race = base_race + variant_suffix
+                        if engine_race not in self.races:
+                            continue  # parent race variant absent
+                    else:
+                        target_race = base_race + variant_suffix
+                        if target_race not in self.races:
+                            continue  # variant not defined for this family
 
                     if (ref_obj, target_race) in added_in_this_list:
                         continue

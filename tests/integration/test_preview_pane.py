@@ -44,6 +44,24 @@ def test_npc_entry_label_has_editor_id_and_form_id():
     assert "0001327C" in e.label()
 
 
+def test_npc_entry_label_surfaces_breed_when_set():
+    """Phase 5 of breeds: the picker shows a breed tag so the user
+    can tell breed-tagged NPCs apart at a glance."""
+    e = NpcEntry(
+        form_id=0x0001_C193, editor_id="UraggroShub",
+        breed_name="CapeBuffalo")
+    label = e.label()
+    assert "UraggroShub" in label
+    assert "CapeBuffalo" in label
+    assert "0001C193" in label
+
+
+def test_npc_entry_label_omits_breed_when_unset():
+    e = NpcEntry(form_id=0x0001_327C, editor_id="Dervenin")
+    assert "—" not in e.label(), (
+        "breed-less NPC label shouldn't carry the breed separator")
+
+
 # --- requires QApplication but no rendering --------------------------------
 
 

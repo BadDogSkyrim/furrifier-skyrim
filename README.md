@@ -310,6 +310,83 @@ YASCatMaleHairDreads001 = "DREADS,BOLD,FUNKY,LONG"
 
 The headpart_labels attempt to prevent an NPC from getting wholly inappropriate headparts, primarily hair. The NPC is given a set of labels derived from their current hair, outfit, and other data. Hair is selected for their furry model that best matches those labels.
 
+### Breeds
+
+A **breed** is a constrained visual flavor of a parent furry race. The
+engine still sees the parent race (RNAM is unchanged); breeds only
+narrow which headparts and tints the furrifier picks. Use them when one
+furry race covers several intended looks — e.g. a generic Mino race
+plus distinct CapeBuffalo / Bison / Yak breeds.
+
+Define breeds in any `races/*.toml` alongside the parent race's other
+catalog data:
+
+```toml
+breeds = [
+  # probability=0 (default) means CapeBuffalo only auto-assigns via
+  # explicit faction / NPC / leveled-list entries below.
+  {breed = "CapeBuffalo", race = "BDMinoRace"},
+  # probability>0 distributes auto-assignment within the parent race:
+  # 10% of every Mino NPC becomes CapeBuffalo unless faction/NPC rules
+  # override. Probabilities for one parent must sum to ≤ 1.0.
+  {breed = "Bison",       race = "BDMinoRace", probability = 0.1},
+]
+```
+
+Breed names are first-class race substitutes. Anywhere a race EDID is
+accepted in a scheme — `races =`, `subraces[].furry`, `[faction_races]`,
+`[npc_races]`, `[[leveled_npcs.groups]] races`  — a breed name can stand
+in. That's how you steer specific NPCs onto a breed.
+
+Breed-specific headpart and tint constraints go on the same
+`headpart_probability` table the race uses, but with the breed name in
+the `race` field. Both `EYEBROWS = 0.5` (flat probability, existing
+form) and `EYEBROWS = {probability = 1.0, headpart = ["..."]}`
+(structured) are accepted; the flat form keeps existing entries
+working. A `tints = [...]` block on the same row constrains layered
+tints. Silence on a type means inherit the parent race's rule.
+
+```toml
+# WhiteTail breed of BDDeerRace — males get one specific horn HDPT
+# and no facial hair; tints are constrained to the listed colors only.
+breeds = [
+  {breed = "WhiteTail", race = "BDDeerRace"},
+]
+headpart_probability = [
+  {race = "WhiteTail", sex = "Male",
+    EYEBROWS    = {probability = 1.0, headpart = ["BDDeerHorns1"]},
+    FACIAL_HAIR = 0.0,
+    tints = [
+      {mask = "SkinTone",   colors = ["BDDeerFaceFurWhite"], probability = 1.0},
+      {mask = "TintMuzzle", colors = ["BDDeerFaceFurWhite", "BDDeerFaceFurBlack"], probability = 0.5},
+    ],
+  },
+  {race = "WhiteTail", sex = "Female",
+    EYEBROWS    = 0.0,
+    FACIAL_HAIR = 0.0,
+    tints = [
+      {mask = "SkinTone",   colors = ["BDDeerFaceFurWhite"]},
+      {mask = "TintMuzzle", colors = ["BDDeerFaceFurWhite", "BDDeerFaceFurBlack"], probability = 0.5},
+    ],
+  },
+]
+```
+
+Mask matching: the `mask` field is a substring matched against the
+parent race's TINI tint-mask filename (e.g. `"SkinTone"` matches
+`Actors\…\TintMasks\SkinTone.dds`). Substrings are intentional — fur-
+pattern variants all classify as `Paint` but have distinct filenames
+(`WolfStripes.dds`, `LeopardSpots.dds`), so substring matching is the
+only way to disambiguate them. Color EDIDs that aren't among the
+parent TINI's existing presets are dropped with a warning; a fully-
+unresolved rule is dropped entirely (the breed can constrain the
+parent's palette but can't introduce new colors).
+
+The breed's tint list is **exhaustive** — only the listed layers are
+applied. If you set `tints = []`, no tint subrecords are emitted at
+all. Silence (no `tints = ` key) defers to the parent race's tints,
+which is the unconstrained pool.
+
 ### Adding your own race catalog
 
 Drop `my_races.toml` (or any other name) into `races/`. It gets merged alongside

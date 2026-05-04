@@ -71,6 +71,20 @@ CrimeFactionFalkreath          = "YASFalkreathRace"
 BYOHHousecarlFalkreathCrimeFaction = "YASFalkreathRace"
 
 
+# Leveled-NPC extension — exercise breed-as-race substitution.
+# Each LVLN matched by `bandit` rolls per-rule and may add a
+# CapeBuffalo (BDMinoRace breed) duplicate. Keeps the rate high for
+# the test so a deterministic fixture sweep produces at least one hit.
+[leveled_npcs]
+exclude_substrings = ["LCharOrc", "Thalmor", "Forsworn"]
+
+[[leveled_npcs.groups]]
+match_substrings = ["bandit"]
+races = [
+  {race = "CapeBuffalo", probability = 0.5},
+]
+
+
 # Per-NPC race overrides (by NPC EditorID).
 [npc_races]
 Jolf         = "YASSailorRace"
