@@ -154,17 +154,19 @@ class TestRaceDefContext:
 
 
     def test_yas_races_probability_loaded(self):
-        """yas_races.toml headpart_probability entries land in every
+        """races/*.toml headpart_probability entries land in every
         scheme's context (catalog is scheme-independent)."""
         ctx = load_scheme('all_races_test')
-        # Mino male brows = 1.0, Mino female brows = 0.5 per yas_races.toml.
-        assert ctx.get_headpart_probability(
-            'BDMinoRace', 'Male', 'EYEBROWS') == 1.0
-        assert ctx.get_headpart_probability(
-            'BDMinoRace', 'Female', 'EYEBROWS') == 0.5
-        # Deer male facial hair = 0.2.
+        # Deer male facial hair = 0.2 per yas_deerrace.toml.
         assert ctx.get_headpart_probability(
             'BDDeerRace', 'Male', 'FACIAL_HAIR') == 0.2
+        # yas_minorace.toml's CapeBuffalo breed registers; per-breed
+        # rules also load (FACIAL_HAIR = 0.0 for both sexes via "both").
+        assert 'CapeBuffalo' in ctx.breeds
+        assert ctx.get_headpart_probability(
+            'CapeBuffalo', 'Male', 'FACIAL_HAIR') == 0.0
+        assert ctx.get_headpart_probability(
+            'CapeBuffalo', 'Female', 'FACIAL_HAIR') == 0.0
 
 
 class TestListAvailableSchemes:

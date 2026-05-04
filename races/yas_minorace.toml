@@ -81,60 +81,109 @@ headpart_equivalents = [
 # below narrow which headparts and tints the furrifier picks for an
 # NPC assigned to the breed. See PLAN_FURRIFIER_BREEDS.md.
 breeds = [
-  # probability=0 (default) means CapeBuffalo only auto-assigns via
-  # explicit [npc_races] / [faction_races] / leveled-list entries.
-  {breed = "CapeBuffalo", race = "BDMinoRace"},
+  # We want all Minotaurs to be one of these breeds, which we do by ensuring probabilities
+  # add to 100%. If we set a breed's probability to 0, it would only be assigned through
+  # explict assignment by faction, leveled NPC group, or individual NPC.
+  {breed = "CapeBuffalo", race = "BDMinoRace", probability = 0.2},
+  {breed = "Sanga", race = "BDMinoRace", probability = 0.25},
+  {breed = "LongHorn", race = "BDMinoRace", probability = 0.2},
+  {breed = "Ankole", race = "BDMinoRace", probability = 0.1},
+  {breed = "Bison", race = "BDMinoRace", probability = 0.25},
 ]
 
-# headpart_probability uses the array-of-tables form ([[…]]) so each
-# row can spread its EYEBROWS / FACIAL_HAIR / tints fields across
-# lines. TOML inline tables {…} must stay on one line, but this form
-# sidesteps that. Every [[headpart_probability]] block in the file is
-# appended to one shared list — the loader doesn't care about the
-# syntax variant.
+# Color schemes
+# tint_layer_mask = [[color_name, weight], ...]
+# tint_layer_mask matches the mask filename--e.g. "TintMuzzle" for BDMinoFaceTintMuzzleMask.dds.
+# If color_name = probability, the value is the probability of applying that tint at all
+# Otherwise, color_name must be a valid color for that tint layer.
+[color_schemes.CapeBuffalo]
+SkinTone = [["BDMinoCoatBlack", 1.0], ["BDMinoCoatDarkBrown", 1.0], ["BDMinoCoatWarmGray", 1.0]]
+TintMuzzle = [["probability", 0.5], ["BDMinoFaceFurBlack", 1.0], ["BDMinoFaceFurBlackBrown", 1.0], ["BDMinoFaceFurBrownDark", 1.0]]
+TintEyeUpper = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
+TintEyeLower = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
+TintCheekLower = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
+TintCheekUpper = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
 
-[[headpart_probability]]
-race = "BDMinoRace"
-sex = "Male"
-EYEBROWS = 1.0
-FACIAL_HAIR = 0.5
+[color_schemes.Ankole]
+SkinTone = [["BDMinoCoatBay", 1.0], ["BDMinoCoatBayLight", 1.0], ["BDMinoCoatBrown", 1.0]]
+TintMuzzle = [["BDMinoFaceFurTan", 0.5], ["BDMinoFaceFurWhite", 0.5], ["BDMinoFaceFurWhite", 0.3]]
+TintEyeUpper = [["probability", 0.75], ["BDMinoFaceFurTan", 0.8], ["BDMinoFaceFurTan", 0.6], ["BDMinoFaceFurWhite", 0.6], ["BDMinoFaceFurWhite", 0.45]]
+TintEyeLower = [["probability", 0.75], ["BDMinoFaceFurTan", 0.8], ["BDMinoFaceFurTan", 0.6], ["BDMinoFaceFurWhite", 0.6], ["BDMinoFaceFurWhite", 0.45]]
+TintCheekLower = [["probability", 0.75], ["BDMinoFaceFurTan", 0.8], ["BDMinoFaceFurTan", 0.6], ["BDMinoFaceFurWhite", 0.6], ["BDMinoFaceFurWhite", 0.45]]
+TintCheekUpper = [["probability", 0.75], ["BDMinoFaceFurTan", 0.8], ["BDMinoFaceFurTan", 0.6], ["BDMinoFaceFurWhite", 0.6], ["BDMinoFaceFurWhite", 0.45]]
+TintNeck = [["probability", 0.5], ["BDMinoFaceFurWhite", 0.7], ["BDMinoFaceFurWhite", 0.5], ["BDMinoFaceFurWhite", 0.3]]
+TintNose = [["BDMinoFleshTan", 0.7]]
 
-[[headpart_probability]]
-race = "BDMinoRace"
-sex = "Female"
-EYEBROWS = 0.5
-FACIAL_HAIR = 0.0
+[color_schemes.Cattle]
+SkinTone = [["BDMinoCoatBay"], ["BDMinoCoatBayLight"], ["BDMinoCoatBrown"], ["BDMinoCoatDarkBrown"], ["BDMinoCoatBlack"], ["BDMinoCoatWarmGray"], ["BDMinoCoatTan"], ["White"]]
+TintMuzzle = [["probability", 0.4], ["BDMinoFaceFurWhite", 0.7], ["BDMinoFaceFurWhite", 0.5], ["BDMinoFaceFurWhite", 0.3]]
+TintEyeUpper = [["probability", 0.5], ["BDMinoFaceFurBlack", 0.5], ["BDMinoFaceFurBrownDark", 0.5], ["BDMinoFaceFurTan", 0.5], ["BDMinoFaceFurWhite", 0.5]]
+TintEyeLower = [["probability", 0.5], ["BDMinoFaceFurBlack", 0.5], ["BDMinoFaceFurBrownDark", 0.5], ["BDMinoFaceFurTan", 0.5], ["BDMinoFaceFurWhite", 0.5]]
+TintCheekLower = [["probability", 0.5], ["BDMinoFaceFurBlack", 0.5], ["BDMinoFaceFurBrownDark", 0.5], ["BDMinoFaceFurTan", 0.5], ["BDMinoFaceFurWhite", 0.5]]
+TintMuzzleUpper = [["probability", 0.5], ["BDMinoFaceFurBlack", 0.25], ["BDMinoFaceFurBrownDark", 0.25], ["BDMinoFaceFurTan", 0.25], ["BDMinoFaceFurWhite", 0.25]]
+TintNose = [["BDMinoFleshTan", 0.7], ["BDMinoFleshTan", 0.4], ["BDMinoFleshDark", 0.7], ["BDMinoFleshDark", 0.4]]
 
-[[headpart_probability]]
-race = "BDMinoRaceVampire"
-sex = "Male"
-EYEBROWS = 1.0
-FACIAL_HAIR = 0.3
+[color_schemes.Bison]
+SkinTone = [["BDMinoCoatDarkBrown", 1.0], ["BDMinoCoatWarmGray", 1.0]]
+TintMuzzle = [["probability", 0.4], ["BDMinoFaceFurBlack", 1.0], ["BDMinoFaceFurBlackBrown", 1.0], ["BDMinoFaceFurBrownDark", 1.0]]
+TintEyeUpper = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
+TintEyeLower = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
+TintCheekLower = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
+TintCheekUpper = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
 
-[[headpart_probability]]
-race = "BDMinoRaceVampire"
-sex = "Female"
-EYEBROWS = 0.5
-FACIAL_HAIR = 0.0
 
 # CapeBuffalo: cape horns only, no facial fluff, dark coat tones.
 [[headpart_probability]]
 race = "CapeBuffalo"
-sex = "Male"
-EYEBROWS = {probability = 1.0, headpart = ["BDMinoCapeHorns"]}
+sex = "both"
+EYEBROWS = {headpart = ["BDMinoCapeHorns"]}
 FACIAL_HAIR = 0.0
-tints = [
-  {mask = "SkinTone", colors = ["BDMinoCoatBlack", "BDMinoCoatDarkBrown"], probability = 1.0},
-]
+colors = "CapeBuffalo" # applies the color scheme of the same name, defined above
 
 [[headpart_probability]]
-race = "CapeBuffalo"
-sex = "Female"
-EYEBROWS = {probability = 1.0, headpart = ["BDMinoCapeHorns"]}
+race = "Ankole"
+sex = "both"
+EYEBROWS = {probability = 1.0, headpart = ["BDMinoAfricanHorns"]}
 FACIAL_HAIR = 0.0
-tints = [
-  {mask = "SkinTone", colors = ["BDMinoCoatBlack", "BDMinoCoatDarkBrown"], probability = 1.0},
-]
+colors = "Ankole"
+
+[[headpart_probability]]
+race = "Sanga"
+sex = "male"
+EYEBROWS = {headpart = ["BDMinoSteerHorns"]}
+FACIAL_HAIR = 0.0
+colors = "Cattle"
+
+[[headpart_probability]]
+race = "Sanga"
+sex = "female"
+EYEBROWS = 0.0
+FACIAL_HAIR = 0.0
+colors = "Cattle"
+
+[[headpart_probability]]
+race = "LongHorn"
+sex = "male"
+EYEBROWS = {headpart = ["BDMinoLongHorn"]}
+FACIAL_HAIR = 0.0
+colors = "Cattle"
+
+[[headpart_probability]]
+race = "LongHorn"
+sex = "female"
+EYEBROWS = 0.0
+FACIAL_HAIR = 0.0
+colors = "Cattle"
+
+# Bison always have manes and beards. No other breed has manes. 
+[[headpart_probability]]
+race = "Bison"
+sex = "both"
+EYEBROWS = {headpart = ["BDMinoBisonHorns"]}
+FACIAL_HAIR = 1.0
+HAIR = {headpart = ["BDMinoHairFemMane", "BDMinoHairFemManeCurly", "BDMinoHairFemManeFeather", "BDMinoHairFemManeHeadband", "BDMinoHairFemManeRough", "BDMinoHairMaleMane", "BDMinoHairMaleManeCurly", "BDMinoHairMaleManeFeather", "BDMinoHairMaleManeHeadband", "BDMinoHairMaleShaggy", "BDMinoHairMinoManeRough"]}
+colors = "Bison"
+
 
 [headpart_labels]
 BDMinoHairFem03                = "NEAT,SHORT"
@@ -171,12 +220,13 @@ BDMinoHairMale09               = "BRAIDS,SHORT,FUNKY"
 BDMinoHairMaleDreads01         = "DREADS,BOLD,FUNKY,LONG"
 BDMinoHairMaleDreadsBeads      = "DREADS,BOLD,NOBLE,LONG"
 BDMinoHairMaleLong             = "LONG,MESSY,FUNKY"
-BDMinoHairMaleMane             = "MANE,BOLD,LONG"
-BDMinoHairMaleManeCurly        = "MANE,BOLD,LONG"
-BDMinoHairMaleManeFeather      = "MANE,BOLD,LONG,FEATHERS"
-BDMinoHairMaleManeHeadband     = "MANE,BOLD,LONG,NOBLE"
+BDMinoHairMaleMane             = "EXCLUDE"
+BDMinoHairMaleManeCurly        = "EXCLUDE"
+BDMinoHairMaleManeFeather      = "EXCLUDE"
+BDMinoHairMaleManeHeadband     = "EXCLUDE"
+BDMinoHairMinoManeRough        = "EXCLUDE"
 BDMinoHairMaleMohawk           = "MOHAWK,MILITARY,BOLD"
 BDMinoHairMaleMohawkFeathers   = "MOHAWK,FUNKY,BOLD,FEATHERS"
 BDMinoHairMaleShaggy           = "MESSY,LONG"
-BDMinoHairMinoManeRough        = "MANE,BOLD,LONG"
 BDMinoHairNone                 = "BALD,BUZZ"
+

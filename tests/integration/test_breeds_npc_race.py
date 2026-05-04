@@ -88,8 +88,10 @@ def test_capebuffalo_breed_registered(breed_furry):
     """Sanity check: CapeBuffalo is in the registry from races/*.toml."""
     assert 'CapeBuffalo' in breed_furry.ctx.breeds
     assert breed_furry.ctx.breeds['CapeBuffalo'].parent_race_edid == 'BDMinoRace'
-    # Default probability per decision #13.
-    assert breed_furry.ctx.breeds['CapeBuffalo'].probability == 0.0
+    # yas_minorace.toml gives CapeBuffalo a non-zero auto-roll weight.
+    # Whatever the exact value, it must be > 0 for the auto-roll path
+    # to fire on un-overridden Mino NPCs.
+    assert breed_furry.ctx.breeds['CapeBuffalo'].probability > 0.0
 
 
 def test_uraggro_shub_assigned_capebuffalo(breed_furry, mino_plugin_set):
@@ -111,10 +113,11 @@ def test_uraggro_shub_assigned_capebuffalo(breed_furry, mino_plugin_set):
     assert breed.parent_race_edid == 'BDMinoRace'
 
 
-def test_unbred_orc_returns_none_breed(breed_furry, mino_plugin_set):
+def test_unforced_orc_takes_breed_from_auto_roll(breed_furry, mino_plugin_set):
     """An Orc not named in [npc_races] takes the normal vanilla→furry
-    path (OrcRace → BDMinoRace) and gets no breed (CapeBuffalo's
-    probability is 0, so the auto-roll never fires)."""
+    path (OrcRace → BDMinoRace). yas_minorace.toml's breed
+    probabilities sum to 1.0 (every Mino is some breed), so the auto-
+    roll always lands on a registered breed."""
     npc = mino_plugin_set.get_record_by_edid('NPC_', 'Borkul')
     assert npc is not None
     result = breed_furry.determine_npc_race(npc)
@@ -123,7 +126,10 @@ def test_unbred_orc_returns_none_breed(breed_furry, mino_plugin_set):
     assert original == 'OrcRace'
     assert assigned == 'OrcRace'
     assert furry == 'BDMinoRace'
-    assert breed is None
+    assert breed is not None, (
+        "with breed probabilities summing to 1.0, every Mino NPC must "
+        "land on a registered breed via the auto-roll")
+    assert breed.parent_race_edid == 'BDMinoRace'
 
 
 # ---------------------------------------------------------------------------
@@ -224,36 +230,42 @@ def _patched_tints(patched):
     return tints
 
 
-def test_capebuffalo_tints_constrained_to_skintone_only(
-        breed_furry, mino_plugin_set):
-    """CapeBuffalo's tint rules only mention SkinTone (mask matches the
-    parent BDMinoRace's TINI 1, filename 'SkinTone.dds'). The breed
-    list is exhaustive (decision #2), so the patched record must have
-    exactly one TINI subrecord — no muzzle/cheek/etc. layers."""
+def test_capebuffalo_emits_skintone_tint(breed_furry, mino_plugin_set):
+    """CapeBuffalo's color scheme always emits SkinTone (TINI 1) at
+    probability 1.0. Other masks may or may not fire depending on
+    their probability rolls — this test only pins down SkinTone."""
     npc = mino_plugin_set.get_record_by_edid('NPC_', 'UraggroShub')
     patched = breed_furry.furrify_npc(npc)
     tints = _patched_tints(patched)
-    assert len(tints) == 1, (
-        f"CapeBuffalo should emit exactly one tint (SkinTone); "
-        f"got {len(tints)}: {tints}"
-    )
+    skintone_tints = [(tini, rgba) for tini, rgba in tints if tini == 1]
+    assert len(skintone_tints) == 1, (
+        f"CapeBuffalo SkinTone (TINI 1) must emit once; got {tints}")
 
 
 def test_capebuffalo_skintone_color_from_whitelist(
         breed_furry, mino_plugin_set):
-    """The TINC color on the SkinTone tint must be one of the two
-    EDIDs listed in CapeBuffalo's tints whitelist:
-      - BDMinoCoatBlack    = (20, 20, 20, 0)
-      - BDMinoCoatDarkBrown = (125, 98, 70, 0)
-    """
-    allowed = {(20, 20, 20, 0), (125, 98, 70, 0)}
+    """The SkinTone TINC color must be one of CapeBuffalo's whitelisted
+    coat-color EDIDs (resolved through BDUngulates' current CNAMs)."""
+    # Read CapeBuffalo's SkinTone whitelist live from the loaded scheme,
+    # then resolve each EDID via the FurryContext's CLFM EDID index so
+    # this test stays correct if Hugh tweaks the CNAMs in BDUngulates.
+    scheme = breed_furry.ctx.color_schemes['CapeBuffalo']
+    skintone_rule = next(r for r in scheme if r.mask_substring == 'SkinTone')
+    allowed = set()
+    for edid, _intensity in skintone_rule.color_choices:
+        rgba = breed_furry._resolve_color_by_edid(edid)
+        if rgba is not None:
+            allowed.add(rgba)
+    assert allowed, (
+        "test premise broken — none of CapeBuffalo's SkinTone EDIDs "
+        "resolved to a CLFM in the load order")
+
     npc = mino_plugin_set.get_record_by_edid('NPC_', 'UraggroShub')
     patched = breed_furry.furrify_npc(npc)
     tints = _patched_tints(patched)
-    assert tints, "no tints emitted"
-    tini, rgba = tints[0]
-    assert tini == 1, (
-        f"BDMinoRace's SkinTone is TINI 1; got {tini}")
+    skintone = next(((tini, rgba) for tini, rgba in tints if tini == 1), None)
+    assert skintone is not None, "no SkinTone tint emitted"
+    _, rgba = skintone
     assert rgba in allowed, (
         f"TINC color {rgba} not in CapeBuffalo whitelist {allowed} — "
         f"either color resolution is wrong or the parent-preset filter "

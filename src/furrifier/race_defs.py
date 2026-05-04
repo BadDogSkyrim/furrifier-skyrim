@@ -82,6 +82,10 @@ class RaceDefContext:
         # time, falls through inheritance chain) from explicit empty list
         # (key present, value [] → "no tints applied").
         self.tint_rules: dict[tuple, list[BreedTintRule]] = {}
+        # Named [color_schemes.NAME] registries. Each scheme is a list of
+        # BreedTintRule (one per mask). Headpart_probability rows reference
+        # a scheme by name via `colors = "NAME"`.
+        self.color_schemes: dict[str, list[BreedTintRule]] = {}
 
 
     def set_race(self, vanilla_id: str, furry_id: str) -> None:
@@ -458,6 +462,57 @@ def _find_resource_dir(name: str) -> Optional[Path]:
     return None
 
 
+def _normalize_sex(raw: Optional[str]) -> Optional[str]:
+    """Map a TOML `sex = ...` value to internal 'Male' / 'Female' / None.
+
+    Accepts case-insensitive 'male', 'female', 'both' (or omit). 'both'
+    and missing both mean sex-agnostic (None).
+    """
+    if raw is None:
+        return None
+    s = raw.strip().lower()
+    if s in ('', 'both', 'either', 'any'):
+        return None
+    if s == 'male':
+        return 'Male'
+    if s == 'female':
+        return 'Female'
+    log.warning(f"unrecognized sex value {raw!r}; treating as sex-agnostic")
+    return None
+
+
+def _parse_color_choices(entries: list) -> tuple[
+        tuple[tuple[str, float], ...], float]:
+    """Parse the entry list for one mask in a [color_schemes.X] block.
+
+    Each entry is `[edid, intensity]` (intensity defaults to 1.0 when
+    omitted). The literal token `["probability", X]` is a magic row that
+    sets the layer-apply probability for the rule.
+
+    Returns (color_choices, probability).
+    """
+    choices: list[tuple[str, float]] = []
+    probability = 1.0
+    for entry in entries:
+        if not isinstance(entry, list) or not entry:
+            log.warning(
+                f"color-scheme entry must be a non-empty list; "
+                f"got {entry!r} — skipping")
+            continue
+        token = entry[0]
+        if token == 'probability':
+            if len(entry) < 2:
+                log.warning(
+                    "color-scheme `probability` row missing value; "
+                    "defaulting to 1.0")
+                continue
+            probability = float(entry[1])
+            continue
+        intensity = float(entry[1]) if len(entry) >= 2 else 1.0
+        choices.append((str(token), intensity))
+    return tuple(choices), probability
+
+
 def _apply_race_catalog(ctx: RaceDefContext, data: dict) -> None:
     """Merge one race catalog file's data into the context.
 
@@ -470,24 +525,41 @@ def _apply_race_catalog(ctx: RaceDefContext, data: dict) -> None:
         ctx.assign_headpart(h['vanilla'], h['furry'])
     for hp_id, labels in data.get('headpart_labels', {}).items():
         ctx.label_headpart_list(hp_id, labels)
+
+    # Color schemes — load before headpart_probability rows so that
+    # `colors = "..."` references can resolve.
+    for scheme_name, scheme_dict in data.get('color_schemes', {}).items():
+        rules = []
+        for mask, entries in scheme_dict.items():
+            color_choices, probability = _parse_color_choices(entries)
+            if not color_choices:
+                log.warning(
+                    f"color scheme {scheme_name!r} mask {mask!r} has no "
+                    f"valid color entries; dropping")
+                continue
+            rules.append(BreedTintRule(
+                mask_substring=str(mask),
+                color_choices=color_choices,
+                probability=probability,
+            ))
+        ctx.color_schemes[scheme_name] = rules
+
     for entry in data.get('headpart_probability', []):
         race = entry['race']
-        sex = entry.get('sex')  # 'Male', 'Female', or absent
+        sex = _normalize_sex(entry.get('sex'))
         for key, value in entry.items():
             if key in ('race', 'sex'):
                 continue
-            if key == 'tints':
-                # Phase 3 — breed/race tint rules. Empty list is preserved
-                # as "explicit no-tints" (decision #2).
-                rules = [
-                    BreedTintRule(
-                        mask_substring=str(t['mask']),
-                        color_edids=tuple(t.get('colors', ())),
-                        probability=float(t.get('probability', 1.0)),
-                    )
-                    for t in value
-                ]
-                ctx.set_tint_rules(race, sex, rules)
+            if key == 'colors':
+                # Reference a named [color_schemes.X] block.
+                scheme_name = str(value)
+                rules = ctx.color_schemes.get(scheme_name)
+                if rules is None:
+                    log.warning(
+                        f"row for {race!r} references undefined color "
+                        f"scheme {scheme_name!r}; skipping")
+                    continue
+                ctx.set_tint_rules(race, sex, list(rules))
                 continue
             # Otherwise it's a HeadpartType key. Value is either a flat
             # probability (existing format) or a structured table

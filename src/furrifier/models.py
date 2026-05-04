@@ -181,15 +181,19 @@ class BreedTintRule:
     """One tint layer rule for a breed.
 
     `mask_substring` matches against the parent race's TINI filename
-    (decision #6). `color_edids` lists CLFM EditorIDs the breed allows
-    for that mask; the breed picks one deterministically, and only
-    EDIDs that are also among the parent's TINI presets are kept
-    (decision #7). `probability` gates whether the layer applies.
+    (decision #6). `color_choices` is a tuple of `(edid, intensity)`
+    sample points, picked uniformly: each entry is equally likely, and
+    the picked entry's intensity becomes the emitted TINV. Duplicate
+    EDIDs at different intensities are intentional — Tan-strong vs
+    Tan-soft are two distinct outcomes. Only EDIDs that match a parent-
+    TINI preset survive (decision #7); others are dropped at emit time
+    with a warning. `probability` gates whether the layer applies at
+    all (decoupled from picking — decision spec'd 2026-05-04).
 
     See PLAN_FURRIFIER_BREEDS.md.
     """
     mask_substring: str
-    color_edids: tuple[str, ...]
+    color_choices: tuple[tuple[str, float], ...]
     probability: float = 1.0
 
 

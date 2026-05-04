@@ -186,16 +186,17 @@ def choose_breed_tints(
 ) -> list[TintChoice]:
     """Emit tint choices for a breed-tagged NPC per its breed rules.
 
-    Algorithm (Phase 3 of PLAN_FURRIFIER_BREEDS.md):
+    Algorithm:
     1. For each rule, find every parent-race TINI whose filename
        contains the rule's mask substring (decision #6).
-    2. Filter the rule's color EDIDs to those that resolve to a CLFM
-       whose form-id is among the matched TINI's preset color form-ids
-       (decision #7); drop missing entries with a warning.
-    3. Hash-roll the rule's probability; if not applied, skip the
-       layer entirely.
-    4. If applied: hash-pick one resolved color, emit one TintChoice
-       per matched TINI using the parent's TINI/TINP/TIAS metadata.
+    2. Hash-roll the rule's probability; skip the layer if it loses.
+    3. Filter `color_choices` to entries whose CLFM EDID resolves to a
+       form-id present in the matched TINI's preset list (decision #7).
+       Same EDID at different intensities is preserved as separate
+       sample points.
+    4. Uniform-pick one entry from the surviving choices for each
+       matched TINI; emit a TintChoice using the parent's TINI/TIAS,
+       the picked entry's color, and the entry's intensity as TINV.
 
     `form_id_for_edid` resolves a CLFM EditorID to its load-order
     form-id (FurryContext-supplied; lazy index).
@@ -221,26 +222,28 @@ def choose_breed_tints(
                 continue
             if hash_string(npc_alias, salt, 1000) >= int(rule.probability * 1000):
                 continue
-        # Resolve breed colors → form-ids.
-        resolved: list[tuple[str, int]] = []  # (edid, form_id_low24)
-        for edid in rule.color_edids:
+        # Resolve each (edid, intensity) entry to its load-order-low24
+        # form-id. Entries whose EDID can't be resolved are dropped.
+        resolved: list[tuple[str, float, int]] = []  # (edid, intensity, fid_low24)
+        for edid, intensity in rule.color_choices:
             fid = form_id_for_edid(edid)
             if fid is None:
                 log.warning(
                     f"breed tint color {edid!r} not found in any plugin's "
                     f"CLFM records; dropping")
                 continue
-            resolved.append((edid, fid & 0x00FFFFFF))
+            resolved.append((edid, intensity, fid & 0x00FFFFFF))
         if not resolved:
             log.warning(
                 f"breed tint rule for mask {rule.mask_substring!r} has no "
                 f"resolvable colors; dropping rule")
             continue
-        # For each matched parent TINI, intersect the rule's resolved
-        # colors with the TINI's allowed presets, hash-pick one, emit.
+        # For each matched parent TINI, intersect resolved entries with
+        # the TINI's allowed presets, uniform-pick one, emit.
         for asset in matches:
             preset_low24 = {p[0] & 0x00FFFFFF: p for p in asset.presets}
-            allowed = [(edid, fid_low) for edid, fid_low in resolved
+            allowed = [(edid, intensity, fid_low)
+                       for edid, intensity, fid_low in resolved
                        if fid_low in preset_low24]
             if not allowed:
                 log.warning(
@@ -248,17 +251,17 @@ def choose_breed_tints(
                     f"among parent TINI {asset.index}'s presets; "
                     f"dropping that match")
                 continue
-            # Salt the color pick by both alias and mask so distinct masks
-            # in the same rule pick independently.
+            # Salt the color pick by mask so distinct TINIs in the same
+            # rule pick independently.
             color_salt = 7411 + asset.index
             idx = hash_string(npc_alias, color_salt, len(allowed))
-            edid, fid_low = allowed[idx]
+            edid, intensity, fid_low = allowed[idx]
             preset = preset_low24[fid_low]
-            color_fid, intensity, tirs = preset
+            color_fid, _parent_intensity, tirs = preset
             choices.append(TintChoice(
                 tini=asset.index,
                 tinc=color_fid,
-                tinv=intensity,
+                tinv=intensity,  # breed-specified, not parent default
                 tias=tirs,
             ))
     return choices
