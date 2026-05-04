@@ -184,7 +184,36 @@ def find_best_headpart_match(
                     if hp_type == HeadpartType.EYES else None)
 
     whitelist = _breed_whitelist(ctx, breed, furry_race_id, npc_sex, hp_type)
-    whitelist_set = set(whitelist) if whitelist else None
+
+    # When the breed/race rule whitelists specific headparts by EDID,
+    # treat that as authoritative author intent: pick directly from the
+    # whitelist. Bypasses both the equivalents chain and the race-pool
+    # intersection — important because race_headparts excludes EXCLUDE-
+    # tagged headparts from the random pool, but a whitelist explicitly
+    # names them and should override that suppression.
+    if whitelist:
+        candidates = []
+        for edid in whitelist:
+            hp = all_headparts.get(edid)
+            if hp is None:
+                log.warning(
+                    f"breed whitelist for {furry_race_id} "
+                    f"{npc_sex.name} {hp_type.name} names unknown "
+                    f"headpart {edid!r}; dropping")
+                continue
+            candidates.append(hp)
+        if target_blind is not None:
+            candidates = _filter_by_blindness(candidates, target_blind)
+        if not candidates:
+            log.warning(
+                f"breed whitelist {whitelist!r} for {furry_race_id} "
+                f"{npc_sex.name} {hp_type.name} resolved to no valid "
+                f"headparts; leaving slot empty for {npc_alias}")
+            return None
+        # Salt 317: "equivalent-list candidate pick" — independent from
+        # the label-match pick below (salt 319).
+        idx = hash_string(npc_alias, 317, len(candidates))
+        return candidates[idx]
 
     # Check for explicit headpart equivalents
     if old_hp.equivalents:
@@ -199,12 +228,7 @@ def find_best_headpart_match(
                 candidates.append(equiv)
         if target_blind is not None:
             candidates = _filter_by_blindness(candidates, target_blind)
-        if whitelist_set is not None:
-            candidates = [c for c in candidates
-                          if c.editor_id in whitelist_set]
         if candidates:
-            # Salt 317: "equivalent-list candidate pick" — independent
-            # from the label-match pick below (salt 319).
             idx = hash_string(npc_alias, 317, len(candidates))
             return candidates[idx]
 
@@ -223,14 +247,7 @@ def find_best_headpart_match(
                  if hp_id in all_headparts]
     if target_blind is not None:
         available = _filter_by_blindness(available, target_blind)
-    if whitelist_set is not None:
-        available = [c for c in available if c.editor_id in whitelist_set]
     if not available:
-        if whitelist_set is not None:
-            log.warning(
-                f"breed whitelist {whitelist!r} for {furry_race_id} "
-                f"{npc_sex.name} {hp_type.name} matched no headparts "
-                f"in the race pool — leaving slot empty for {npc_alias}")
         return None
 
     best_score = -1000

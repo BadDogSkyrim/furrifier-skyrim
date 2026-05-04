@@ -295,6 +295,44 @@ def test_override_furry_race_resolves_breed_to_parent(
         f"got {eyebrows}")
 
 
+def test_breed_hair_whitelist_overrides_exclude_label(
+        breed_furry, mino_plugin_set):
+    """A breed whitelist explicitly names headparts by EDID. Those
+    headparts must apply even when the catalog has tagged them with
+    EXCLUDE — the EXCLUDE label suppresses random-pool selection, but
+    a deliberate whitelist is explicit author intent and overrides.
+
+    Bison's HAIR whitelist in yas_minorace.toml is the BDMino mane
+    set, all of which carry headpart_labels = "EXCLUDE". Pre-fix this
+    produced Bison NPCs with no HAIR PNAM (the whitelist intersected
+    the EXCLUDE-filtered race pool to empty). Regression gate.
+    """
+    npc = mino_plugin_set.get_record_by_edid(
+        'NPC_', 'EncBandit02Boss2HOrcM')
+    assert npc is not None
+    patched = breed_furry.furrify_npc(
+        npc, override_furry_race='Bison')
+    assert patched is not None
+    hair = _pnam_edids_of_type(
+        patched, breed_furry.all_headparts, HeadpartType.HAIR)
+    assert hair, (
+        "Bison override should produce a HAIR PNAM from the breed's "
+        "mane whitelist; got none — likely the whitelist intersected "
+        "the race pool (which excludes EXCLUDE-tagged hairs) to empty"
+    )
+    bison_whitelist = {
+        'BDMinoHairFemMane', 'BDMinoHairFemManeCurly',
+        'BDMinoHairFemManeFeather', 'BDMinoHairFemManeHeadband',
+        'BDMinoHairFemManeRough', 'BDMinoHairMaleMane',
+        'BDMinoHairMaleManeCurly', 'BDMinoHairMaleManeFeather',
+        'BDMinoHairMaleManeHeadband', 'BDMinoHairMaleShaggy',
+        'BDMinoHairMinoManeRough',
+    }
+    assert hair[0] in bison_whitelist, (
+        f"HAIR pick {hair[0]!r} not in Bison's mane whitelist — "
+        f"the whitelist filter isn't actually firing")
+
+
 def test_extend_leveled_npcs_creates_breed_duplicate(
         breed_furry, mino_plugin_set):
     """The ungulate_test scheme has a `bandit` leveled-NPCs group with

@@ -101,7 +101,7 @@ SkinTone = [["BDMinoCoatBlack", 1.0], ["BDMinoCoatDarkBrown", 1.0], ["BDMinoCoat
 TintMuzzle = [["probability", 0.5], ["BDMinoFaceFurBlack", 1.0], ["BDMinoFaceFurBlackBrown", 1.0], ["BDMinoFaceFurBrownDark", 1.0]]
 TintEyeUpper = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
 TintEyeLower = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
-TintCheekLower = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
+TintCheeckLower = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
 TintCheekUpper = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
 
 [color_schemes.Ankole]
@@ -109,7 +109,7 @@ SkinTone = [["BDMinoCoatBay", 1.0], ["BDMinoCoatBayLight", 1.0], ["BDMinoCoatBro
 TintMuzzle = [["BDMinoFaceFurTan", 0.5], ["BDMinoFaceFurWhite", 0.5], ["BDMinoFaceFurWhite", 0.3]]
 TintEyeUpper = [["probability", 0.75], ["BDMinoFaceFurTan", 0.8], ["BDMinoFaceFurTan", 0.6], ["BDMinoFaceFurWhite", 0.6], ["BDMinoFaceFurWhite", 0.45]]
 TintEyeLower = [["probability", 0.75], ["BDMinoFaceFurTan", 0.8], ["BDMinoFaceFurTan", 0.6], ["BDMinoFaceFurWhite", 0.6], ["BDMinoFaceFurWhite", 0.45]]
-TintCheekLower = [["probability", 0.75], ["BDMinoFaceFurTan", 0.8], ["BDMinoFaceFurTan", 0.6], ["BDMinoFaceFurWhite", 0.6], ["BDMinoFaceFurWhite", 0.45]]
+TintCheeckLower = [["probability", 0.75], ["BDMinoFaceFurTan", 0.8], ["BDMinoFaceFurTan", 0.6], ["BDMinoFaceFurWhite", 0.6], ["BDMinoFaceFurWhite", 0.45]]
 TintCheekUpper = [["probability", 0.75], ["BDMinoFaceFurTan", 0.8], ["BDMinoFaceFurTan", 0.6], ["BDMinoFaceFurWhite", 0.6], ["BDMinoFaceFurWhite", 0.45]]
 TintNeck = [["probability", 0.5], ["BDMinoFaceFurWhite", 0.7], ["BDMinoFaceFurWhite", 0.5], ["BDMinoFaceFurWhite", 0.3]]
 TintNose = [["BDMinoFleshTan", 0.7]]
@@ -119,7 +119,7 @@ SkinTone = [["BDMinoCoatBay"], ["BDMinoCoatBayLight"], ["BDMinoCoatBrown"], ["BD
 TintMuzzle = [["probability", 0.4], ["BDMinoFaceFurWhite", 0.7], ["BDMinoFaceFurWhite", 0.5], ["BDMinoFaceFurWhite", 0.3]]
 TintEyeUpper = [["probability", 0.5], ["BDMinoFaceFurBlack", 0.5], ["BDMinoFaceFurBrownDark", 0.5], ["BDMinoFaceFurTan", 0.5], ["BDMinoFaceFurWhite", 0.5]]
 TintEyeLower = [["probability", 0.5], ["BDMinoFaceFurBlack", 0.5], ["BDMinoFaceFurBrownDark", 0.5], ["BDMinoFaceFurTan", 0.5], ["BDMinoFaceFurWhite", 0.5]]
-TintCheekLower = [["probability", 0.5], ["BDMinoFaceFurBlack", 0.5], ["BDMinoFaceFurBrownDark", 0.5], ["BDMinoFaceFurTan", 0.5], ["BDMinoFaceFurWhite", 0.5]]
+TintCheeckLower = [["probability", 0.5], ["BDMinoFaceFurBlack", 0.5], ["BDMinoFaceFurBrownDark", 0.5], ["BDMinoFaceFurTan", 0.5], ["BDMinoFaceFurWhite", 0.5]]
 TintMuzzleUpper = [["probability", 0.5], ["BDMinoFaceFurBlack", 0.25], ["BDMinoFaceFurBrownDark", 0.25], ["BDMinoFaceFurTan", 0.25], ["BDMinoFaceFurWhite", 0.25]]
 TintNose = [["BDMinoFleshTan", 0.7], ["BDMinoFleshTan", 0.4], ["BDMinoFleshDark", 0.7], ["BDMinoFleshDark", 0.4]]
 
@@ -128,7 +128,7 @@ SkinTone = [["BDMinoCoatDarkBrown", 1.0], ["BDMinoCoatWarmGray", 1.0]]
 TintMuzzle = [["probability", 0.4], ["BDMinoFaceFurBlack", 1.0], ["BDMinoFaceFurBlackBrown", 1.0], ["BDMinoFaceFurBrownDark", 1.0]]
 TintEyeUpper = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
 TintEyeLower = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
-TintCheekLower = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
+TintCheeckLower = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
 TintCheekUpper = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
 
 

@@ -312,21 +312,26 @@ class FurryContext:
             if not _should_assign(npc_alias, furry_race_id, npc_sex,
                                   hp_type, self.ctx, breed=breed):
                 continue
-            candidates = self.race_headparts.get(
-                (hp_type, sex_key, furry_race_id), set())
-            if not candidates:
-                continue
             # Apply the breed's (or race's) headpart whitelist when set.
+            # Whitelist is authoritative — bypasses the EXCLUDE-filter
+            # that race_headparts applies, since explicit author intent
+            # overrides the random-pool suppression.
             lookup_name = breed.name if breed is not None else furry_race_id
             whitelist = self.ctx.get_headpart_rule(
                 lookup_name, sex_name, hp_type.name).headpart_whitelist
             if whitelist:
-                candidates = candidates & set(whitelist)
+                candidates = {edid for edid in whitelist
+                              if edid in self.all_headparts}
                 if not candidates:
                     log.warning(
-                        f"breed whitelist {whitelist!r} matched no "
-                        f"headparts in {furry_race_id} {hp_type.name} "
-                        f"pool — skipping {npc_alias}")
+                        f"breed whitelist {whitelist!r} for "
+                        f"{hp_type.name} contains no known headparts "
+                        f"— skipping {npc_alias}")
+                    continue
+            else:
+                candidates = self.race_headparts.get(
+                    (hp_type, sex_key, furry_race_id), set())
+                if not candidates:
                     continue
             candidate_list = sorted(candidates)
             idx = hash_string(npc_alias, 619 + int(hp_type),
