@@ -441,31 +441,9 @@ class FurryContext:
         return classes
 
 
-    def _resolve_color(self, tinc_fid: int) -> tuple[int, int, int, int]:
-        """Resolve a TINC FormID (pointing to a CLFM record) to RGBA.
-
-        Returns (R, G, B, A) as 0-255 values.
-        """
-        obj_id = tinc_fid & 0x00FFFFFF
-        for plugin in self.plugin_set:
-            for rec in plugin.get_records_by_signature('CLFM'):
-                if (rec.form_id.value & 0x00FFFFFF) == obj_id:
-                    cnam = rec.get_subrecord('CNAM')
-                    if cnam and cnam.size >= 4:
-                        return (cnam.data[0], cnam.data[1],
-                                cnam.data[2], cnam.data[3])
-                    elif cnam and cnam.size >= 3:
-                        return (cnam.data[0], cnam.data[1],
-                                cnam.data[2], 0)
-        return (255, 255, 255, 0)
-
-
     def _build_clfm_edid_index(self) -> dict[str, Record]:
-        """Build a CLFM EditorID → record index across the load order.
-
-        Used for Phase 3 breed tint resolution where colors are named
-        by EDID. Load-order-winning record wins on EDID collision.
-        """
+        """CLFM EditorID → record. Load-order-winning record wins on
+        EDID collision (later plugins override earlier)."""
         index: dict[str, Record] = {}
         if self.plugin_set is None:
             return index
@@ -477,10 +455,53 @@ class FurryContext:
         return index
 
 
-    def _resolve_color_by_edid(self, edid: str) -> Optional[tuple[int, int, int, int]]:
-        """Resolve a CLFM EditorID to its RGBA. None if not found."""
+    def _build_clfm_form_id_index(self) -> dict[int, Record]:
+        """CLFM full load-order-normalized FormID → record.
+
+        Distinct from the pre-Phase-4 lower-24-bit lookup, which
+        conflated records sharing an object index across different
+        masters (e.g. CellanFur06GrayBrown vs Red01 at 0x0012DD).
+        """
+        index: dict[int, Record] = {}
+        if self.plugin_set is None:
+            return index
+        for plugin in self.plugin_set:
+            for rec in plugin.get_records_by_signature('CLFM'):
+                fid = rec.normalize_form_id(rec.form_id).value
+                index[fid] = rec  # later overrides win for the same FID
+        return index
+
+
+    def _ensure_clfm_indexes(self) -> None:
+        """Lazy-build both CLFM indexes. Idempotent."""
         if not hasattr(self, '_clfm_by_edid_cache'):
             self._clfm_by_edid_cache = self._build_clfm_edid_index()
+        if not hasattr(self, '_clfm_by_form_id_cache'):
+            self._clfm_by_form_id_cache = self._build_clfm_form_id_index()
+
+
+    def _resolve_color(self, tinc_fid: int) -> tuple[int, int, int, int]:
+        """Resolve a load-order-normalized TINC FormID to RGBA.
+
+        Callers must pass FormIDs already normalized to load-order
+        space (TintAsset.presets does this at extraction time). Returns
+        (255, 255, 255, 0) when no CLFM matches.
+        """
+        self._ensure_clfm_indexes()
+        rec = self._clfm_by_form_id_cache.get(tinc_fid)
+        if rec is not None:
+            cnam = rec.get_subrecord('CNAM')
+            if cnam and cnam.size >= 4:
+                return (cnam.data[0], cnam.data[1],
+                        cnam.data[2], cnam.data[3])
+            if cnam and cnam.size >= 3:
+                return (cnam.data[0], cnam.data[1], cnam.data[2], 0)
+        return (255, 255, 255, 0)
+
+
+    def _resolve_color_by_edid(self, edid: str) -> Optional[tuple[int, int, int, int]]:
+        """Resolve a CLFM EditorID to its RGBA. None if not found."""
+        self._ensure_clfm_indexes()
         rec = self._clfm_by_edid_cache.get(edid)
         if rec is None:
             return None
@@ -495,10 +516,8 @@ class FurryContext:
 
 
     def _form_id_for_edid(self, edid: str) -> Optional[int]:
-        """Look up a CLFM's FormID by EditorID (load-order space).
-        None if not found."""
-        if not hasattr(self, '_clfm_by_edid_cache'):
-            self._clfm_by_edid_cache = self._build_clfm_edid_index()
+        """Load-order-normalized FormID for a CLFM EDID. None if not found."""
+        self._ensure_clfm_indexes()
         rec = self._clfm_by_edid_cache.get(edid)
         if rec is None:
             return None

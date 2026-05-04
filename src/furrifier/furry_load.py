@@ -410,7 +410,14 @@ def _extract_tint_section(record: Record, sex: Sex) -> 'RaceTintData':
             elif s.signature == 'TINP':
                 tinp_val = struct.unpack('<H', s.data[:2])[0]
             elif s.signature == 'TINC':
-                color_fid = struct.unpack('<I', s.data[:4])[0]
+                raw_fid = struct.unpack('<I', s.data[:4])[0]
+                # Normalize to load-order space at extraction time so
+                # downstream resolution is unambiguous (Phase 4). The
+                # raw bytes are in the source RACE plugin's master-list
+                # space; without normalization a low-24-bit lookup would
+                # conflate FormIDs that share an object index across
+                # different masters.
+                color_fid = record.normalize_form_id(raw_fid).value
                 # Look ahead for TINV and TIRS
                 intensity = 0.0
                 tirs = 0
