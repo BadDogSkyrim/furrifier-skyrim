@@ -23,7 +23,7 @@ from .headparts import (
     _PROBABILITY_GATED_TYPES,
 )
 from .util import hash_string, short_race_name
-from .tints import choose_furry_tints
+from .tints import choose_breed_tints, choose_furry_tints
 
 log = logging.getLogger(__name__)
 
@@ -340,11 +340,26 @@ class FurryContext:
         npc_tint_classes = self._extract_npc_tint_classes(
             npc, original_race_id, npc_sex)
 
-        # Apply furry tint layers
-        tint_choices = choose_furry_tints(
-            npc_alias, npc_sex, furry_race_id,
-            npc_tint_classes, self.race_tints, self.max_tint_layers,
-        )
+        # Apply furry tint layers. When the breed defines explicit tint
+        # rules (or `tints = []` for "no tints"), use the breed-driven
+        # path; otherwise fall back to the unconstrained pool.
+        breed_tint_rules = None
+        if breed is not None:
+            breed_tint_rules = self.ctx.get_tint_rules(breed.name, sex_name)
+        if breed_tint_rules is not None:
+            from .tints import choose_breed_tints
+            race_data = self.race_tints.get((furry_race_id, npc_sex))
+            if race_data is None:
+                tint_choices = []
+            else:
+                tint_choices = choose_breed_tints(
+                    npc_alias, breed_tint_rules, race_data,
+                    self._form_id_for_edid)
+        else:
+            tint_choices = choose_furry_tints(
+                npc_alias, npc_sex, furry_race_id,
+                npc_tint_classes, self.race_tints, self.max_tint_layers,
+            )
 
         skin_tone_color = None
         skin_tone_intensity = 0.0
@@ -443,6 +458,51 @@ class FurryContext:
                         return (cnam.data[0], cnam.data[1],
                                 cnam.data[2], 0)
         return (255, 255, 255, 0)
+
+
+    def _build_clfm_edid_index(self) -> dict[str, Record]:
+        """Build a CLFM EditorID → record index across the load order.
+
+        Used for Phase 3 breed tint resolution where colors are named
+        by EDID. Load-order-winning record wins on EDID collision.
+        """
+        index: dict[str, Record] = {}
+        if self.plugin_set is None:
+            return index
+        for plugin in self.plugin_set:
+            for rec in plugin.get_records_by_signature('CLFM'):
+                edid = rec.editor_id
+                if edid:
+                    index[edid] = rec  # last wins = load-order winner
+        return index
+
+
+    def _resolve_color_by_edid(self, edid: str) -> Optional[tuple[int, int, int, int]]:
+        """Resolve a CLFM EditorID to its RGBA. None if not found."""
+        if not hasattr(self, '_clfm_by_edid_cache'):
+            self._clfm_by_edid_cache = self._build_clfm_edid_index()
+        rec = self._clfm_by_edid_cache.get(edid)
+        if rec is None:
+            return None
+        cnam = rec.get_subrecord('CNAM')
+        if cnam is None:
+            return None
+        if cnam.size >= 4:
+            return (cnam.data[0], cnam.data[1], cnam.data[2], cnam.data[3])
+        if cnam.size >= 3:
+            return (cnam.data[0], cnam.data[1], cnam.data[2], 0)
+        return None
+
+
+    def _form_id_for_edid(self, edid: str) -> Optional[int]:
+        """Look up a CLFM's FormID by EditorID (load-order space).
+        None if not found."""
+        if not hasattr(self, '_clfm_by_edid_cache'):
+            self._clfm_by_edid_cache = self._build_clfm_edid_index()
+        rec = self._clfm_by_edid_cache.get(edid)
+        if rec is None:
+            return None
+        return rec.normalize_form_id(rec.form_id).value
 
 
     def _apply_qnam_from_color(self, record: Record,

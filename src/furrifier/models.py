@@ -177,6 +177,23 @@ class HeadpartRule:
 
 
 @dataclass
+class BreedTintRule:
+    """One tint layer rule for a breed.
+
+    `mask_substring` matches against the parent race's TINI filename
+    (decision #6). `color_edids` lists CLFM EditorIDs the breed allows
+    for that mask; the breed picks one deterministically, and only
+    EDIDs that are also among the parent's TINI presets are kept
+    (decision #7). `probability` gates whether the layer applies.
+
+    See PLAN_FURRIFIER_BREEDS.md.
+    """
+    mask_substring: str
+    color_edids: tuple[str, ...]
+    probability: float = 1.0
+
+
+@dataclass
 class LeveledNpcEntry:
     """Per-race rule inside a leveled-list group.
 

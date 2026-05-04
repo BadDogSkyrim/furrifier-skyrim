@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from .models import (
-    Breed, HeadpartRule, LeveledNpcEntry, LeveledNpcGroup,
+    Breed, BreedTintRule, HeadpartRule, LeveledNpcEntry, LeveledNpcGroup,
     RaceAssignment, Subrace,
 )
 from .util import hash_string
@@ -77,6 +77,11 @@ class RaceDefContext:
         # ordered list (definition order matters for the deterministic roll).
         self.breeds: dict[str, Breed] = {}
         self.breeds_by_parent: dict[str, list[Breed]] = {}
+        # Breed/race tint rules per (race_or_breed, sex_or_None) — list of
+        # BreedTintRule. Distinguishes silence (key absent → None at lookup
+        # time, falls through inheritance chain) from explicit empty list
+        # (key present, value [] → "no tints applied").
+        self.tint_rules: dict[tuple, list[BreedTintRule]] = {}
 
 
     def set_race(self, vanilla_id: str, furry_id: str) -> None:
@@ -280,6 +285,53 @@ class RaceDefContext:
             furry_race_id, sex, hp_type_name).probability
 
 
+    def set_tint_rules(self, race_or_breed: str,
+                       sex: Optional[str],
+                       rules: list[BreedTintRule]) -> None:
+        """Register a list of tint rules for a (race-or-breed, sex).
+
+        An empty list is preserved as "explicit no-tints"; pass None
+        to remove a registration entirely (rare).
+        """
+        self.tint_rules[(race_or_breed, sex)] = list(rules)
+
+
+    def get_tint_rules(self, race_or_breed: str,
+                       sex: Optional[str]) -> Optional[list[BreedTintRule]]:
+        """Resolve tint rules with breed→parent inheritance.
+
+        Returns:
+            list[BreedTintRule] when an explicit registration applies
+            (possibly empty = "no tints"). None means "no rule found at
+            any level" — the caller falls back to the unconstrained
+            tint pool (existing `choose_furry_tints`).
+
+        Resolution chain:
+        1. (breed, sex) — if `race_or_breed` is a registered breed
+        2. (breed, None)
+        3. (parent_race or race_or_breed, sex)
+        4. (parent_race or race_or_breed, None)
+        5. ('*', sex) / ('*', None) — wildcards
+        6. None
+        """
+        breed = self.breeds.get(race_or_breed)
+        if breed is not None:
+            for sex_key in (sex, None):
+                rules = self.tint_rules.get((breed.name, sex_key))
+                if rules is not None:
+                    return rules
+            race_key = breed.parent_race_edid
+        else:
+            race_key = race_or_breed
+
+        for outer_key in (race_key, '*'):
+            for sex_key in (sex, None):
+                rules = self.tint_rules.get((outer_key, sex_key))
+                if rules is not None:
+                    return rules
+        return None
+
+
 _LEVELED_NPCS_KEYS = frozenset({'exclude_substrings', 'groups'})
 _GROUP_KEYS = frozenset({'match_substrings', 'races'})
 _RACE_RULE_KEYS = frozenset({'race', 'probability'})
@@ -421,21 +473,33 @@ def _apply_race_catalog(ctx: RaceDefContext, data: dict) -> None:
     for entry in data.get('headpart_probability', []):
         race = entry['race']
         sex = entry.get('sex')  # 'Male', 'Female', or absent
-        for hp_type_name, value in entry.items():
-            if hp_type_name in ('race', 'sex'):
+        for key, value in entry.items():
+            if key in ('race', 'sex'):
                 continue
-            # Per-type value is either a flat probability (existing
-            # format) or a structured table {probability=..., headpart=
-            # [...]} for breed-style whitelisting (Phase 2).
+            if key == 'tints':
+                # Phase 3 — breed/race tint rules. Empty list is preserved
+                # as "explicit no-tints" (decision #2).
+                rules = [
+                    BreedTintRule(
+                        mask_substring=str(t['mask']),
+                        color_edids=tuple(t.get('colors', ())),
+                        probability=float(t.get('probability', 1.0)),
+                    )
+                    for t in value
+                ]
+                ctx.set_tint_rules(race, sex, rules)
+                continue
+            # Otherwise it's a HeadpartType key. Value is either a flat
+            # probability (existing format) or a structured table
+            # {probability=..., headpart=[...]} (Phase 2).
             if isinstance(value, dict):
                 ctx.set_headpart_rule(
-                    race, sex, hp_type_name,
+                    race, sex, key,
                     probability=float(value.get('probability', 1.0)),
                     headpart_whitelist=tuple(value.get('headpart', ())),
                 )
             else:
-                ctx.set_headpart_probability(
-                    race, sex, hp_type_name, float(value))
+                ctx.set_headpart_probability(race, sex, key, float(value))
     for entry in data.get('breeds', []):
         ctx.set_breed(
             name=entry['breed'],

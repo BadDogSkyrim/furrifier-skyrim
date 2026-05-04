@@ -194,3 +194,67 @@ def test_capebuffalo_hair_inherits_unconstrained_pool(
             f"CapeBuffalo HAIR pick {hair[0]!r} not in BDMinoRace's "
             f"male hair pool — looks like the breed accidentally "
             f"narrowed the unconstrained slot")
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — tint filtering by breed
+# ---------------------------------------------------------------------------
+
+
+import struct
+
+
+def _patched_tints(patched):
+    """Walk patched record's TINI/TINC/TINV subrecords in order, returning
+    tuples of (tini_index, rgba)."""
+    tints = []
+    subs = patched.subrecords
+    for i, sr in enumerate(subs):
+        if sr.signature != 'TINI':
+            continue
+        tini = struct.unpack('<H', sr.data[:2])[0]
+        rgba = None
+        for j in range(i + 1, min(i + 4, len(subs))):
+            if subs[j].signature == 'TINC' and subs[j].size >= 4:
+                rgba = tuple(subs[j].data[:4])
+                break
+            if subs[j].signature == 'TINI':
+                break
+        tints.append((tini, rgba))
+    return tints
+
+
+def test_capebuffalo_tints_constrained_to_skintone_only(
+        breed_furry, mino_plugin_set):
+    """CapeBuffalo's tint rules only mention SkinTone (mask matches the
+    parent BDMinoRace's TINI 1, filename 'SkinTone.dds'). The breed
+    list is exhaustive (decision #2), so the patched record must have
+    exactly one TINI subrecord — no muzzle/cheek/etc. layers."""
+    npc = mino_plugin_set.get_record_by_edid('NPC_', 'UraggroShub')
+    patched = breed_furry.furrify_npc(npc)
+    tints = _patched_tints(patched)
+    assert len(tints) == 1, (
+        f"CapeBuffalo should emit exactly one tint (SkinTone); "
+        f"got {len(tints)}: {tints}"
+    )
+
+
+def test_capebuffalo_skintone_color_from_whitelist(
+        breed_furry, mino_plugin_set):
+    """The TINC color on the SkinTone tint must be one of the two
+    EDIDs listed in CapeBuffalo's tints whitelist:
+      - BDMinoCoatBlack    = (20, 20, 20, 0)
+      - BDMinoCoatDarkBrown = (125, 98, 70, 0)
+    """
+    allowed = {(20, 20, 20, 0), (125, 98, 70, 0)}
+    npc = mino_plugin_set.get_record_by_edid('NPC_', 'UraggroShub')
+    patched = breed_furry.furrify_npc(npc)
+    tints = _patched_tints(patched)
+    assert tints, "no tints emitted"
+    tini, rgba = tints[0]
+    assert tini == 1, (
+        f"BDMinoRace's SkinTone is TINI 1; got {tini}")
+    assert rgba in allowed, (
+        f"TINC color {rgba} not in CapeBuffalo whitelist {allowed} — "
+        f"either color resolution is wrong or the parent-preset filter "
+        f"silently picked something else")

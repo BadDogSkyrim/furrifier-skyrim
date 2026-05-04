@@ -10,9 +10,9 @@ from __future__ import annotations
 import logging
 import random
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Callable, Optional
 
-from .models import Sex, TintLayer, TintAsset
+from .models import BreedTintRule, Sex, TintAsset, TintLayer
 from .util import hash_string
 
 log = logging.getLogger(__name__)
@@ -175,6 +175,92 @@ def choose_furry_tints(npc_alias: str, npc_sex: Sex,
         if layer_id < TintLayer.DECORATION_LO:
             fur_count += 1
 
+    return choices
+
+
+def choose_breed_tints(
+        npc_alias: str,
+        rules: list[BreedTintRule],
+        race_data: 'RaceTintData',
+        form_id_for_edid: Callable[[str], Optional[int]],
+) -> list[TintChoice]:
+    """Emit tint choices for a breed-tagged NPC per its breed rules.
+
+    Algorithm (Phase 3 of PLAN_FURRIFIER_BREEDS.md):
+    1. For each rule, find every parent-race TINI whose filename
+       contains the rule's mask substring (decision #6).
+    2. Filter the rule's color EDIDs to those that resolve to a CLFM
+       whose form-id is among the matched TINI's preset color form-ids
+       (decision #7); drop missing entries with a warning.
+    3. Hash-roll the rule's probability; if not applied, skip the
+       layer entirely.
+    4. If applied: hash-pick one resolved color, emit one TintChoice
+       per matched TINI using the parent's TINI/TINP/TIAS metadata.
+
+    `form_id_for_edid` resolves a CLFM EditorID to its load-order
+    form-id (FurryContext-supplied; lazy index).
+    """
+    choices: list[TintChoice] = []
+    if not rules:
+        return choices
+    # Flatten parent's tint assets across all classes for substring match.
+    all_assets: list[TintAsset] = []
+    for assets in race_data.classes.values():
+        all_assets.extend(assets)
+    for rule in rules:
+        matches = [a for a in all_assets if rule.mask_substring in a.filename]
+        if not matches:
+            log.warning(
+                f"breed tint rule mask {rule.mask_substring!r} matched no "
+                f"parent TINI; dropping rule")
+            continue
+        # Probability gate per rule (independent of mask multiplicity).
+        salt = 7411 + (sum(ord(c) for c in rule.mask_substring) % 997)
+        if rule.probability < 1.0:
+            if rule.probability <= 0.0:
+                continue
+            if hash_string(npc_alias, salt, 1000) >= int(rule.probability * 1000):
+                continue
+        # Resolve breed colors → form-ids.
+        resolved: list[tuple[str, int]] = []  # (edid, form_id_low24)
+        for edid in rule.color_edids:
+            fid = form_id_for_edid(edid)
+            if fid is None:
+                log.warning(
+                    f"breed tint color {edid!r} not found in any plugin's "
+                    f"CLFM records; dropping")
+                continue
+            resolved.append((edid, fid & 0x00FFFFFF))
+        if not resolved:
+            log.warning(
+                f"breed tint rule for mask {rule.mask_substring!r} has no "
+                f"resolvable colors; dropping rule")
+            continue
+        # For each matched parent TINI, intersect the rule's resolved
+        # colors with the TINI's allowed presets, hash-pick one, emit.
+        for asset in matches:
+            preset_low24 = {p[0] & 0x00FFFFFF: p for p in asset.presets}
+            allowed = [(edid, fid_low) for edid, fid_low in resolved
+                       if fid_low in preset_low24]
+            if not allowed:
+                log.warning(
+                    f"breed colors for mask {rule.mask_substring!r} not "
+                    f"among parent TINI {asset.index}'s presets; "
+                    f"dropping that match")
+                continue
+            # Salt the color pick by both alias and mask so distinct masks
+            # in the same rule pick independently.
+            color_salt = 7411 + asset.index
+            idx = hash_string(npc_alias, color_salt, len(allowed))
+            edid, fid_low = allowed[idx]
+            preset = preset_low24[fid_low]
+            color_fid, intensity, tirs = preset
+            choices.append(TintChoice(
+                tini=asset.index,
+                tinc=color_fid,
+                tinv=intensity,
+                tias=tirs,
+            ))
     return choices
 
 

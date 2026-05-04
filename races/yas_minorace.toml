@@ -83,9 +83,9 @@ headpart_probability = [
   {race = "BDMinoRaceVampire", sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
 
   # Breed-level rules — apply when an NPC is assigned a Mino breed.
-  # CapeBuffalo: bovid horns only, no facial fluff.
-  {race = "CapeBuffalo", sex = "Male"  , EYEBROWS = {probability = 1.0, headpart = ["BDMinoCapeHorns"]}, FACIAL_HAIR = 0.0},
-  {race = "CapeBuffalo", sex = "Female", EYEBROWS = {probability = 1.0, headpart = ["BDMinoCapeHorns"]}, FACIAL_HAIR = 0.0},
+  # CapeBuffalo: cape horns only, no facial fluff, dark coat tones.
+  {race = "CapeBuffalo", sex = "Male"  , EYEBROWS = {probability = 1.0, headpart = ["BDMinoCapeHorns"]}, FACIAL_HAIR = 0.0, tints = [{mask = "SkinTone", colors = ["BDMinoCoatBlack", "BDMinoCoatDarkBrown"], probability = 1.0}]},
+  {race = "CapeBuffalo", sex = "Female", EYEBROWS = {probability = 1.0, headpart = ["BDMinoCapeHorns"]}, FACIAL_HAIR = 0.0, tints = [{mask = "SkinTone", colors = ["BDMinoCoatBlack", "BDMinoCoatDarkBrown"], probability = 1.0}]},
 ]
 
 # Breeds — constrained visual flavors of BDMinoRace. The breed's
