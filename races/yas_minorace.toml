@@ -81,11 +81,16 @@ headpart_probability = [
   {race = "BDMinoRace", sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
   {race = "BDMinoRaceVampire", sex = "Male", EYEBROWS = 1.0, FACIAL_HAIR = 0.3},
   {race = "BDMinoRaceVampire", sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
+
+  # Breed-level rules — apply when an NPC is assigned a Mino breed.
+  # CapeBuffalo: bovid horns only, no facial fluff.
+  {race = "CapeBuffalo", sex = "Male"  , EYEBROWS = {probability = 1.0, headpart = ["BDMinoCapeHorns"]}, FACIAL_HAIR = 0.0},
+  {race = "CapeBuffalo", sex = "Female", EYEBROWS = {probability = 1.0, headpart = ["BDMinoCapeHorns"]}, FACIAL_HAIR = 0.0},
 ]
 
-# Breeds — constrained visual flavors of BDMinoRace. Phase 1 just
-# registers them; Phase 2/3 will add headpart_rules + tint_rules to
-# constrain which assets each breed picks. See PLAN_FURRIFIER_BREEDS.md.
+# Breeds — constrained visual flavors of BDMinoRace. The breed's
+# RNAM stays BDMinoRace; the constraints above narrow which headparts
+# the furrifier picks. See PLAN_FURRIFIER_BREEDS.md.
 breeds = [
   # probability=0 (default) means CapeBuffalo only auto-assigns via
   # explicit [npc_races] / [faction_races] / leveled-list entries.

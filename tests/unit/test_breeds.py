@@ -1,4 +1,5 @@
-"""Phase 1 of the breeds feature — registry + scheme substitutability.
+"""Phase 1 + 2 of the breeds feature — registry, substitutability,
+headpart filtering.
 
 A breed is a constrained visual flavor of a parent furry race. The
 engine sees only the parent race; the breed exists at the furrifier's
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import pytest
 
+from furrifier.models import HeadpartRule
 from furrifier.race_defs import RaceDefContext
 
 
@@ -224,3 +226,133 @@ class TestSchemeBreedSubstitutability:
             ctx.assignments['OrcRace'].furry_id)
         assert engine_race == 'YASMinoRace'
         assert breed is not None and breed.name == 'CapeBuffalo'
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — headpart filtering by breed
+# ---------------------------------------------------------------------------
+
+
+class TestHeadpartRule:
+    """`HeadpartRule(probability, headpart_whitelist)` is the unified
+    record stored per (race-or-breed, sex, hp_type)."""
+
+    def test_default_rule_is_unconstrained(self):
+        r = HeadpartRule()
+        assert r.probability == 1.0
+        assert r.headpart_whitelist == ()
+
+    def test_rule_carries_whitelist_tuple(self):
+        r = HeadpartRule(probability=1.0, headpart_whitelist=('A', 'B'))
+        assert r.headpart_whitelist == ('A', 'B')
+
+
+class TestSetGetHeadpartRule:
+    def test_set_rule_stored_per_key(self):
+        ctx = RaceDefContext()
+        ctx.set_headpart_rule(
+            'CapeBuffalo', 'Male', 'EYEBROWS',
+            probability=1.0, headpart_whitelist=('BDMinoBisonHorns',))
+        rule = ctx.get_headpart_rule('CapeBuffalo', 'Male', 'EYEBROWS')
+        assert rule.probability == 1.0
+        assert rule.headpart_whitelist == ('BDMinoBisonHorns',)
+
+    def test_breed_inherits_parent_when_silent(self):
+        """Decision #5: breed silent on a type → parent race rule applies."""
+        ctx = RaceDefContext()
+        ctx.set_breed('CapeBuffalo', 'BDMinoRace', probability=0.0)
+        ctx.set_headpart_rule(
+            'BDMinoRace', 'Male', 'FACIAL_HAIR', probability=0.5)
+        # Breed has no FACIAL_HAIR rule → falls through to BDMinoRace.
+        rule = ctx.get_headpart_rule('CapeBuffalo', 'Male', 'FACIAL_HAIR')
+        assert rule.probability == 0.5
+
+    def test_breed_rule_overrides_parent(self):
+        ctx = RaceDefContext()
+        ctx.set_breed('CapeBuffalo', 'BDMinoRace')
+        ctx.set_headpart_rule(
+            'BDMinoRace', 'Male', 'FACIAL_HAIR', probability=0.5)
+        ctx.set_headpart_rule(
+            'CapeBuffalo', 'Male', 'FACIAL_HAIR', probability=0.0)
+        rule = ctx.get_headpart_rule('CapeBuffalo', 'Male', 'FACIAL_HAIR')
+        assert rule.probability == 0.0
+
+    def test_unknown_name_returns_default(self):
+        ctx = RaceDefContext()
+        rule = ctx.get_headpart_rule('NoSuchRace', 'Male', 'EYEBROWS')
+        assert rule.probability == 1.0
+        assert rule.headpart_whitelist == ()
+
+    def test_get_headpart_probability_still_works(self):
+        """Existing public API remains stable — internally it just
+        returns the rule's probability."""
+        ctx = RaceDefContext()
+        ctx.set_headpart_probability('BDMinoRace', 'Male', 'EYEBROWS', 0.7)
+        assert ctx.get_headpart_probability(
+            'BDMinoRace', 'Male', 'EYEBROWS') == 0.7
+
+    def test_breed_inheritance_for_get_headpart_probability(self):
+        """get_headpart_probability is breed-aware via the same
+        inheritance chain — so existing _should_assign keeps working."""
+        ctx = RaceDefContext()
+        ctx.set_breed('CapeBuffalo', 'BDMinoRace')
+        ctx.set_headpart_probability('BDMinoRace', 'Male', 'EYEBROWS', 0.7)
+        assert ctx.get_headpart_probability(
+            'CapeBuffalo', 'Male', 'EYEBROWS') == 0.7
+
+
+class TestStructuredHeadpartProbabilityLoader:
+    """The headpart_probability TOML row's per-type values can be a
+    flat float (existing) or a structured table (new)."""
+
+    def _load_with_data(self, tmp_path, monkeypatch, races_toml: str):
+        races_dir = tmp_path / 'races'
+        races_dir.mkdir()
+        (races_dir / 'r.toml').write_text(races_toml)
+        schemes_dir = tmp_path / 'schemes'
+        schemes_dir.mkdir()
+        (schemes_dir / 's.toml').write_text(
+            'races = [{vanilla = "NordRace", furry = "Z"}]\n')
+        from furrifier import race_defs
+        monkeypatch.setattr(
+            race_defs, '_find_resource_dir',
+            lambda name: schemes_dir if name == 'schemes' else races_dir)
+        return race_defs.load_scheme('s')
+
+    def test_flat_float_value_still_supported(self, tmp_path, monkeypatch):
+        ctx = self._load_with_data(tmp_path, monkeypatch,
+            'headpart_probability = [\n'
+            '  {race = "BDMinoRace", sex = "Male", EYEBROWS = 0.4},\n'
+            ']\n')
+        rule = ctx.get_headpart_rule('BDMinoRace', 'Male', 'EYEBROWS')
+        assert rule.probability == 0.4
+        assert rule.headpart_whitelist == ()
+
+    def test_structured_value_with_whitelist(self, tmp_path, monkeypatch):
+        ctx = self._load_with_data(tmp_path, monkeypatch,
+            'breeds = [{breed = "WhiteTail", race = "BDDeerRace"}]\n'
+            'headpart_probability = [\n'
+            '  {race = "WhiteTail", sex = "Male", '
+            'EYEBROWS = {probability = 1.0, headpart = ["BDDeerHorns1"]},'
+            '   FACIAL_HAIR = 0.0},\n'
+            ']\n')
+        eb = ctx.get_headpart_rule('WhiteTail', 'Male', 'EYEBROWS')
+        assert eb.probability == 1.0
+        assert eb.headpart_whitelist == ('BDDeerHorns1',)
+        # Sibling FACIAL_HAIR uses the flat-float form on the same row.
+        fh = ctx.get_headpart_rule('WhiteTail', 'Male', 'FACIAL_HAIR')
+        assert fh.probability == 0.0
+
+    def test_structured_value_omits_probability_defaults_to_one(
+            self, tmp_path, monkeypatch):
+        """Decision #3: missing `probability` on a structured value
+        means 1.0 (always apply)."""
+        ctx = self._load_with_data(tmp_path, monkeypatch,
+            'breeds = [{breed = "WhiteTail", race = "BDDeerRace"}]\n'
+            'headpart_probability = [\n'
+            '  {race = "WhiteTail", sex = "Male", '
+            'EYEBROWS = {headpart = ["BDDeerHorns1"]}},\n'
+            ']\n')
+        rule = ctx.get_headpart_rule('WhiteTail', 'Male', 'EYEBROWS')
+        assert rule.probability == 1.0
+        assert rule.headpart_whitelist == ('BDDeerHorns1',)

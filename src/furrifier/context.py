@@ -294,7 +294,7 @@ class FurryContext:
             new_hp = find_similar_headpart(
                 old_hp, npc_alias, npc_sex, labels,
                 furry_race_id, self.race_headparts, self.all_headparts,
-                self.ctx,
+                self.ctx, breed=breed,
             )
             if new_hp and new_hp.record:
                 self._add_headpart_pnam(patched, new_hp)
@@ -306,16 +306,29 @@ class FurryContext:
         # the race's default headpart (a single "steer horns") for every
         # NPC that wasn't already given a brow.
         sex_key = int(npc_sex)
+        sex_name = 'Female' if npc_sex.is_female else 'Male'
         for hp_type in _PROBABILITY_GATED_TYPES:
             if hp_type in assigned_types:
                 continue
             if not _should_assign(npc_alias, furry_race_id, npc_sex,
-                                  hp_type, self.ctx):
+                                  hp_type, self.ctx, breed=breed):
                 continue
             candidates = self.race_headparts.get(
                 (hp_type, sex_key, furry_race_id), set())
             if not candidates:
                 continue
+            # Apply the breed's (or race's) headpart whitelist when set.
+            lookup_name = breed.name if breed is not None else furry_race_id
+            whitelist = self.ctx.get_headpart_rule(
+                lookup_name, sex_name, hp_type.name).headpart_whitelist
+            if whitelist:
+                candidates = candidates & set(whitelist)
+                if not candidates:
+                    log.warning(
+                        f"breed whitelist {whitelist!r} matched no "
+                        f"headparts in {furry_race_id} {hp_type.name} "
+                        f"pool — skipping {npc_alias}")
+                    continue
             candidate_list = sorted(candidates)
             idx = hash_string(npc_alias, 619 + int(hp_type),
                               len(candidate_list))

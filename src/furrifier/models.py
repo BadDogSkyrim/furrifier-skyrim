@@ -164,6 +164,19 @@ class Breed:
 
 
 @dataclass
+class HeadpartRule:
+    """Headpart-assignment rule for a (race-or-breed, sex, hp_type).
+
+    `probability` gates whether the layer applies (existing behavior).
+    `headpart_whitelist`, when non-empty, constrains the candidate pool
+    to just those EditorIDs — a breed may say "always pick from this
+    short list" instead of the parent race's full pool.
+    """
+    probability: float = 1.0
+    headpart_whitelist: tuple[str, ...] = ()
+
+
+@dataclass
 class LeveledNpcEntry:
     """Per-race rule inside a leveled-list group.
 

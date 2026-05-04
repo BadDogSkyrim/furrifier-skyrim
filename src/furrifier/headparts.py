@@ -13,7 +13,7 @@ from typing import Optional
 
 from esplib import Record
 
-from .models import Sex, HeadpartType, HeadpartInfo
+from .models import Breed, Sex, HeadpartType, HeadpartInfo
 from .race_defs import RaceDefContext
 from .util import hash_string
 
@@ -141,6 +141,20 @@ def calculate_label_match_score(npc_labels: list[str],
     )
 
 
+def _breed_whitelist(ctx: RaceDefContext, breed: Optional[Breed],
+                     furry_race_id: str, npc_sex: Sex,
+                     hp_type: HeadpartType) -> tuple[str, ...]:
+    """Resolve the breed-or-race headpart whitelist for this slot.
+
+    Empty tuple = unconstrained pool. Caller intersects with whatever
+    candidate set it has.
+    """
+    sex_name = 'Female' if npc_sex.is_female else 'Male'
+    lookup_name = breed.name if breed is not None else furry_race_id
+    return ctx.get_headpart_rule(
+        lookup_name, sex_name, hp_type.name).headpart_whitelist
+
+
 def find_best_headpart_match(
     old_hp: HeadpartInfo,
     npc_alias: str,
@@ -150,12 +164,16 @@ def find_best_headpart_match(
     race_headparts: dict,
     all_headparts: dict[str, HeadpartInfo],
     ctx: RaceDefContext,
+    breed: Optional[Breed] = None,
 ) -> Optional[HeadpartInfo]:
     """Find the best furry headpart to replace a vanilla headpart.
 
     Uses headpart equivalents (1:1 mappings) if defined, otherwise
     scores all available headparts by label matching. For eye headparts,
     candidates are filtered to match the vanilla eye's blindness state.
+
+    `breed`, when set, constrains the candidate pool to its
+    `headpart_whitelist` for this (sex, type) — see PLAN_FURRIFIER_BREEDS.md.
     """
     hp_type = old_hp.hp_type
     sex_key = int(npc_sex)
@@ -164,6 +182,9 @@ def find_best_headpart_match(
     # so a sighted NPC can't end up with a blind furry eye (and vice versa).
     target_blind = (_blindness_state(old_hp.editor_id)
                     if hp_type == HeadpartType.EYES else None)
+
+    whitelist = _breed_whitelist(ctx, breed, furry_race_id, npc_sex, hp_type)
+    whitelist_set = set(whitelist) if whitelist else None
 
     # Check for explicit headpart equivalents
     if old_hp.equivalents:
@@ -178,6 +199,9 @@ def find_best_headpart_match(
                 candidates.append(equiv)
         if target_blind is not None:
             candidates = _filter_by_blindness(candidates, target_blind)
+        if whitelist_set is not None:
+            candidates = [c for c in candidates
+                          if c.editor_id in whitelist_set]
         if candidates:
             # Salt 317: "equivalent-list candidate pick" — independent
             # from the label-match pick below (salt 319).
@@ -199,7 +223,14 @@ def find_best_headpart_match(
                  if hp_id in all_headparts]
     if target_blind is not None:
         available = _filter_by_blindness(available, target_blind)
+    if whitelist_set is not None:
+        available = [c for c in available if c.editor_id in whitelist_set]
     if not available:
+        if whitelist_set is not None:
+            log.warning(
+                f"breed whitelist {whitelist!r} for {furry_race_id} "
+                f"{npc_sex.name} {hp_type.name} matched no headparts "
+                f"in the race pool — leaving slot empty for {npc_alias}")
         return None
 
     best_score = -1000
@@ -233,13 +264,20 @@ _PROBABILITY_GATED_TYPES = (HeadpartType.EYEBROWS, HeadpartType.FACIAL_HAIR)
 
 
 def _should_assign(npc_alias: str, furry_race_id: str, npc_sex: Sex,
-                   hp_type: HeadpartType, ctx: RaceDefContext) -> bool:
+                   hp_type: HeadpartType, ctx: RaceDefContext,
+                   breed: Optional[Breed] = None) -> bool:
     """Probability gate for EYEBROWS and FACIAL_HAIR. Deterministic
-    per (NPC, hp_type). Other types always assign."""
+    per (NPC, hp_type). Other types always assign.
+
+    `breed`, when set, looks up breed-specific probability first, with
+    fallback to the parent race per the inheritance chain in
+    `RaceDefContext.get_headpart_rule`.
+    """
     if hp_type not in _PROBABILITY_GATED_TYPES:
         return True
     sex_name = 'Female' if npc_sex.is_female else 'Male'
-    p = ctx.get_headpart_probability(furry_race_id, sex_name, hp_type.name)
+    lookup_name = breed.name if breed is not None else furry_race_id
+    p = ctx.get_headpart_probability(lookup_name, sex_name, hp_type.name)
     if p >= 1.0:
         return True
     if p <= 0.0:
@@ -258,19 +296,21 @@ def find_similar_headpart(
     race_headparts: dict,
     all_headparts: dict[str, HeadpartInfo],
     ctx: RaceDefContext,
+    breed: Optional[Breed] = None,
 ) -> Optional[HeadpartInfo]:
     """Find a furry equivalent for a vanilla headpart.
 
     If the old headpart is an "empty" headpart, returns None (skip it).
     Otherwise, adds the old headpart's labels to the NPC's label list
-    and finds the best match.
+    and finds the best match. `breed`, when set, applies the breed's
+    probability gate and headpart whitelist for this (sex, hp_type).
     """
     if old_hp.editor_id in ctx.empty_headparts:
         log.debug(f"Headpart {old_hp.editor_id} is empty, skipping")
         return None
 
     if not _should_assign(npc_alias, furry_race_id, npc_sex,
-                          old_hp.hp_type, ctx):
+                          old_hp.hp_type, ctx, breed=breed):
         log.debug(
             f"Probability skip: {npc_alias} {furry_race_id} "
             f"{old_hp.hp_type.name}")
@@ -285,4 +325,5 @@ def find_similar_headpart(
     return find_best_headpart_match(
         old_hp, npc_alias, npc_sex, working_labels,
         furry_race_id, race_headparts, all_headparts, ctx,
+        breed=breed,
     )

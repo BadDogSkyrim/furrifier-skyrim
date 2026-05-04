@@ -1,10 +1,16 @@
-"""Integration test: Phase 1 of breeds — npc_races maps to a breed.
+"""Integration tests for breeds Phase 1 + 2.
 
 Uses `ungulate_test` scheme with `[npc_races] UraggroShub = "CapeBuffalo"`.
 CapeBuffalo is registered as a BDMinoRace breed in
-`races/yas_minorace.toml`. Verifies `determine_npc_race` returns the
-breed in the 4-tuple so downstream phases can apply breed-specific
-constraints. See PLAN_FURRIFIER_BREEDS.md.
+`races/yas_minorace.toml`, with EYEBROWS whitelisted to BDMinoCapeHorns
+and FACIAL_HAIR disabled.
+
+Phase 1: `determine_npc_race` exposes the assigned breed.
+Phase 2: the patched NPC's PNAM list reflects the breed's headpart
+constraints — only whitelisted EYEBROWS, no FACIAL_HAIR, HAIR
+unconstrained (inherits parent BDMinoRace pool).
+
+See PLAN_FURRIFIER_BREEDS.md.
 """
 from __future__ import annotations
 
@@ -118,3 +124,73 @@ def test_unbred_orc_returns_none_breed(breed_furry, mino_plugin_set):
     assert assigned == 'OrcRace'
     assert furry == 'BDMinoRace'
     assert breed is None
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — headpart filtering by breed
+# ---------------------------------------------------------------------------
+
+
+from furrifier.models import HeadpartType
+
+
+def _pnam_edids_of_type(patched, all_headparts, hp_type: HeadpartType):
+    """EditorIDs of patched PNAM entries matching the requested type."""
+    edids = []
+    for sr in patched.get_subrecords('PNAM'):
+        obj_id = sr.get_uint32() & 0x00FFFFFF
+        for hp_id, hp in all_headparts.items():
+            if (hp.record and hp.hp_type == hp_type
+                    and (hp.record.form_id.value & 0x00FFFFFF) == obj_id):
+                edids.append(hp_id)
+                break
+    return edids
+
+
+def test_capebuffalo_eyebrows_constrained_to_whitelist(
+        breed_furry, mino_plugin_set):
+    """CapeBuffalo's EYEBROWS rule whitelists ['BDMinoCapeHorns'] —
+    UraggroShub must end up with that exact horn, not whatever the
+    breed-less Mino pool would produce by default."""
+    npc = mino_plugin_set.get_record_by_edid('NPC_', 'UraggroShub')
+    assert npc is not None
+    patched = breed_furry.furrify_npc(npc)
+    assert patched is not None
+    eyebrows = _pnam_edids_of_type(
+        patched, breed_furry.all_headparts, HeadpartType.EYEBROWS)
+    assert eyebrows == ['BDMinoCapeHorns'], (
+        f"UraggroShub-as-CapeBuffalo should get only the whitelisted "
+        f"BDMinoCapeHorns; got {eyebrows}")
+
+
+def test_capebuffalo_facial_hair_disabled(breed_furry, mino_plugin_set):
+    """CapeBuffalo's FACIAL_HAIR=0.0 → never assigned. Phase 2 should
+    suppress facial hair even though the parent BDMinoRace's male rule
+    is FACIAL_HAIR=0.5 (decision #5 inheritance: breed's explicit 0.0
+    overrides the parent)."""
+    npc = mino_plugin_set.get_record_by_edid('NPC_', 'UraggroShub')
+    patched = breed_furry.furrify_npc(npc)
+    facial = _pnam_edids_of_type(
+        patched, breed_furry.all_headparts, HeadpartType.FACIAL_HAIR)
+    assert facial == [], (
+        f"CapeBuffalo should suppress FACIAL_HAIR; got {facial}")
+
+
+def test_capebuffalo_hair_inherits_unconstrained_pool(
+        breed_furry, mino_plugin_set):
+    """CapeBuffalo doesn't define HAIR rules → inherits BDMinoRace's
+    unconstrained pool. Whatever HAIR is picked, it must come from the
+    full Mino male hair pool, not be filtered to a one-element list."""
+    npc = mino_plugin_set.get_record_by_edid('NPC_', 'UraggroShub')
+    patched = breed_furry.furrify_npc(npc)
+    hair = _pnam_edids_of_type(
+        patched, breed_furry.all_headparts, HeadpartType.HAIR)
+    bdmino_male_hair = breed_furry.race_headparts.get(
+        (HeadpartType.HAIR, 0, 'BDMinoRace'), set())
+    assert bdmino_male_hair, (
+        "test premise broken — BDMinoRace male hair pool is empty")
+    if hair:
+        assert hair[0] in bdmino_male_hair, (
+            f"CapeBuffalo HAIR pick {hair[0]!r} not in BDMinoRace's "
+            f"male hair pool — looks like the breed accidentally "
+            f"narrowed the unconstrained slot")

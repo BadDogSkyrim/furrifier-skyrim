@@ -19,7 +19,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from .models import Breed, LeveledNpcEntry, LeveledNpcGroup, RaceAssignment, Subrace
+from .models import (
+    Breed, HeadpartRule, LeveledNpcEntry, LeveledNpcGroup,
+    RaceAssignment, Subrace,
+)
 from .util import hash_string
 
 log = logging.getLogger(__name__)
@@ -54,10 +57,14 @@ class RaceDefContext:
         self.label_conflicts: set[frozenset] = set()
         # empty headparts: set of EditorIDs that represent "no headpart"
         self.empty_headparts: set[str] = set()
-        # headpart assignment probability: (furry_race_edid, sex_name_or_None,
-        # HeadpartType.name) -> float in [0.0, 1.0]. Missing key = 1.0.
-        # sex_name is 'Male', 'Female', or None (applies to both).
-        self.headpart_probability: dict[tuple, float] = {}
+        # Headpart-assignment rules per (race_or_breed, sex_name_or_None,
+        # HeadpartType.name) → HeadpartRule. Missing key = unconstrained
+        # default (probability=1.0, no whitelist). sex_name is 'Male',
+        # 'Female', or None (applies to both). race_or_breed may be a
+        # registered race EDID OR a breed name; breeds inherit from
+        # their parent race when silent on a type. See decision #5 in
+        # PLAN_FURRIFIER_BREEDS.md.
+        self.headpart_rules: dict[tuple, HeadpartRule] = {}
         # leveled-list extension groups: ordered list, first-match wins
         # against the LVLN editor_id
         self.leveled_npc_groups: list[LeveledNpcGroup] = []
@@ -203,30 +210,74 @@ class RaceDefContext:
 
         sex is 'Male', 'Female', or None (applies to both).
         hp_type_name is a HeadpartType enum name, e.g. 'EYEBROWS'.
+
+        Backwards-compat shim around `set_headpart_rule` — sets a rule
+        with the given probability and no headpart whitelist.
         """
-        self.headpart_probability[(furry_race_id, sex, hp_type_name)] = probability
+        self.set_headpart_rule(furry_race_id, sex, hp_type_name,
+                               probability=probability)
+
+
+    def set_headpart_rule(self, race_or_breed: str,
+                          sex: Optional[str],
+                          hp_type_name: str,
+                          probability: float = 1.0,
+                          headpart_whitelist: tuple[str, ...] = (),
+                          ) -> None:
+        """Register a headpart rule for a (race-or-breed, sex, type).
+
+        `race_or_breed` is a race EDID (e.g. 'BDDeerRace') or a breed
+        name (e.g. 'WhiteTail'). `headpart_whitelist`, when non-empty,
+        restricts the candidate pool at selection time to those
+        EditorIDs.
+        """
+        self.headpart_rules[(race_or_breed, sex, hp_type_name)] = (
+            HeadpartRule(probability=probability,
+                         headpart_whitelist=tuple(headpart_whitelist)))
+
+
+    def get_headpart_rule(self, race_or_breed: str, sex: Optional[str],
+                          hp_type_name: str) -> HeadpartRule:
+        """Look up a headpart rule with breed→parent inheritance.
+
+        Resolution order:
+        1. (breed, sex, type) — if `race_or_breed` is a registered breed
+        2. (breed, None, type)
+        3. (parent_race or race_or_breed, sex, type)
+        4. (parent_race or race_or_breed, None, type)
+        5. ('*', sex, type) — wildcard race
+        6. ('*', None, type)
+        7. default HeadpartRule()
+
+        Decision #5 in PLAN_FURRIFIER_BREEDS.md: breed silence on a
+        type means inherit from parent race.
+        """
+        breed = self.breeds.get(race_or_breed)
+        if breed is not None:
+            for sex_key in (sex, None):
+                rule = self.headpart_rules.get(
+                    (breed.name, sex_key, hp_type_name))
+                if rule is not None:
+                    return rule
+            race_key = breed.parent_race_edid
+        else:
+            race_key = race_or_breed
+
+        for outer_key in (race_key, '*'):
+            for sex_key in (sex, None):
+                rule = self.headpart_rules.get(
+                    (outer_key, sex_key, hp_type_name))
+                if rule is not None:
+                    return rule
+        return HeadpartRule()
 
 
     def get_headpart_probability(self, furry_race_id: str, sex: str,
                                  hp_type_name: str) -> float:
-        """Look up probability for a (race, sex, type) with fallback chain:
-
-        1. (race, sex, type)   — most specific
-        2. (race, None, type)  — race-specific, any sex
-        3. ('*', sex, type)    — wildcard race, sex-specific
-        4. ('*', None, type)   — wildcard race, any sex
-        5. 1.0                 — always assign
-
-        Use race='*' in the TOML to set a default that applies to every
-        furry race unless overridden.
-        """
-        for race_key in (furry_race_id, '*'):
-            for sex_key in (sex, None):
-                p = self.headpart_probability.get(
-                    (race_key, sex_key, hp_type_name))
-                if p is not None:
-                    return p
-        return 1.0
+        """Look up probability with the same fallback chain as
+        `get_headpart_rule`. Returns 1.0 when no rule applies."""
+        return self.get_headpart_rule(
+            furry_race_id, sex, hp_type_name).probability
 
 
 _LEVELED_NPCS_KEYS = frozenset({'exclude_substrings', 'groups'})
@@ -370,10 +421,21 @@ def _apply_race_catalog(ctx: RaceDefContext, data: dict) -> None:
     for entry in data.get('headpart_probability', []):
         race = entry['race']
         sex = entry.get('sex')  # 'Male', 'Female', or absent
-        for hp_type_name, probability in entry.items():
+        for hp_type_name, value in entry.items():
             if hp_type_name in ('race', 'sex'):
                 continue
-            ctx.set_headpart_probability(race, sex, hp_type_name, probability)
+            # Per-type value is either a flat probability (existing
+            # format) or a structured table {probability=..., headpart=
+            # [...]} for breed-style whitelisting (Phase 2).
+            if isinstance(value, dict):
+                ctx.set_headpart_rule(
+                    race, sex, hp_type_name,
+                    probability=float(value.get('probability', 1.0)),
+                    headpart_whitelist=tuple(value.get('headpart', ())),
+                )
+            else:
+                ctx.set_headpart_probability(
+                    race, sex, hp_type_name, float(value))
     for entry in data.get('breeds', []):
         ctx.set_breed(
             name=entry['breed'],
