@@ -76,25 +76,64 @@ headpart_equivalents = [
   {vanilla = "MaleEyesOrcYellow"                  , furry = "BDMinoMaleEyesOrcYellow"},
 ]
 
-headpart_probability = [
-  {race = "BDMinoRace", sex = "Male", EYEBROWS = 1.0, FACIAL_HAIR = 0.5},
-  {race = "BDMinoRace", sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
-  {race = "BDMinoRaceVampire", sex = "Male", EYEBROWS = 1.0, FACIAL_HAIR = 0.3},
-  {race = "BDMinoRaceVampire", sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
-
-  # Breed-level rules — apply when an NPC is assigned a Mino breed.
-  # CapeBuffalo: cape horns only, no facial fluff, dark coat tones.
-  {race = "CapeBuffalo", sex = "Male"  , EYEBROWS = {probability = 1.0, headpart = ["BDMinoCapeHorns"]}, FACIAL_HAIR = 0.0, tints = [{mask = "SkinTone", colors = ["BDMinoCoatBlack", "BDMinoCoatDarkBrown"], probability = 1.0}]},
-  {race = "CapeBuffalo", sex = "Female", EYEBROWS = {probability = 1.0, headpart = ["BDMinoCapeHorns"]}, FACIAL_HAIR = 0.0, tints = [{mask = "SkinTone", colors = ["BDMinoCoatBlack", "BDMinoCoatDarkBrown"], probability = 1.0}]},
-]
-
 # Breeds — constrained visual flavors of BDMinoRace. The breed's
-# RNAM stays BDMinoRace; the constraints above narrow which headparts
-# the furrifier picks. See PLAN_FURRIFIER_BREEDS.md.
+# RNAM stays BDMinoRace; the per-breed headpart_probability rules
+# below narrow which headparts and tints the furrifier picks for an
+# NPC assigned to the breed. See PLAN_FURRIFIER_BREEDS.md.
 breeds = [
   # probability=0 (default) means CapeBuffalo only auto-assigns via
   # explicit [npc_races] / [faction_races] / leveled-list entries.
   {breed = "CapeBuffalo", race = "BDMinoRace"},
+]
+
+# headpart_probability uses the array-of-tables form ([[…]]) so each
+# row can spread its EYEBROWS / FACIAL_HAIR / tints fields across
+# lines. TOML inline tables {…} must stay on one line, but this form
+# sidesteps that. Every [[headpart_probability]] block in the file is
+# appended to one shared list — the loader doesn't care about the
+# syntax variant.
+
+[[headpart_probability]]
+race = "BDMinoRace"
+sex = "Male"
+EYEBROWS = 1.0
+FACIAL_HAIR = 0.5
+
+[[headpart_probability]]
+race = "BDMinoRace"
+sex = "Female"
+EYEBROWS = 0.5
+FACIAL_HAIR = 0.0
+
+[[headpart_probability]]
+race = "BDMinoRaceVampire"
+sex = "Male"
+EYEBROWS = 1.0
+FACIAL_HAIR = 0.3
+
+[[headpart_probability]]
+race = "BDMinoRaceVampire"
+sex = "Female"
+EYEBROWS = 0.5
+FACIAL_HAIR = 0.0
+
+# CapeBuffalo: cape horns only, no facial fluff, dark coat tones.
+[[headpart_probability]]
+race = "CapeBuffalo"
+sex = "Male"
+EYEBROWS = {probability = 1.0, headpart = ["BDMinoCapeHorns"]}
+FACIAL_HAIR = 0.0
+tints = [
+  {mask = "SkinTone", colors = ["BDMinoCoatBlack", "BDMinoCoatDarkBrown"], probability = 1.0},
+]
+
+[[headpart_probability]]
+race = "CapeBuffalo"
+sex = "Female"
+EYEBROWS = {probability = 1.0, headpart = ["BDMinoCapeHorns"]}
+FACIAL_HAIR = 0.0
+tints = [
+  {mask = "SkinTone", colors = ["BDMinoCoatBlack", "BDMinoCoatDarkBrown"], probability = 1.0},
 ]
 
 [headpart_labels]
