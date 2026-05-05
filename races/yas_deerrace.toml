@@ -79,12 +79,157 @@ headpart_equivalents = [
   {vanilla = "MaleEyesWoodElfLightBrown"          , furry = "BDDeerMaleEyesWoodElfLightBrown"},
 ]
 
-headpart_probability = [
-  {race = "BDDeerRace", sex = "Male", EYEBROWS = 1.0, FACIAL_HAIR = 0.2},
-  {race = "BDDeerRace", sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
-  {race = "BDDeerRaceVampire", sex = "Male", EYEBROWS = 1.0, FACIAL_HAIR = 0.2},
-  {race = "BDDeerRaceVampire", sex = "Female", EYEBROWS = 0.5, FACIAL_HAIR = 0.0},
+breeds = [
+  # All deer are one of these breeds.
+  {breed = "Dikdik", race = "BDDeerRace", probability = 0.1},
+  {breed = "Elk", race = "BDDeerRace", probability = 0.15},
+  {breed = "Gazelle", race = "BDDeerRace", probability = 0.1},
+  {breed = "Goat", race = "BDDeerRace", probability = 0.1},
+  {breed = "Moose", race = "BDDeerRace", probability = 0.15},
+  {breed = "Reindeer", race = "BDDeerRace", probability = 0.20},
+  {breed = "WhiteTail", race = "BDDeerRace", probability = 0.20},
 ]
+
+[color_schemes.Dikdik]
+SkinTone = [["BDDeerCoatBay", 0.9], ["BDDeerCoatBayLight", 0.8], ["BDDeerCoatBrown", 0.9], ["BDDeerCoatWarmGray", 0.9]]
+TintNeck = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.9], ["BDDeerFaceFurWhite", 0.8]]
+TintEyeUpper = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.8], ["BDDeerFaceFurWhite", 0.5], ["BDDeerFaceFurTan", 0.8], ["BDDeerFaceFurTan", 0.5]]
+TintEyeLower = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.8], ["BDDeerFaceFurWhite", 0.5], ["BDDeerFaceFurTan", 0.8], ["BDDeerFaceFurTan", 0.5]]
+TintCheeckLower = [["probability", 0.75], ["BDDeerFaceFurBlackBrown", 0.4], ["BDDeerFaceFurTan", 0.3]]
+TintCheekUpper = [["probability", 0.75], ["BDDeerFaceFurBlackBrown", 0.2], ["BDDeerFaceFurTan", 0.3]]
+TintMuzzleUpper = [["probability", 0.75], ["BDDeerFaceFurBlackBrown", 0.2], ["BDDeerFaceFurTan", 0.3]]
+TintLaughline = [["probability", 1.0], ["BDDeerFaceFurBlack", 1], ["BDDeerFaceFurBlackBrown", 1]]
+TintEyeliner = [["probability", 1.0], ["BDDeerFleshDark", 1]]
+TintNose = [["probability", 1.0], ["BDDeerFleshDark", 0.9]]
+
+[color_schemes.ElkMoose]
+SkinTone = [["BDDeerCoatDarkBrown", 0.9], ["BDDeerCoatWarmGray", 0.9]]
+TintNeck = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.5], ["BDDeerFaceFurWhite", 0.3]]
+TintEyeUpper = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.5], ["BDDeerFaceFurWhite", 0.3], ["BDDeerFaceFurTan", 0.5], ["BDDeerFaceFurTan", 0.3]]
+TintEyeLower = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.5], ["BDDeerFaceFurWhite", 0.3], ["BDDeerFaceFurTan", 0.5], ["BDDeerFaceFurTan", 0.3]]
+TintCheeckLower = [["probability", 0.75], ["BDDeerFaceFurTan", 0.4], ["BDDeerFaceFurWhite", 0.3]]
+TintCheekUpper = [["probability", 0.75], ["BDDeerFaceFurTan", 0.4], ["BDDeerFaceFurWhite", 0.3]]
+TintEyeliner = [["probability", 1.0], ["BDDeerFleshDark", 1]]
+TintNose = [["probability", 1.0], ["BDDeerFleshDark", 0.9]]
+
+[color_schemes.Gazelle]
+SkinTone = [["BDDeerCoatBrown", 0.9], ["BDDeerCoatBrown", 0.8], ["BDDeerCoatBrown", 0.7], ["BDDeerCoatTan", 0.9]]
+TintMuzzle = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.9], ["BDDeerFaceFurWhite", 0.8]]
+TintNeck = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.9], ["BDDeerFaceFurWhite", 0.8]]
+TintEyeUpper = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.8], ["BDDeerFaceFurWhite", 0.5]]
+TintEyeLower = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.8], ["BDDeerFaceFurWhite", 0.5]]
+TintCheeckLower = [["probability", 1.0], ["BDDeerFaceFurTan", 0.9], ["BDDeerFaceFurWhite", 0.9]]
+TintCheekUpper = [["probability", 1.0], ["BDDeerFaceFurTan", 0.9], ["BDDeerFaceFurWhite", 0.9]]
+TintLaughline = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.9], ["BDDeerFaceFurWhite", 0.6]]
+TintTommyStripe = [["probability", 1.0], ["BDDeerCoatBlack", 1.0], ["black", 1.0], ["BlackBrownBase", 1.0]]
+TintEyeliner = [["probability", 1.0], ["BDDeerFleshDark", 1]]
+TintNose = [["probability", 1.0], ["BDDeerFleshDark", 0.9]]
+
+[color_schemes.Goat]
+SkinTone = [["BDDeerCoatTan", 0.9], ["WHITE", 0.9]]
+TintNeck = [["probability", 0.7], ["BDDeerFaceFurWhite", 0.5], ["BDDeerFaceFurWhite", 0.3]]
+TintEyeUpper = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.5], ["BDDeerFaceFurWhite", 0.3], ["BDDeerFaceFurTan", 0.5], ["BDDeerFaceFurTan", 0.3], ["BDDeerFaceFurBlackBrown", 0.5]]
+TintEyeLower = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.5], ["BDDeerFaceFurWhite", 0.3], ["BDDeerFaceFurTan", 0.5], ["BDDeerFaceFurTan", 0.3], ["BDDeerFaceFurBlackBrown", 0.5]]
+TintCheeckLower = [["probability", 0.75], ["BDDeerFaceFurTan", 0.4], ["BDDeerFaceFurWhite", 0.3]]
+TintCheekUpper = [["probability", 0.75], ["BDDeerFaceFurTan", 0.4], ["BDDeerFaceFurWhite", 0.3]]
+TintEyeliner = [["probability", 1.0], ["BDDeerFleshDark", 1]]
+TintNose = [["probability", 1.0], ["BDDeerFleshDark", 0.9]]
+
+[color_schemes.Reindeer]
+SkinTone = [["BDDeerCoatDarkBrown", 0.9], ["BDDeerCoatWarmGray", 0.9]]
+TintMuzzle = [["probability", 0.7], ["BDDeerFaceFurWhite", 0.6], ["BDDeerFaceFurBlack", 0.6], ["BDDeerFaceFurBlackBrown", 0.6], ["BDDeerFaceFurBrownDark", 0.6], ["BDDeerFaceFurWhite", 0.2]]
+TintNeck = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.5], ["BDDeerFaceFurWhite", 0.3]]
+TintEyeUpper = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.8], ["BDDeerFaceFurWhite", 0.5]]
+TintEyeLower = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.8], ["BDDeerFaceFurWhite", 0.5]]
+TintCheeckLower = [["probability", 0.75], ["BDDeerFaceFurTan", 0.4], ["BDDeerFaceFurWhite", 0.3]]
+TintCheekUpper = [["probability", 0.75], ["BDDeerFaceFurTan", 0.4], ["BDDeerFaceFurWhite", 0.3]]
+TintLaughline = [["probability", 0.5], ["BDDeerFaceFurWhite", 0.8], ["BDDeerFaceFurWhite", 0.5]]
+TintEyeliner = [["probability", 1.0], ["BDDeerFleshDark", 1]]
+TintNose = [["probability", 1.0], ["BDDeerFleshDark", 0.9]]
+
+[color_schemes.WhiteTail]
+SkinTone = [["BDDeerCoatBay", 0.9], ["BDDeerCoatBayLight", 0.8], ["BDDeerCoatBrown", 0.9]]
+TintMuzzle = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.9], ["BDDeerFaceFurWhite", 0.8]]
+TintNeck = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.9], ["BDDeerFaceFurWhite", 0.8]]
+TintEyeUpper = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.8], ["BDDeerFaceFurWhite", 0.5], ["BDDeerFaceFurTan", 0.8], ["BDDeerFaceFurTan", 0.5]]
+TintEyeLower = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.8], ["BDDeerFaceFurWhite", 0.5], ["BDDeerFaceFurTan", 0.8], ["BDDeerFaceFurTan", 0.5]]
+TintCheeckLower = [["probability", 0.75], ["BDDeerFaceFurBlackBrown", 0.4], ["BDDeerFaceFurTan", 0.3]]
+TintCheekUpper = [["probability", 0.75], ["BDDeerFaceFurBlackBrown", 0.2], ["BDDeerFaceFurTan", 0.3]]
+TintMuzzleUpper = [["probability", 0.75], ["BDDeerFaceFurBlackBrown", 0.2], ["BDDeerFaceFurTan", 0.3]]
+TintLaughline = [["probability", 1.0], ["BDDeerFaceFurBlack", 1], ["BDDeerFaceFurBlackBrown", 1]]
+TintEyeliner = [["probability", 1.0], ["BDDeerFleshDark", 1]]
+TintNose = [["probability", 1.0], ["BDDeerFleshDark", 0.9]]
+
+[[headpart_probability]]
+race = "Dikdik"
+sex = "both"
+EYEBROWS = {headpart = ["BDDeerHorns6"]}
+FACIAL_HAIR = 0.0
+colors = "Dikdik"
+
+[[headpart_probability]]
+race = "Elk"
+sex = "male"
+EYEBROWS = {headpart = ["BDDeerHorns4"]}
+FACIAL_HAIR = 0.2
+colors = "ElkMoose"
+
+[[headpart_probability]]
+race = "Elk"
+sex = "female"
+EYEBROWS = 0.0
+FACIAL_HAIR = 0.0
+colors = "ElkMoose"
+
+[[headpart_probability]]
+race = "Gazelle"
+sex = "both"
+EYEBROWS = {headpart = ["BDDeerHorns3"]}
+FACIAL_HAIR = 0.0
+colors = "Gazelle"
+
+[[headpart_probability]]
+race = "Goat"
+sex = "both"
+EYEBROWS = {headpart = ["BDDeerHornsRam"]}
+FACIAL_HAIR = 0.5
+colors = "Goat"
+
+[[headpart_probability]]
+race = "Moose"
+sex = "male"
+EYEBROWS = {headpart = ["BDDeerHorns8"]}
+FACIAL_HAIR = 0.4
+colors = "ElkMoose"
+
+[[headpart_probability]]
+race = "Moose"
+sex = "female"
+EYEBROWS = 0.0
+FACIAL_HAIR = 0.0
+colors = "ElkMoose"
+
+[[headpart_probability]]
+race = "Reindeer"
+sex = "both"
+EYEBROWS = {headpart = ["BDDeerHornsReindeer"]}
+FACIAL_HAIR = 0.4
+colors = "Reindeer"
+
+[[headpart_probability]]
+race = "WhiteTail"
+sex = "male"
+EYEBROWS = {headpart = ["BDDeerHorns1"]}
+FACIAL_HAIR = 0.2
+colors = "WhiteTail"
+
+[[headpart_probability]]
+race = "WhiteTail"
+sex = "female"
+EYEBROWS = 0.0
+FACIAL_HAIR = 0.0
+colors = "WhiteTail"
+
 
 [headpart_labels]
 BDDeerDreads01                 = "DREADS,BOLD,FUNKY,LONG"

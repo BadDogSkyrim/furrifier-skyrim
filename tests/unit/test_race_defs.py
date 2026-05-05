@@ -157,9 +157,6 @@ class TestRaceDefContext:
         """races/*.toml headpart_probability entries land in every
         scheme's context (catalog is scheme-independent)."""
         ctx = load_scheme('all_races_test')
-        # Deer male facial hair = 0.2 per yas_deerrace.toml.
-        assert ctx.get_headpart_probability(
-            'BDDeerRace', 'Male', 'FACIAL_HAIR') == 0.2
         # yas_minorace.toml's CapeBuffalo breed registers; per-breed
         # rules also load (FACIAL_HAIR = 0.0 for both sexes via "both").
         assert 'CapeBuffalo' in ctx.breeds
@@ -167,6 +164,9 @@ class TestRaceDefContext:
             'CapeBuffalo', 'Male', 'FACIAL_HAIR') == 0.0
         assert ctx.get_headpart_probability(
             'CapeBuffalo', 'Female', 'FACIAL_HAIR') == 0.0
+        # yas_deerrace.toml registers Deer breeds (Dikdik, Elk, Goat,
+        # Moose, Reindeer, WhiteTail, Gazelle) summing to 1.0.
+        assert {'Dikdik', 'Elk', 'WhiteTail'}.issubset(ctx.breeds.keys())
 
 
 class TestListAvailableSchemes:

@@ -434,7 +434,15 @@ def extract_npc_info(npc: Record, plugin_set: PluginSet,
     starting with "meshes\\" or "textures\\") so the AssetResolver
     can resolve them uniformly.
     """
-    form_id_hex = f"{int(npc.form_id):08X}"
+    # Filename convention: facegen NIFs are named with the FormID's
+    # lower 24 bits and a 00 high byte. The folder name (`<plugin>/`)
+    # already namespaces by plugin; the file just carries the object
+    # index. Same shape CK uses for both overrides and self-defined
+    # records (e.g. BDUngulates.esp/0003465F.NIF for an NPC whose
+    # in-file FormID is 0x0503465F). Pre-fix, leveled-list duplicates
+    # took the patch's self-index in the high byte — engine wouldn't
+    # find the file.
+    form_id_hex = f"{int(npc.form_id) & 0xFFFFFF:08X}"
     is_female = _is_npc_female(npc)
 
     # Race

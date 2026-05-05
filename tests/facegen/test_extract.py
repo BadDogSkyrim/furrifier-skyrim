@@ -70,6 +70,45 @@ def test_extract_form_id(skyrim_plugin_set, manifest):
     assert info["npc_edid"] == expected["npc_edid"]
 
 
+def test_extract_form_id_strips_high_byte():
+    """FaceGen filenames use the FormID's lower 24 bits with high byte
+    zeroed — the folder name (`<plugin>.esp/`) namespaces by plugin so
+    the filename only carries the object index. CK convention:
+    BDUngulates.esp/0003465F.NIF holds facegen for an NPC whose
+    in-file FormID is 0x0503465F (high byte = self-index 5).
+
+    Pre-fix `extract_npc_info` produced the raw 8-hex FormID, so
+    leveled-list duplicates (patch-self-defined) wrote files like
+    YASNPCPatchNSFW.esp/110008EA.nif when CK would have written
+    000008EA.nif. Regression gate.
+    """
+    from unittest.mock import MagicMock
+    from furrifier.facegen.extract import extract_npc_info
+
+    npc = MagicMock()
+    # Simulate a patch-defined NPC with the patch's self-index (17, 0x11)
+    # in the FormID's high byte — what _create_leveled_duplicate produces
+    # post-save.
+    npc.form_id = MagicMock()
+    npc.form_id.__int__ = lambda self: 0x110008EA
+    npc.editor_id = "YAS_Banditboss_Mino"
+    # Stub everything extract reads — RNAM/ACBS/etc. We only care about
+    # form_id_hex; missing race/headparts/etc. is fine for this test.
+    npc.get_subrecord = MagicMock(return_value=None)
+    npc.subrecords = []
+    npc.plugin = MagicMock()
+    npc.plugin.header.masters = []
+
+    plugin_set = MagicMock()
+    plugin_set.resolve_form_id = MagicMock(return_value=None)
+
+    info = extract_npc_info(
+        npc, plugin_set, patch_plugin_name="YASNPCPatch.esp")
+    assert info["form_id"] == "000008EA", (
+        f"form_id should have high byte zeroed for facegen filename "
+        f"convention; got {info['form_id']!r}")
+
+
 def test_extract_race_and_sex(skyrim_plugin_set, manifest):
     from furrifier.facegen.extract import extract_npc_info
     npc = _find_npc_by_formid(skyrim_plugin_set, DERVENIN)
