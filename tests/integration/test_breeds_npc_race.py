@@ -295,6 +295,38 @@ def test_override_furry_race_resolves_breed_to_parent(
         f"got {eyebrows}")
 
 
+def test_override_furry_race_with_race_name_auto_rolls_breed(
+        breed_furry, mino_plugin_set):
+    """When override_furry_race names a *race* (not a breed) and that
+    race has breeds with non-zero probability, furrify_npc must
+    hash-roll for a breed. Otherwise leveled-list duplicates miss
+    breed-specific constraints — Hugh hit it on
+    YAS_EncWarlockStorm05DarkElfM_BDDeer (no horns, mismatched tints)
+    because the override path was using BDDeerRace unconstrained.
+
+    yas_minorace.toml's BDMinoRace breeds all whitelist a single horn
+    EDID for EYEBROWS. After the fix, an override-to-BDMinoRace bake
+    must land on one of those horns — proving the auto-roll fired."""
+    npc = mino_plugin_set.get_record_by_edid('NPC_', 'Borkul')
+    assert npc is not None
+    patched = breed_furry.furrify_npc(
+        npc, override_furry_race='BDMinoRace')
+    assert patched is not None
+    eyebrows = _pnam_edids_of_type(
+        patched, breed_furry.all_headparts, HeadpartType.EYEBROWS)
+    breed_whitelisted_horns = {
+        'BDMinoCapeHorns', 'BDMinoBisonHorns', 'BDMinoAfricanHorns',
+        'BDMinoSteerHorns', 'BDMinoLongHorn',
+    }
+    assert eyebrows, (
+        "override-to-race should still emit EYEBROWS via the rolled "
+        "breed's whitelist; got nothing")
+    assert eyebrows[0] in breed_whitelisted_horns, (
+        f"override-to-race EYEBROWS={eyebrows[0]!r} not in any breed's "
+        f"whitelist — auto-roll didn't fire, breed constraints were "
+        f"bypassed")
+
+
 def test_breed_hair_whitelist_overrides_exclude_label(
         breed_furry, mino_plugin_set):
     """A breed whitelist explicitly names headparts by EDID. Those

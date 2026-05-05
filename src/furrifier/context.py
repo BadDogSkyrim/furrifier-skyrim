@@ -225,6 +225,15 @@ class FurryContext:
             assigned_race_id = override_furry_race
             furry_race_id, breed = self.ctx.resolve_race_or_breed(
                 override_furry_race)
+            # If the override named a race (not a breed) and that race
+            # has breeds defined, hash-roll for a breed — same as the
+            # determine_npc_race path. Without this, leveled-list
+            # duplicates whose rule names a race miss every breed's
+            # headpart/tint constraints (no horns, decoration tints
+            # carried over from the source NPC).
+            if breed is None:
+                roll_alias = unalias(npc.editor_id or str(npc.form_id))
+                breed = self.ctx.roll_breed(roll_alias, furry_race_id)
         else:
             race_result = self.determine_npc_race(npc)
             if race_result is None:
