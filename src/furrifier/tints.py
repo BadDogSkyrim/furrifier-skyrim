@@ -209,7 +209,8 @@ def choose_breed_tints(
     for assets in race_data.classes.values():
         all_assets.extend(assets)
     for rule in rules:
-        matches = [a for a in all_assets if rule.mask_substring in a.filename]
+        mask_lc = rule.mask_substring.lower()
+        matches = [a for a in all_assets if mask_lc in a.filename.lower()]
         if not matches:
             log.warning(
                 f"breed tint rule mask {rule.mask_substring!r} matched no "

@@ -100,7 +100,8 @@ class TestClfmEditorIdIndex:
     def test_load_order_winner_wins_on_edid_collision(self):
         """EnhancedCharacterEdit.esp overrides Skyrim.esm's
         HairColor15SteelGrey. Plugins iterate in load order, so the
-        last (winning override) lands in the index."""
+        last (winning override) lands in the index. Keys are lowercased
+        so scheme-supplied EDIDs match regardless of source case."""
         skyrim = _stub_clfm(0x000A0436, 'HairColor15SteelGrey', (100, 100, 100, 0))
         ece    = _stub_clfm(0x000A0436, 'HairColor15SteelGrey', (110, 110, 110, 0))
         # Skyrim loads first, ECE loads later (winning override).
@@ -108,13 +109,29 @@ class TestClfmEditorIdIndex:
         ctx = _stub_furry_context(plugin_set)
 
         index = ctx._build_clfm_edid_index()
-        assert index['HairColor15SteelGrey'] is ece
+        assert index['haircolor15steelgrey'] is ece
 
     def test_resolve_color_by_edid_returns_cnam(self):
         clfm = _stub_clfm(0x05000918, 'BDMinoCoatBlack', (20, 20, 20, 0))
         plugin_set = [_stub_plugin([clfm])]
         ctx = _stub_furry_context(plugin_set)
         assert ctx._resolve_color_by_edid('BDMinoCoatBlack') == (20, 20, 20, 0)
+
+    def test_resolve_color_by_edid_case_insensitive(self):
+        """Scheme/TOML EDIDs may differ in case from CLFM record EDIDs;
+        lookup tolerates the mismatch (e.g. `["black", 1.0]` in TOML
+        vs CLFM record EDID `Black`)."""
+        clfm = _stub_clfm(0x05000918, 'BDMinoCoatBlack', (20, 20, 20, 0))
+        plugin_set = [_stub_plugin([clfm])]
+        ctx = _stub_furry_context(plugin_set)
+        assert ctx._resolve_color_by_edid('bdminocoatblack') == (20, 20, 20, 0)
+        assert ctx._resolve_color_by_edid('BDMINOCOATBLACK') == (20, 20, 20, 0)
+
+    def test_form_id_for_edid_case_insensitive(self):
+        clfm = _stub_clfm(0x05000918, 'BDMinoCoatBlack', (20, 20, 20, 0))
+        plugin_set = [_stub_plugin([clfm])]
+        ctx = _stub_furry_context(plugin_set)
+        assert ctx._form_id_for_edid('bdminocoatblack') == 0x05000918
 
     def test_resolve_color_by_edid_unknown_returns_none(self):
         plugin_set = [_stub_plugin([])]

@@ -31,6 +31,20 @@ _BLIND_RIGHT_RE = re.compile(r'Blind(Right|R(?=[A-Z]|$|[^a-zA-Z]))')
 _BLIND_FULL_RE = re.compile(r'Blind(?![a-zA-Z])')
 
 
+def _ci_lookup(d: dict, edid: str):
+    """Case-insensitive dict lookup over EDID-keyed dicts (e.g.
+    `all_headparts`). Fast path on exact match, falls back to a single
+    case-folded linear scan. Lets scheme/TOML EDIDs miss-by-case still
+    resolve to the engine record."""
+    if edid in d:
+        return d[edid]
+    el = edid.lower()
+    for k, v in d.items():
+        if k.lower() == el:
+            return v
+    return None
+
+
 def _blindness_state(edid: Optional[str]) -> str:
     """Parse an eye headpart EditorID into its blindness state.
 
@@ -194,7 +208,7 @@ def find_best_headpart_match(
     if whitelist:
         candidates = []
         for edid in whitelist:
-            hp = all_headparts.get(edid)
+            hp = _ci_lookup(all_headparts, edid)
             if hp is None:
                 log.warning(
                     f"breed whitelist for {furry_race_id} "

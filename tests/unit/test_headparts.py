@@ -164,6 +164,26 @@ class TestFindBestHeadpartMatch:
             'FurryRace', race_hps, hps, ctx)
         assert r1 is r2
 
+    def test_whitelist_lookup_case_insensitive(self, ctx):
+        """A scheme-supplied whitelist EDID with case mismatched against
+        the record's actual EditorID still resolves — authors don't
+        have to memorize record capitalization."""
+        old_hp = self._make_hp('VanillaHair')
+        real = self._make_hp('BDDeerHorns1')
+        all_headparts = {'BDDeerHorns1': real}
+        # race_headparts pool intentionally empty: whitelist path
+        # bypasses race-pool intersection entirely.
+        race_headparts = {(HeadpartType.HAIR, 0, 'FurryRace'): set()}
+        ctx.set_headpart_rule(
+            'FurryRace', None, HeadpartType.HAIR.name,
+            probability=1.0,
+            headpart_whitelist=('bddeerhorns1',))
+        result = find_best_headpart_match(
+            old_hp, 'TestNPC', Sex.MALE_ADULT, [],
+            'FurryRace', race_headparts, all_headparts, ctx,
+        )
+        assert result is real
+
 
 class TestHeadpartProbability:
     """Probability gate on EYEBROWS and FACIAL_HAIR assignment."""

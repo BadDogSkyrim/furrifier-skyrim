@@ -20,7 +20,7 @@ from .vanilla_setup import unalias
 from .furry_load import is_npc_female, is_child_race
 from .headparts import (
     load_npc_labels, find_similar_headpart, _should_assign,
-    _PROBABILITY_GATED_TYPES,
+    _PROBABILITY_GATED_TYPES, _ci_lookup,
 )
 from .util import hash_string, short_race_name
 from .tints import choose_breed_tints, choose_furry_tints
@@ -329,8 +329,11 @@ class FurryContext:
             whitelist = self.ctx.get_headpart_rule(
                 lookup_name, sex_name, hp_type.name).headpart_whitelist
             if whitelist:
-                candidates = {edid for edid in whitelist
-                              if edid in self.all_headparts}
+                candidates = set()
+                for edid in whitelist:
+                    hp = _ci_lookup(self.all_headparts, edid)
+                    if hp is not None:
+                        candidates.add(hp.editor_id)
                 if not candidates:
                     log.warning(
                         f"breed whitelist {whitelist!r} for "
@@ -455,8 +458,9 @@ class FurryContext:
 
 
     def _build_clfm_edid_index(self) -> dict[str, Record]:
-        """CLFM EditorID → record. Load-order-winning record wins on
-        EDID collision (later plugins override earlier)."""
+        """CLFM EditorID → record. Keys are lowercased so scheme-supplied
+        EDIDs match regardless of case; load-order-winning record wins
+        on EDID collision (later plugins override earlier)."""
         index: dict[str, Record] = {}
         if self.plugin_set is None:
             return index
@@ -464,7 +468,7 @@ class FurryContext:
             for rec in plugin.get_records_by_signature('CLFM'):
                 edid = rec.editor_id
                 if edid:
-                    index[edid] = rec  # last wins = load-order winner
+                    index[edid.lower()] = rec  # last wins = load-order winner
         return index
 
 
@@ -515,7 +519,7 @@ class FurryContext:
     def _resolve_color_by_edid(self, edid: str) -> Optional[tuple[int, int, int, int]]:
         """Resolve a CLFM EditorID to its RGBA. None if not found."""
         self._ensure_clfm_indexes()
-        rec = self._clfm_by_edid_cache.get(edid)
+        rec = self._clfm_by_edid_cache.get(edid.lower())
         if rec is None:
             return None
         cnam = rec.get_subrecord('CNAM')
@@ -531,7 +535,7 @@ class FurryContext:
     def _form_id_for_edid(self, edid: str) -> Optional[int]:
         """Load-order-normalized FormID for a CLFM EDID. None if not found."""
         self._ensure_clfm_indexes()
-        rec = self._clfm_by_edid_cache.get(edid)
+        rec = self._clfm_by_edid_cache.get(edid.lower())
         if rec is None:
             return None
         return rec.normalize_form_id(rec.form_id).value

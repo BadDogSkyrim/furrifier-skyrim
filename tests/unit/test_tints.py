@@ -1,11 +1,11 @@
 """Tests for tint layer logic."""
 
 from furrifier.tints import (
-    class_name_to_layer, choose_tint_preset,
-    _randomize_index_list, TINT_CLASS_NAMES,
+    class_name_to_layer, choose_tint_preset, choose_breed_tints,
+    _randomize_index_list, RaceTintData, TINT_CLASS_NAMES,
 )
 from furrifier.furry_load import _classify_tint_path
-from furrifier.models import TintLayer
+from furrifier.models import BreedTintRule, TintAsset, TintLayer
 
 
 class TestClassNameToLayer:
@@ -81,6 +81,36 @@ class TestChooseTintPreset:
         for name in ['Lydia', 'Ulfric', 'Delphine', 'Nazeem', 'Balgruuf']:
             results.add(choose_tint_preset(name, 1455, presets))
         assert len(results) > 1  # Not all the same
+
+
+class TestChooseBreedTints:
+    def test_mask_substring_case_insensitive(self):
+        """Scheme-supplied mask substring matches TINT filename
+        case-insensitively, so authors don't have to memorize asset
+        capitalization. (Hugh hit it twice with TintLaughLine vs
+        TintLaughline.dds — see project_furrifier_todo.md item 4.)"""
+        asset = TintAsset(
+            index=5,
+            filename=r'YAS\Deer\Tints\TintLaughline.dds',
+            layer_type=0,
+            layer_class='Laugh Lines',
+            presets=[(0x12345, 1.0, 0)],
+        )
+        race_data = RaceTintData()
+        race_data.classes = {'Laugh Lines': [asset]}
+        rule = BreedTintRule(
+            mask_substring='TintLaughLine',
+            color_choices=(('SomeColor', 0.8),),
+            probability=1.0,
+        )
+        choices = choose_breed_tints(
+            'TestNPC', [rule], race_data,
+            form_id_for_edid=lambda edid: (
+                0x12345 if edid == 'SomeColor' else None),
+        )
+        assert len(choices) == 1
+        assert choices[0].tini == 5
+        assert choices[0].tinv == 0.8
 
 
 class TestRandomizeIndexList:
