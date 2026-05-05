@@ -558,13 +558,32 @@ class FurrifierWindow(QMainWindow):
                     "%(asctime)s %(levelname)s %(name)s: %(message)s"))
                 root.addHandler(fh)
                 self._file_handler = fh
-            except OSError as exc:
+                # Confirm in the log pane so the user knows the path
+                # was resolved and the file is open. Surfaces silent
+                # path-resolution drift (e.g. CWD-relative paths
+                # pointing somewhere unexpected).
+                logging.getLogger(__name__).info(
+                    "Logging to file: %s", log_path)
+            except Exception as exc:
+                # Broaden from OSError — Path.resolve, mkdir, and
+                # FileHandler can raise non-OSError on Windows
+                # depending on the path. Log the type so we see what
+                # blew up if it ever does.
                 logging.getLogger(__name__).warning(
-                    "could not open log file %r: %s", config.log_file, exc)
+                    "could not open log file %r: %s: %s",
+                    config.log_file, type(exc).__name__, exc)
         elif self._file_handler is not None:
             # Already attached — make sure its level matches the
             # current debug setting.
             self._file_handler.setLevel(level)
+            if (config.log_file and
+                    Path(config.log_file).resolve() !=
+                    Path(self._file_handler.baseFilename).resolve()):
+                logging.getLogger(__name__).warning(
+                    "Log file path changed from %r to %r mid-session; "
+                    "still writing to the original — restart the GUI "
+                    "to switch.",
+                    self._file_handler.baseFilename, config.log_file)
 
     def _remove_log_handler(self) -> None:
         # File handler stays attached for the window's life; Run end

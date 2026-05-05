@@ -164,7 +164,7 @@ colors = "Cattle"
 [[headpart_probability]]
 race = "LongHorn"
 sex = "male"
-EYEBROWS = {headpart = ["BDMinoLongHorn"]}
+EYEBROWS = {headpart = ["BDMinoLonghorn"]}
 FACIAL_HAIR = 0.0
 colors = "Cattle"
 
