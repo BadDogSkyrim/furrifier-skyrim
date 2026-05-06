@@ -331,7 +331,7 @@ def _furrify_schlong_lists(compat_flst: Record, prob_flst: Record,
             continue
 
         entries.append((vanilla_fid, new_prob_fid, new_size_fid))
-        log.info(f"  Added {vanilla_edid} to SOS lists")
+        log.debug(f"  Added {vanilla_edid} to SOS lists")
 
     # Write all three lists from the parallel entries
     def _get_or_copy(flst_rec):

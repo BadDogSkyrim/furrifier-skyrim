@@ -1621,30 +1621,33 @@ class FurryContext:
     # -- Statistics --
 
     def print_statistics(self) -> None:
-        """Print post-run summary statistics."""
+        """Log post-run summary statistics at DEBUG. The race and hair
+        distribution blocks are useful for tuning a scheme but too
+        verbose for default INFO output — `--debug` (CLI) / Debug
+        checkbox (GUI) surfaces them when wanted."""
         total = sum(self.stats_race_counts.values())
         if total == 0:
             return
 
-        log.info("")
-        log.info("========== RACE DISTRIBUTION ==========")
+        log.debug("")
+        log.debug("========== RACE DISTRIBUTION ==========")
         for race_id in sorted(self.stats_race_counts,
                               key=lambda r: -self.stats_race_counts[r]):
             n = self.stats_race_counts[race_id]
             pct = 100 * n / total
-            log.info(f"  {race_id}: {n} ({pct:.1f}%)")
-        log.info(f"  Total: {total}")
+            log.debug(f"  {race_id}: {n} ({pct:.1f}%)")
+        log.debug(f"  Total: {total}")
 
         for label, hair_dict in [("MALE", self.stats_hair_male),
                                  ("FEMALE", self.stats_hair_female)]:
             if not hair_dict:
                 continue
             hair_total = sum(hair_dict.values())
-            log.info("")
-            log.info(f"========== {label} HAIR DISTRIBUTION ==========")
+            log.debug("")
+            log.debug(f"========== {label} HAIR DISTRIBUTION ==========")
             for hp_id in sorted(hair_dict,
                                 key=lambda h: -hair_dict[h]):
                 n = hair_dict[hp_id]
                 pct = 100 * n / hair_total
-                log.info(f"  {hp_id}: {n} ({pct:.1f}%)")
-            log.info(f"  Total: {hair_total}")
+                log.debug(f"  {hp_id}: {n} ({pct:.1f}%)")
+            log.debug(f"  Total: {hair_total}")
