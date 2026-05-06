@@ -175,14 +175,15 @@ def build_race_headparts(plugins,
 
     race_headparts: dict[tuple, set[str]] = {}
 
-    excluded = 0
+    # The EXCLUDE label is a *selection-time* policy ("never auto-
+    # assign"), not an indexing property: a breed/race whitelist may
+    # legitimately name an EXCLUDE-tagged headpart, and we want
+    # `race_headparts` to honestly describe what each race actually
+    # exposes so whitelist entries can be cross-checked against it.
+    # The filter lives in `find_best_headpart_match` and the
+    # probability-gated path in `furrify_npc`.
     for hp in all_headparts.values():
         if hp.record is None:
-            continue
-
-        # EXCLUDE label means "never use this headpart on anything"
-        if 'EXCLUDE' in hp.labels:
-            excluded += 1
             continue
 
         # Get DATA flags for sex filtering
@@ -234,8 +235,7 @@ def build_race_headparts(plugins,
                     race_headparts[key] = set()
                 race_headparts[key].add(hp.editor_id)
 
-    log.info(f"Built race_headparts index: {len(race_headparts)} entries"
-             f" ({excluded} EXCLUDE-tagged headparts skipped)")
+    log.info(f"Built race_headparts index: {len(race_headparts)} entries")
     return race_headparts
 
 

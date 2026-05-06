@@ -45,6 +45,14 @@ def _ci_lookup(d: dict, edid: str):
     return None
 
 
+def _is_excluded(hp: HeadpartInfo) -> bool:
+    """Selection-time EXCLUDE filter. Whitelists override (an explicit
+    name in `headpart_whitelist` is authoritative author intent), but
+    the random label-match and probability-gated picks must skip
+    EXCLUDE-tagged HDPTs."""
+    return 'EXCLUDE' in hp.labels
+
+
 def _blindness_state(edid: Optional[str]) -> str:
     """Parse an eye headpart EditorID into its blindness state.
 
@@ -200,12 +208,16 @@ def find_best_headpart_match(
     whitelist = _breed_whitelist(ctx, breed, furry_race_id, npc_sex, hp_type)
 
     # When the breed/race rule whitelists specific headparts by EDID,
-    # treat that as authoritative author intent: pick directly from the
-    # whitelist. Bypasses both the equivalents chain and the race-pool
-    # intersection — important because race_headparts excludes EXCLUDE-
-    # tagged headparts from the random pool, but a whitelist explicitly
-    # names them and should override that suppression.
+    # treat that as authoritative author intent: pick directly from
+    # the whitelist. Whitelists are still allowed to name EXCLUDE-
+    # tagged HDPTs — that's the suppression-override case. We DO
+    # cross-check against `race_headparts` though, so a whitelist
+    # entry referencing a headpart that isn't valid for this race
+    # (e.g. a deer horn whitelisted on a mino) gets a loud warning
+    # instead of silently emitting garbage.
     if whitelist:
+        race_pool = race_headparts.get(
+            (hp_type, sex_key, furry_race_id), set())
         candidates = []
         for edid in whitelist:
             hp = _ci_lookup(all_headparts, edid)
@@ -215,6 +227,13 @@ def find_best_headpart_match(
                     f"{npc_sex.name} {hp_type.name} names unknown "
                     f"headpart {edid!r}; dropping")
                 continue
+            if race_pool and hp.editor_id not in race_pool:
+                log.warning(
+                    f"breed whitelist for {furry_race_id} "
+                    f"{npc_sex.name} {hp_type.name} names {edid!r} "
+                    f"which isn't in this race's HDPT pool — patch "
+                    f"may emit broken NPCs. Honoring author intent "
+                    f"anyway.")
             candidates.append(hp)
         if target_blind is not None:
             candidates = _filter_by_blindness(candidates, target_blind)
@@ -259,6 +278,10 @@ def find_best_headpart_match(
     available = [all_headparts[hp_id]
                  for hp_id in sorted(race_headparts[key])
                  if hp_id in all_headparts]
+    # EXCLUDE filter applies on this random/label-match path only:
+    # whitelists above bypass it. The index itself includes
+    # EXCLUDE-tagged HDPTs so whitelist cross-checks are honest.
+    available = [hp for hp in available if not _is_excluded(hp)]
     if target_blind is not None:
         available = _filter_by_blindness(available, target_blind)
     if not available:

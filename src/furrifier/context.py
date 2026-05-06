@@ -21,7 +21,7 @@ from .vanilla_setup import unalias
 from .furry_load import is_npc_female, is_child_race
 from .headparts import (
     load_npc_labels, find_similar_headpart, _should_assign,
-    _PROBABILITY_GATED_TYPES, _ci_lookup,
+    _PROBABILITY_GATED_TYPES, _ci_lookup, _is_excluded,
 )
 from .util import hash_string, short_race_name
 from .tints import choose_breed_tints, choose_furry_tints
@@ -323,18 +323,30 @@ class FurryContext:
                                   hp_type, self.ctx, breed=breed):
                 continue
             # Apply the breed's (or race's) headpart whitelist when set.
-            # Whitelist is authoritative — bypasses the EXCLUDE-filter
-            # that race_headparts applies, since explicit author intent
-            # overrides the random-pool suppression.
+            # Whitelist is authoritative — author intent overrides the
+            # random-pool EXCLUDE filter. We DO cross-check whitelisted
+            # EDIDs against this race's HDPT pool and warn on mismatch
+            # (e.g. a deer horn whitelisted on a mino) so silent garbage
+            # in the patch becomes a loud warning.
             lookup_name = breed.name if breed is not None else furry_race_id
             whitelist = self.ctx.get_headpart_rule(
                 lookup_name, sex_name, hp_type.name).headpart_whitelist
             if whitelist:
+                race_pool = self.race_headparts.get(
+                    (hp_type, sex_key, furry_race_id), set())
                 candidates = set()
                 for edid in whitelist:
                     hp = _ci_lookup(self.all_headparts, edid)
-                    if hp is not None:
-                        candidates.add(hp.editor_id)
+                    if hp is None:
+                        continue
+                    if race_pool and hp.editor_id not in race_pool:
+                        log.warning(
+                            f"breed whitelist for {furry_race_id} "
+                            f"{sex_name} {hp_type.name} names "
+                            f"{edid!r} which isn't in this race's "
+                            f"HDPT pool — patch may emit broken NPCs. "
+                            f"Honoring author intent anyway.")
+                    candidates.add(hp.editor_id)
                 if not candidates:
                     log.warning(
                         f"breed whitelist {whitelist!r} for "
@@ -342,8 +354,13 @@ class FurryContext:
                         f"— skipping {npc_alias}")
                     continue
             else:
-                candidates = self.race_headparts.get(
+                # Filter EXCLUDE-tagged HDPTs from the random pool.
+                # build_race_headparts no longer drops them (that's a
+                # selection-time policy now, applied here).
+                pool = self.race_headparts.get(
                     (hp_type, sex_key, furry_race_id), set())
+                candidates = {edid for edid in pool
+                              if not _is_excluded(self.all_headparts[edid])}
                 if not candidates:
                     continue
             candidate_list = sorted(candidates)

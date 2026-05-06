@@ -184,6 +184,79 @@ class TestFindBestHeadpartMatch:
         )
         assert result is real
 
+    def test_excluded_headpart_skipped_on_label_match(self, ctx):
+        """EXCLUDE-tagged HDPTs are now indexed in race_headparts (the
+        index honestly describes what each race exposes), but the
+        random label-match path must still skip them — that's the
+        author-intent contract for the EXCLUDE label."""
+        old_hp = self._make_hp('VanillaHair')
+        furry_normal = self._make_hp('FurryHairNeat', labels=['SHORT', 'NEAT'])
+        furry_excluded = self._make_hp(
+            'FurryHairExcluded', labels=['SHORT', 'NEAT', 'EXCLUDE'])
+        all_headparts = {
+            'FurryHairNeat': furry_normal,
+            'FurryHairExcluded': furry_excluded,
+        }
+        # Index includes the EXCLUDE entry — selection time filters it.
+        race_headparts = {
+            (HeadpartType.HAIR, 0, 'FurryRace'): {
+                'FurryHairNeat', 'FurryHairExcluded'},
+        }
+        result = find_best_headpart_match(
+            old_hp, 'TestNPC', Sex.MALE_ADULT, ['SHORT', 'NEAT'],
+            'FurryRace', race_headparts, all_headparts, ctx,
+        )
+        assert result is furry_normal
+
+    def test_excluded_headpart_pickable_via_whitelist(self, ctx):
+        """A whitelist explicitly naming an EXCLUDE-tagged headpart
+        picks it anyway — author intent overrides the suppression.
+        This is the bypass case the new index design is supposed to
+        support cleanly."""
+        old_hp = self._make_hp('VanillaHair')
+        furry_excluded = self._make_hp(
+            'FurryHairBigHorns', labels=['EXCLUDE'])
+        all_headparts = {'FurryHairBigHorns': furry_excluded}
+        race_headparts = {
+            (HeadpartType.HAIR, 0, 'FurryRace'): {'FurryHairBigHorns'},
+        }
+        ctx.set_headpart_rule(
+            'FurryRace', None, HeadpartType.HAIR.name,
+            probability=1.0,
+            headpart_whitelist=('FurryHairBigHorns',))
+        result = find_best_headpart_match(
+            old_hp, 'TestNPC', Sex.MALE_ADULT, [],
+            'FurryRace', race_headparts, all_headparts, ctx,
+        )
+        assert result is furry_excluded
+
+    def test_whitelist_warns_on_race_mismatch(self, ctx, caplog):
+        """A whitelist entry naming a headpart not in this race's
+        HDPT pool (e.g. a deer horn whitelisted on a mino) still
+        gets honored — author intent — but logs a warning so the
+        author notices the misconfiguration. Validation gap that
+        previously emitted silent garbage."""
+        import logging
+        old_hp = self._make_hp('VanillaHair')
+        deer_horn = self._make_hp('BDDeerHorns1')
+        all_headparts = {'BDDeerHorns1': deer_horn}
+        # The "mino" race's HDPT pool doesn't include this deer horn.
+        race_headparts = {
+            (HeadpartType.HAIR, 0, 'BDMinoRace'): {'BDMinoCowHorns'},
+        }
+        ctx.set_headpart_rule(
+            'BDMinoRace', None, HeadpartType.HAIR.name,
+            probability=1.0,
+            headpart_whitelist=('BDDeerHorns1',))
+        with caplog.at_level(logging.WARNING, logger='furrifier.headparts'):
+            result = find_best_headpart_match(
+                old_hp, 'TestNPC', Sex.MALE_ADULT, [],
+                'BDMinoRace', race_headparts, all_headparts, ctx,
+            )
+        assert result is deer_horn  # honored anyway
+        assert any("isn't in this race's HDPT pool" in r.message
+                   for r in caplog.records)
+
 
 class TestHeadpartProbability:
     """Probability gate on EYEBROWS and FACIAL_HAIR assignment."""
