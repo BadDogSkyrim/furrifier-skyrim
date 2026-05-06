@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import threading
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -22,11 +23,23 @@ log = logging.getLogger(__name__)
 ProgressCallback = Callable[[str], None]
 
 
+class CancelledError(Exception):
+    """Raised at a cooperative cancel checkpoint when the caller's
+    cancel_event is set. Worker code catches it; CLI never sets the
+    event, so this never fires there."""
+
+
+def _check_cancel(event: Optional[threading.Event]) -> None:
+    if event is not None and event.is_set():
+        raise CancelledError()
+
+
 def run_furrification(
     config: FurrifierConfig,
     load_order: Optional[LoadOrder] = None,
     progress: Optional[ProgressCallback] = None,
     cache: "Optional[SessionCache]" = None,
+    cancel_event: Optional[threading.Event] = None,
 ) -> int:
     """Run the full furrification pipeline.
 
@@ -59,7 +72,8 @@ def run_furrification(
     root_logger.addHandler(log_counter)
     try:
         return _run_furrification_body(
-            config, load_order, progress, log_counter, cache=cache)
+            config, load_order, progress, log_counter,
+            cache=cache, cancel_event=cancel_event)
     finally:
         root_logger.removeHandler(log_counter)
 
@@ -70,10 +84,14 @@ def _run_furrification_body(
     progress: Optional[ProgressCallback],
     log_counter: "_LogCounter",
     cache: "Optional[SessionCache]" = None,
+    cancel_event: Optional[threading.Event] = None,
 ) -> int:
     def emit(phase: str) -> None:
         if progress is not None:
             progress(phase)
+        # Phase boundaries are the natural cancel checkpoints — work
+        # inside a phase is opaque to us, so we sample between phases.
+        _check_cancel(cancel_event)
 
     log.info("Skyrim Furrifier v0.1.0")
     log.info(f"  Scheme: {config.race_scheme}")
@@ -98,7 +116,8 @@ def _run_furrification_body(
     # Furrify NPCs
     emit("Furrifying NPCs")
     log.info("Furrifying NPCs...")
-    npc_count = furry.furrify_all_npcs(plugin_set, only_npc=config.only_npc)
+    npc_count = furry.furrify_all_npcs(
+        plugin_set, only_npc=config.only_npc, cancel_event=cancel_event)
     log.info(f"Furrified {npc_count} NPCs")
 
     # Extend leveled NPC lists with furry duplicates. --only mode skips
@@ -158,7 +177,8 @@ def _run_furrification_body(
         emit("Building FaceGen")
         log.info("Building FaceGen...")
         _run_facegen(config, patch, plugin_set,
-                     session.data_dir, session.output_dir, progress)
+                     session.data_dir, session.output_dir, progress,
+                     cancel_event=cancel_event)
 
     # Print warning/error summary (after FaceGen so its warnings roll up too)
     _print_log_summary(log_counter)
@@ -195,7 +215,8 @@ class _LogCounter(logging.Handler):
             self.warnings.append(self.format(record))
 
 
-def _run_facegen(config, patch, plugin_set, data_dir, output_dir, progress):
+def _run_facegen(config, patch, plugin_set, data_dir, output_dir, progress,
+                 cancel_event: Optional[threading.Event] = None):
     """Run the facegen builder, optionally under cProfile.
 
     When `config.profile_file` is set, dump raw stats to that path and
@@ -211,7 +232,8 @@ def _run_facegen(config, patch, plugin_set, data_dir, output_dir, progress):
                                 progress=progress,
                                 limit=config.facegen_limit,
                                 facetint_size=config.facetint_size,
-                                only_npc=config.only_npc)
+                                only_npc=config.only_npc,
+                                cancel_event=cancel_event)
 
     if not config.profile_file:
         _run()

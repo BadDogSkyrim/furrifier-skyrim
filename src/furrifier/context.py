@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import struct
+import threading
 from typing import Optional
 
 from esplib import Plugin, PluginSet, Record
@@ -558,7 +559,9 @@ class FurryContext:
         record.add_subrecord('QNAM', struct.pack('<fff',
                              qr / 255.0, qg / 255.0, qb / 255.0))
 
-    def furrify_all_npcs(self, plugins, only_npc: Optional[str] = None) -> int:
+    def furrify_all_npcs(self, plugins, only_npc: Optional[str] = None,
+                         cancel_event: "Optional[threading.Event]" = None,
+                         ) -> int:
         """Furrify all NPCs across the load order. Returns count.
 
         Only processes the winning override of each NPC (last in load
@@ -567,8 +570,12 @@ class FurryContext:
 
         `only_npc` (when set) restricts patching to a single NPC matched
         by EditorID (case-insensitive) or hex form-id object index.
+
+        `cancel_event` (when set) is checked once per NPC; raises
+        `main.CancelledError` so the caller can drop out of the run.
         """
         from .facegen import _matches_only_npc
+        from .main import _check_cancel
 
         # Build a map of FormID -> winning record across all plugins.
         # Last occurrence wins (plugins are in load order).
@@ -588,6 +595,7 @@ class FurryContext:
         processed = 0
         total = len(winning)
         for obj_id, npc in winning.items():
+            _check_cancel(cancel_event)
             processed += 1
             if (processed % 500) == 0:
                 log.debug(f"  NPCs: {processed}/{total}")

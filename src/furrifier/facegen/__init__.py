@@ -138,7 +138,8 @@ def build_facegen_for_patch(
         progress: Optional[ProgressCallback] = None,
         limit: Optional[int] = None,
         facetint_size: Optional[int] = None,
-        only_npc: Optional[str] = None) -> tuple[int, int]:
+        only_npc: Optional[str] = None,
+        cancel_event: "Optional[threading.Event]" = None) -> tuple[int, int]:
     """Build FaceGen files for every NPC override in `patch`.
 
     `data_dir` is the Skyrim install Data folder — source of headpart
@@ -225,8 +226,12 @@ def build_facegen_for_patch(
 
     # One resolver for the run — the BSA extraction cache builds up
     # across NPCs, so shared vanilla headpart nifs only get pulled once.
+    from ..main import _check_cancel
     with AssetResolver.for_data_dir(data_dir) as resolver:
         for i, npc in enumerate(npcs):
+            # Check before the try/except so a cancel propagates out
+            # rather than being swallowed as a per-NPC failure.
+            _check_cancel(cancel_event)
             if progress:
                 progress(f"FaceGen {i + 1}/{total}")
             edid_for_log = npc.editor_id or f"0x{int(npc.form_id):08X}"

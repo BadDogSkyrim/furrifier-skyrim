@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -118,6 +119,7 @@ class _Worker(QThread):
     phase = Signal(str)
     finished_ok = Signal()
     failed = Signal(str)
+    cancelled = Signal()
 
     def __init__(self, config: FurrifierConfig,
                  load_order: Optional[LoadOrder],
@@ -127,14 +129,25 @@ class _Worker(QThread):
         self._config = config
         self._load_order = load_order
         self._cache = cache
+        # Cooperative-cancel flag the pipeline checks at phase
+        # boundaries and per-NPC checkpoints. set() is thread-safe.
+        self._cancel_event = threading.Event()
+
+    def cancel(self) -> None:
+        self._cancel_event.set()
 
     def run(self) -> None:  # noqa: D401 — QThread.run override
+        from .main import CancelledError
         try:
             run_furrification(
                 self._config, load_order=self._load_order,
                 progress=lambda p: self.phase.emit(p),
-                cache=self._cache)
+                cache=self._cache,
+                cancel_event=self._cancel_event)
             self.finished_ok.emit()
+        except CancelledError:
+            logging.getLogger(__name__).info("Furrification cancelled by user")
+            self.cancelled.emit()
         except Exception as exc:
             logging.getLogger(__name__).exception(
                 "Furrification failed: %s", exc)
@@ -355,8 +368,10 @@ class FurrifierWindow(QMainWindow):
         layout = QHBoxLayout(frame)
         self.phase_label = QLabel("Ready.", frame)
         layout.addWidget(self.phase_label, stretch=1)
+        # Single button doubles as Run / Cancel — its label tracks
+        # worker state. _run_or_cancel_clicked dispatches.
         self.run_button = QPushButton("Run", frame)
-        self.run_button.clicked.connect(self._start_run)
+        self.run_button.clicked.connect(self._run_or_cancel_clicked)
         self.run_button.setFixedWidth(120)
         # Primary-action styling: filled accent per QSS property
         # selector. Only one primary button in the window.
@@ -465,6 +480,17 @@ class FurrifierWindow(QMainWindow):
         return LoadOrder.from_list(
             self._plugin_override, data_dir=data_dir, game_id="tes5")
 
+    def _run_or_cancel_clicked(self) -> None:
+        """Dispatch the run-button click by worker state. Idle → start
+        a run; running → request cooperative cancel."""
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.cancel()
+            self.run_button.setEnabled(False)
+            self.run_button.setText("Cancelling...")
+            self.phase_label.setText("Cancelling...")
+        else:
+            self._start_run()
+
     def _start_run(self) -> None:
         if self._worker is not None and self._worker.isRunning():
             return
@@ -473,8 +499,8 @@ class FurrifierWindow(QMainWindow):
 
         self.log_text.clear()
         self._install_log_handler(config)
-        self.run_button.setEnabled(False)
-        self.run_button.setText("Running...")
+        # Repurpose the button as Cancel for the duration of the run.
+        self.run_button.setText("Cancel")
         self.phase_label.setText("Starting...")
 
         worker = _Worker(config, load_order, cache=self._session_cache,
@@ -482,6 +508,7 @@ class FurrifierWindow(QMainWindow):
         worker.phase.connect(self.phase_label.setText)
         worker.finished_ok.connect(self._on_finished_ok)
         worker.failed.connect(self._on_failed)
+        worker.cancelled.connect(self._on_cancelled)
         worker.finished.connect(worker.deleteLater)
         self._worker = worker
         worker.start()
@@ -507,6 +534,17 @@ class FurrifierWindow(QMainWindow):
         self._worker = None
         # Failure may have left the patch mid-populated. Drop the cache
         # so the next Load NPCs gets a clean load.
+        self._session_cache.invalidate()
+
+    def _on_cancelled(self) -> None:
+        self._remove_log_handler()
+        self.run_button.setEnabled(True)
+        self.run_button.setText("Run")
+        self.phase_label.setText("Cancelled.")
+        self._worker = None
+        # Cancel mid-run leaves the patch in whatever state the
+        # cancel checkpoint caught it. Drop the cache so the next
+        # Load NPCs / Run sees a clean slate.
         self._session_cache.invalidate()
 
     # --- log plumbing ------------------------------------------------------
