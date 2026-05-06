@@ -254,7 +254,7 @@ headpart_equivalents = [
 # to every furry race unless overridden by a more specific entry.
 # Lookup order: (race, sex, type) > (race, *, type) > ("*", sex, type)
 # > ("*", *, type) > 1.0.
-headpart_probability = [
+race_customization = [
   # Default for every furry race: earring slot is a 30% roll, no beards.
   {race = "*"                                  , EYEBROWS = 0.3, FACIAL_HAIR = 0.0},
 ]

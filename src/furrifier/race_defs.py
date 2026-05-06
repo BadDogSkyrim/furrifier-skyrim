@@ -83,9 +83,14 @@ class RaceDefContext:
         # (key present, value [] → "no tints applied").
         self.tint_rules: dict[tuple, list[BreedTintRule]] = {}
         # Named [color_schemes.NAME] registries. Each scheme is a list of
-        # BreedTintRule (one per mask). Headpart_probability rows reference
+        # BreedTintRule (one per mask). race_customization rows reference
         # a scheme by name via `colors = "NAME"`.
         self.color_schemes: dict[str, list[BreedTintRule]] = {}
+        # Per-(race-or-breed, sex_or_None) weight remap range. NPC
+        # weight (NAM7, vanilla 0-100 float) is linearly remapped onto
+        # (low, high). Default (0, 100) = no remap. Inheritance chain
+        # mirrors headpart_rules: breed → parent race → '*' → default.
+        self.weight_ranges: dict[tuple, tuple[float, float]] = {}
         # User-supplied keyword → TintLayer-class-name mappings, merged
         # from every race catalog's [tint_keywords] section. Checked
         # BEFORE the built-in _TINT_PATH_KEYWORDS table at classify
@@ -344,6 +349,51 @@ class RaceDefContext:
         return None
 
 
+    def set_weight_range(self, race_or_breed: str, sex: Optional[str],
+                         low: float, high: float) -> None:
+        """Register a weight remap range for a (race-or-breed, sex).
+
+        Vanilla NPC NAM7 weight (0-100 float) is linearly mapped onto
+        (low, high). Default behavior with no registration is (0,100)
+        i.e. identity. Used to make e.g. all Mino NPCs weigh at least
+        50 regardless of their vanilla weight.
+        """
+        if not (0.0 <= low <= 100.0 and 0.0 <= high <= 100.0):
+            log.warning(
+                f"weight_range for {race_or_breed!r} {sex!r}: values "
+                f"[{low}, {high}] outside vanilla 0-100 NAM7 range")
+        if low > high:
+            log.warning(
+                f"weight_range for {race_or_breed!r} {sex!r}: low={low} "
+                f">  high={high}; the remap will invert weights "
+                f"(probably not intended)")
+        self.weight_ranges[(race_or_breed, sex)] = (float(low), float(high))
+
+
+    def get_weight_range(self, race_or_breed: str,
+                         sex: Optional[str]) -> tuple[float, float]:
+        """Resolve weight range with breed→parent→`*` inheritance.
+
+        Falls back to (0.0, 100.0) — identity remap — when nothing is
+        registered. Resolution chain mirrors `get_headpart_rule`."""
+        breed = self.breeds.get(race_or_breed)
+        if breed is not None:
+            for sex_key in (sex, None):
+                r = self.weight_ranges.get((breed.name, sex_key))
+                if r is not None:
+                    return r
+            race_key = breed.parent_race_edid
+        else:
+            race_key = race_or_breed
+
+        for outer_key in (race_key, '*'):
+            for sex_key in (sex, None):
+                r = self.weight_ranges.get((outer_key, sex_key))
+                if r is not None:
+                    return r
+        return (0.0, 100.0)
+
+
 _LEVELED_NPCS_KEYS = frozenset({'exclude_substrings', 'groups'})
 _GROUP_KEYS = frozenset({'match_substrings', 'races'})
 _RACE_RULE_KEYS = frozenset({'race', 'probability'})
@@ -553,7 +603,7 @@ def _apply_race_catalog(ctx: RaceDefContext, data: dict,
             continue
         ctx.tint_keywords.append((str(keyword), str(class_name)))
 
-    # Color schemes — load before headpart_probability rows so that
+    # Color schemes — load before race_customization rows so that
     # `colors = "..."` references can resolve.
     for scheme_name, scheme_dict in data.get('color_schemes', {}).items():
         rules = []
@@ -571,7 +621,18 @@ def _apply_race_catalog(ctx: RaceDefContext, data: dict,
             ))
         ctx.color_schemes[scheme_name] = rules
 
-    for entry in data.get('headpart_probability', []):
+    # `[[race_customization]]` rows configure per-race or per-breed
+    # tweaks: headpart probabilities + whitelists, color-scheme
+    # references, and weight remap ranges. Each row is keyed by
+    # `race` (may name a race, subrace, or breed) and an optional
+    # `sex`. Other keys in the row are interpreted as:
+    #   - `colors = "scheme_name"` → set_tint_rules
+    #   - `weight_range = [low, high]` → set_weight_range
+    #   - HeadpartType key (EYEBROWS / FACIAL_HAIR / HAIR / etc.):
+    #     either a flat probability, or {probability=..., headpart=[...]}
+    # (Renamed from `[[headpart_probability]]` 2026-05-06; the table
+    # always covered more than just probabilities.)
+    for entry in data.get('race_customization', []):
         race = entry['race']
         sex = _normalize_sex(entry.get('sex'))
         for key, value in entry.items():
@@ -587,6 +648,15 @@ def _apply_race_catalog(ctx: RaceDefContext, data: dict,
                         f"scheme {scheme_name!r}; skipping")
                     continue
                 ctx.set_tint_rules(race, sex, list(rules))
+                continue
+            if key == 'weight_range':
+                if (not isinstance(value, list) or len(value) != 2):
+                    log.warning(
+                        f"row for {race!r}: weight_range must be a "
+                        f"two-element list [low, high]; got {value!r}; "
+                        f"skipping")
+                    continue
+                ctx.set_weight_range(race, sex, value[0], value[1])
                 continue
             # Otherwise it's a HeadpartType key. Value is either a flat
             # probability (existing format) or a structured table

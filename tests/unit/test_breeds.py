@@ -302,7 +302,7 @@ class TestSetGetHeadpartRule:
 
 
 class TestStructuredHeadpartProbabilityLoader:
-    """The headpart_probability TOML row's per-type values can be a
+    """The race_customization TOML row's per-type values can be a
     flat float (existing) or a structured table (new)."""
 
     def _load_with_data(self, tmp_path, monkeypatch, races_toml: str):
@@ -321,7 +321,7 @@ class TestStructuredHeadpartProbabilityLoader:
 
     def test_flat_float_value_still_supported(self, tmp_path, monkeypatch):
         ctx = self._load_with_data(tmp_path, monkeypatch,
-            'headpart_probability = [\n'
+            'race_customization = [\n'
             '  {race = "BDMinoRace", sex = "Male", EYEBROWS = 0.4},\n'
             ']\n')
         rule = ctx.get_headpart_rule('BDMinoRace', 'Male', 'EYEBROWS')
@@ -331,7 +331,7 @@ class TestStructuredHeadpartProbabilityLoader:
     def test_structured_value_with_whitelist(self, tmp_path, monkeypatch):
         ctx = self._load_with_data(tmp_path, monkeypatch,
             'breeds = [{breed = "WhiteTail", race = "BDDeerRace"}]\n'
-            'headpart_probability = [\n'
+            'race_customization = [\n'
             '  {race = "WhiteTail", sex = "Male", '
             'EYEBROWS = {probability = 1.0, headpart = ["BDDeerHorns1"]},'
             '   FACIAL_HAIR = 0.0},\n'
@@ -349,10 +349,124 @@ class TestStructuredHeadpartProbabilityLoader:
         means 1.0 (always apply)."""
         ctx = self._load_with_data(tmp_path, monkeypatch,
             'breeds = [{breed = "WhiteTail", race = "BDDeerRace"}]\n'
-            'headpart_probability = [\n'
+            'race_customization = [\n'
             '  {race = "WhiteTail", sex = "Male", '
             'EYEBROWS = {headpart = ["BDDeerHorns1"]}},\n'
             ']\n')
         rule = ctx.get_headpart_rule('WhiteTail', 'Male', 'EYEBROWS')
         assert rule.probability == 1.0
         assert rule.headpart_whitelist == ('BDDeerHorns1',)
+
+
+class TestWeightRange:
+    """Per-race / -breed weight remap range. Vanilla NAM7 weight
+    (0-100 float) is linearly mapped onto (low, high). Default
+    (0, 100) = identity."""
+
+
+    def test_default_is_identity(self):
+        ctx = RaceDefContext()
+        assert ctx.get_weight_range('AnyRace', 'Male') == (0.0, 100.0)
+
+
+    def test_set_and_get(self):
+        ctx = RaceDefContext()
+        ctx.set_weight_range('BDMinoRace', None, 50.0, 100.0)
+        assert ctx.get_weight_range('BDMinoRace', 'Male') == (50.0, 100.0)
+        assert ctx.get_weight_range('BDMinoRace', 'Female') == (50.0, 100.0)
+
+
+    def test_breed_inherits_parent_when_silent(self):
+        ctx = RaceDefContext()
+        ctx.set_breed('LongHorn', 'BDMinoRace')
+        ctx.set_weight_range('BDMinoRace', None, 50.0, 100.0)
+        # LongHorn has no own range → inherits parent's.
+        assert ctx.get_weight_range('LongHorn', 'Male') == (50.0, 100.0)
+
+
+    def test_breed_overrides_parent(self):
+        ctx = RaceDefContext()
+        ctx.set_breed('LongHorn', 'BDMinoRace')
+        ctx.set_weight_range('BDMinoRace', None, 50.0, 100.0)
+        ctx.set_weight_range('LongHorn', None, 70.0, 100.0)
+        assert ctx.get_weight_range('LongHorn', 'Male') == (70.0, 100.0)
+
+
+    def test_sex_specific_then_sex_agnostic(self):
+        ctx = RaceDefContext()
+        ctx.set_weight_range('BDMinoRace', 'Male', 60.0, 90.0)
+        ctx.set_weight_range('BDMinoRace', None, 30.0, 80.0)
+        assert ctx.get_weight_range('BDMinoRace', 'Male') == (60.0, 90.0)
+        # Female falls through to sex-agnostic default for the race.
+        assert ctx.get_weight_range('BDMinoRace', 'Female') == (30.0, 80.0)
+
+
+    def test_wildcard_fallback(self):
+        ctx = RaceDefContext()
+        ctx.set_weight_range('*', None, 25.0, 75.0)
+        assert ctx.get_weight_range('SomeRace', 'Male') == (25.0, 75.0)
+
+
+class TestWeightRangeTomlLoader:
+    """End-to-end: weight_range field on a [[race_customization]] row
+    parses into RaceDefContext.weight_ranges."""
+
+
+    def _load_with_data(self, tmp_path, monkeypatch, races_toml: str):
+        races_dir = tmp_path / 'races'
+        races_dir.mkdir()
+        (races_dir / 'r.toml').write_text(races_toml)
+        schemes_dir = tmp_path / 'schemes'
+        schemes_dir.mkdir()
+        (schemes_dir / 's.toml').write_text(
+            'races = [{vanilla = "NordRace", furry = "BDMinoRace"}]\n')
+        from furrifier import race_defs
+        monkeypatch.setattr(
+            race_defs, '_find_resource_dir',
+            lambda name: schemes_dir if name == 'schemes' else races_dir)
+        return race_defs.load_scheme('s')
+
+
+    def test_weight_range_parsed(self, tmp_path, monkeypatch):
+        ctx = self._load_with_data(tmp_path, monkeypatch,
+            'race_customization = [\n'
+            '  {race = "BDMinoRace", weight_range = [50, 100]},\n'
+            ']\n')
+        assert ctx.get_weight_range('BDMinoRace', 'Male') == (50.0, 100.0)
+
+
+    def test_weight_range_with_sex(self, tmp_path, monkeypatch):
+        ctx = self._load_with_data(tmp_path, monkeypatch,
+            'race_customization = [\n'
+            '  {race = "BDMinoRace", sex = "Male", '
+            'weight_range = [70, 100]},\n'
+            ']\n')
+        assert ctx.get_weight_range('BDMinoRace', 'Male') == (70.0, 100.0)
+        # Female falls through to default since no female row was given.
+        assert ctx.get_weight_range('BDMinoRace', 'Female') == (0.0, 100.0)
+
+
+    def test_weight_range_alongside_headpart_rule(self, tmp_path, monkeypatch):
+        """A row can carry weight_range AND a HeadpartType key — the
+        loader must dispatch on key, not bail on the first non-headpart
+        field."""
+        ctx = self._load_with_data(tmp_path, monkeypatch,
+            'race_customization = [\n'
+            '  {race = "BDMinoRace", sex = "Male", '
+            'weight_range = [50, 100], FACIAL_HAIR = 0.0},\n'
+            ']\n')
+        assert ctx.get_weight_range('BDMinoRace', 'Male') == (50.0, 100.0)
+        rule = ctx.get_headpart_rule('BDMinoRace', 'Male', 'FACIAL_HAIR')
+        assert rule.probability == 0.0
+
+
+    def test_weight_range_malformed_warns_and_drops(
+            self, tmp_path, monkeypatch, caplog):
+        import logging
+        with caplog.at_level(logging.WARNING, logger='furrifier.race_defs'):
+            ctx = self._load_with_data(tmp_path, monkeypatch,
+                'race_customization = [\n'
+                '  {race = "BDMinoRace", weight_range = 50},\n'
+                ']\n')
+        assert ctx.get_weight_range('BDMinoRace', 'Male') == (0.0, 100.0)
+        assert any('weight_range must be' in r.message for r in caplog.records)

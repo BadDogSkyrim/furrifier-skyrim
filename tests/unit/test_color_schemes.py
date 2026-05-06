@@ -10,7 +10,7 @@ Picking among non-magic entries is **uniform** (each entry equally
 likely) — duplicate EDIDs at different intensities are intentional
 (e.g. Tan-strong vs Tan-soft as two equally-likely outcomes).
 
-A `[[headpart_probability]]` row references a scheme by name with
+A `[[race_customization]]` row references a scheme by name with
 `colors = "SchemeName"`.
 """
 from __future__ import annotations
@@ -184,13 +184,13 @@ class TestColorsReferenceOnHeadpartProbability:
 
     def test_colors_reference_resolves_to_scheme_rules(
             self, tmp_path, monkeypatch):
-        """A `colors = "SchemeName"` field on a [[headpart_probability]]
+        """A `colors = "SchemeName"` field on a [[race_customization]]
         row pulls the named scheme's rules into this (race, sex) slot."""
         ctx = self._load_with_data(tmp_path, monkeypatch,
             'breeds = [{breed = "CapeBuffalo", race = "BDMinoRace"}]\n'
             '[color_schemes.CapeBuffalo]\n'
             'SkinTone = [["BDMinoCoatBlack", 1.0]]\n'
-            '[[headpart_probability]]\n'
+            '[[race_customization]]\n'
             'race = "CapeBuffalo"\n'
             'sex = "both"\n'
             'colors = "CapeBuffalo"\n'
@@ -220,7 +220,7 @@ class TestSexNormalization:
         """`sex = "both"` registers under (race, None, type) — applies
         to either sex through the existing fallback chain."""
         ctx = self._load_with_data(tmp_path, monkeypatch,
-            '[[headpart_probability]]\n'
+            '[[race_customization]]\n'
             'race = "X"\n'
             'sex = "both"\n'
             'EYEBROWS = 0.4\n'
@@ -231,7 +231,7 @@ class TestSexNormalization:
 
     def test_sex_omitted_means_sex_agnostic(self, tmp_path, monkeypatch):
         ctx = self._load_with_data(tmp_path, monkeypatch,
-            '[[headpart_probability]]\n'
+            '[[race_customization]]\n'
             'race = "X"\n'
             'EYEBROWS = 0.3\n'
         )
@@ -241,11 +241,11 @@ class TestSexNormalization:
     def test_sex_lowercase_male_female(self, tmp_path, monkeypatch):
         """Lowercase `male` / `female` normalize to internal Male/Female."""
         ctx = self._load_with_data(tmp_path, monkeypatch,
-            '[[headpart_probability]]\n'
+            '[[race_customization]]\n'
             'race = "X"\n'
             'sex = "male"\n'
             'EYEBROWS = 0.5\n'
-            '[[headpart_probability]]\n'
+            '[[race_customization]]\n'
             'race = "X"\n'
             'sex = "female"\n'
             'EYEBROWS = 0.1\n'
@@ -257,7 +257,7 @@ class TestSexNormalization:
         """Existing files using `sex = "Male"` keep parsing — the
         normalizer is case-insensitive."""
         ctx = self._load_with_data(tmp_path, monkeypatch,
-            '[[headpart_probability]]\n'
+            '[[race_customization]]\n'
             'race = "X"\n'
             'sex = "Male"\n'
             'EYEBROWS = 0.7\n'

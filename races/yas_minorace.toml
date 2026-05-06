@@ -77,7 +77,7 @@ headpart_equivalents = [
 ]
 
 # Breeds — constrained visual flavors of BDMinoRace. The breed's
-# RNAM stays BDMinoRace; the per-breed headpart_probability rules
+# RNAM stays BDMinoRace; the per-breed race_customization rules
 # below narrow which headparts and tints the furrifier picks for an
 # NPC assigned to the breed. See PLAN_FURRIFIER_BREEDS.md.
 breeds = [
@@ -132,43 +132,50 @@ TintCheeckLower = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoF
 TintCheekUpper = [["probability", 0.75], ["BDMinoFaceFurBlack", 0.8], ["BDMinoFaceFurTan", 0.2], ["BDMinoFaceFurWhite", 0.15]]
 
 
+# Race-wide: Minos are heavy. Map vanilla weight (0-100) onto
+# (50, 100) so even a vanilla weight=0 NPC ends up at 50.
+[[race_customization]]
+race = "BDMinoRace"
+weight_range = [50, 100]
+
+
 # CapeBuffalo: cape horns only, no facial fluff, dark coat tones.
-[[headpart_probability]]
+[[race_customization]]
 race = "CapeBuffalo"
 sex = "both"
 EYEBROWS = {headpart = ["BDMinoCapeHorns"]}
 FACIAL_HAIR = 0.0
 colors = "CapeBuffalo" # applies the color scheme of the same name, defined above
 
-[[headpart_probability]]
+[[race_customization]]
 race = "Ankole"
 sex = "both"
 EYEBROWS = {probability = 1.0, headpart = ["BDMinoAfricanHorns"]}
 FACIAL_HAIR = 0.0
 colors = "Ankole"
 
-[[headpart_probability]]
+[[race_customization]]
 race = "Sanga"
 sex = "male"
 EYEBROWS = {headpart = ["BDMinoSteerHorns"]}
 FACIAL_HAIR = 0.0
 colors = "Cattle"
 
-[[headpart_probability]]
+[[race_customization]]
 race = "Sanga"
 sex = "female"
 EYEBROWS = 0.0
 FACIAL_HAIR = 0.0
 colors = "Cattle"
 
-[[headpart_probability]]
+[[race_customization]]
 race = "LongHorn"
 sex = "male"
 EYEBROWS = {headpart = ["BDMinoLonghorn"]}
 FACIAL_HAIR = 0.0
 colors = "Cattle"
 
-[[headpart_probability]]
+[[race_customization]]
 race = "LongHorn"
 sex = "female"
 EYEBROWS = 0.0
@@ -176,12 +183,21 @@ FACIAL_HAIR = 0.0
 colors = "Cattle"
 
 # Bison always have manes and beards. No other breed has manes. 
-[[headpart_probability]]
+[[race_customization]]
 race = "Bison"
-sex = "both"
+sex = "male"
 EYEBROWS = {headpart = ["BDMinoBisonHorns"]}
 FACIAL_HAIR = 1.0
-HAIR = {headpart = ["BDMinoHairFemMane", "BDMinoHairFemManeCurly", "BDMinoHairFemManeFeather", "BDMinoHairFemManeHeadband", "BDMinoHairFemManeRough", "BDMinoHairMaleMane", "BDMinoHairMaleManeCurly", "BDMinoHairMaleManeFeather", "BDMinoHairMaleManeHeadband", "BDMinoHairMaleShaggy", "BDMinoHairMinoManeRough"]}
+HAIR = {headpart = ["BDMinoHairMaleMane", "BDMinoHairMaleManeCurly", "BDMinoHairMaleManeFeather", "BDMinoHairMaleManeHeadband", "BDMinoHairMaleShaggy", "BDMinoHairMinoManeRough"]}
+colors = "Bison"
+
+# Bison always have manes and beards. No other breed has manes. 
+[[race_customization]]
+race = "Bison"
+sex = "female"
+EYEBROWS = {headpart = ["BDMinoBisonHorns"]}
+FACIAL_HAIR = 1.0
+HAIR = {headpart = ["BDMinoHairFemMane", "BDMinoHairFemManeCurly", "BDMinoHairFemManeFeather", "BDMinoHairFemManeHeadband", "BDMinoHairFemManeRough"]}
 colors = "Bison"
 
 

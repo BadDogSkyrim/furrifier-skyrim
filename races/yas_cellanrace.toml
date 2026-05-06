@@ -16,7 +16,7 @@ headpart_equivalents = [
   {vanilla = "MaleEyesHumanVampire"      , furry = "MaleEyesCellanVampire"},
 ]
 
-headpart_probability = [
+race_customization = [
   {race = "CellanRace", sex = "Male", EYEBROWS = 0.0, FACIAL_HAIR = 0.2},
   {race = "CellanRace", sex = "Female", EYEBROWS = 0.0, FACIAL_HAIR = 0.0},
   {race = "CellanRaceVampire", sex = "Male", EYEBROWS = 0.0, FACIAL_HAIR = 0.2},

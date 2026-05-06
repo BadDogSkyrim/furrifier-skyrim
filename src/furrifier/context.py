@@ -281,6 +281,27 @@ class FurryContext:
             nama.data = bytearray(len(nama.data))
             nama.modified = True
 
+        # Apply the breed/race/wildcard weight_range remap (if any).
+        # NAM7 is the NPC's weight, vanilla 0-100 float; we linearly
+        # map it onto (low, high) configured in the scheme. Default
+        # range (0, 100) is identity → no change. Used so e.g. all
+        # Mino NPCs end up at weight ≥ 50 regardless of source.
+        sex_name_for_weight = 'Female' if npc_sex.is_female else 'Male'
+        weight_lookup_name = (breed.name if breed is not None
+                              else furry_race_id)
+        weight_low, weight_high = self.ctx.get_weight_range(
+            weight_lookup_name, sex_name_for_weight)
+        if (weight_low, weight_high) != (0.0, 100.0):
+            nam7 = patched.get_subrecord('NAM7')
+            if nam7 is not None and nam7.size >= 4:
+                vanilla_weight = struct.unpack('<f', nam7.data[:4])[0]
+                # Clamp source to 0-100 in case a mod shipped weights
+                # outside the vanilla range.
+                clamped = max(0.0, min(100.0, vanilla_weight))
+                remapped = (weight_low
+                            + (clamped / 100.0) * (weight_high - weight_low))
+                nam7.data = struct.pack('<f', remapped)
+
         # Load NPC labels for headpart matching
         labels = load_npc_labels(npc, self.ctx)
 

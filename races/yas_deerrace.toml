@@ -173,70 +173,70 @@ TintLaughline = [["probability", 1.0], ["BDDeerFaceFurBlack", 1], ["BDDeerFaceFu
 TintEyeliner = [["probability", 1.0], ["BDDeerFleshDark", 1]]
 TintNose = [["probability", 1.0], ["BDDeerFleshDark", 0.9]]
 
-[[headpart_probability]]
+[[race_customization]]
 race = "Dikdik"
 sex = "both"
 EYEBROWS = {headpart = ["BDDeerHorns6"]}
 FACIAL_HAIR = 0.0
 colors = "Dikdik"
 
-[[headpart_probability]]
+[[race_customization]]
 race = "Elk"
 sex = "male"
 EYEBROWS = {headpart = ["BDDeerHorns4"]}
 FACIAL_HAIR = 0.2
 colors = "ElkMoose"
 
-[[headpart_probability]]
+[[race_customization]]
 race = "Elk"
 sex = "female"
 EYEBROWS = 0.0
 FACIAL_HAIR = 0.0
 colors = "ElkMoose"
 
-[[headpart_probability]]
+[[race_customization]]
 race = "Gazelle"
 sex = "both"
 EYEBROWS = {headpart = ["BDDeerHorns3"]}
 FACIAL_HAIR = 0.0
 colors = "Gazelle"
 
-[[headpart_probability]]
+[[race_customization]]
 race = "Goat"
 sex = "both"
 EYEBROWS = {headpart = ["BDDeerHornsRam"]}
 FACIAL_HAIR = 0.5
 colors = "Goat"
 
-[[headpart_probability]]
+[[race_customization]]
 race = "Moose"
 sex = "male"
 EYEBROWS = {headpart = ["BDDeerHorns8"]}
 FACIAL_HAIR = 0.4
 colors = "ElkMoose"
 
-[[headpart_probability]]
+[[race_customization]]
 race = "Moose"
 sex = "female"
 EYEBROWS = 0.0
 FACIAL_HAIR = 0.0
 colors = "ElkMoose"
 
-[[headpart_probability]]
+[[race_customization]]
 race = "Reindeer"
 sex = "both"
 EYEBROWS = {headpart = ["BDDeerHornsReindeer"]}
 FACIAL_HAIR = 0.4
 colors = "Reindeer"
 
-[[headpart_probability]]
+[[race_customization]]
 race = "WhiteTail"
 sex = "male"
 EYEBROWS = {headpart = ["BDDeerHorns1"]}
 FACIAL_HAIR = 0.2
 colors = "WhiteTail"
 
-[[headpart_probability]]
+[[race_customization]]
 race = "WhiteTail"
 sex = "female"
 EYEBROWS = 0.0

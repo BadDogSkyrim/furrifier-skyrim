@@ -339,12 +339,14 @@ accepted in a scheme — `races =`, `subraces[].furry`, `[faction_races]`,
 in. That's how you steer specific NPCs onto a breed.
 
 Breed-specific headpart and tint constraints go on the same
-`headpart_probability` table the race uses, but with the breed name in
+`race_customization` table the race uses, but with the breed name in
 the `race` field. Both `EYEBROWS = 0.5` (flat probability, existing
 form) and `EYEBROWS = {probability = 1.0, headpart = ["..."]}`
 (structured) are accepted; the flat form keeps existing entries
 working. A `tints = [...]` block on the same row constrains layered
-tints. Silence on a type means inherit the parent race's rule.
+tints. A `weight_range = [low, high]` field linearly remaps the
+NPC's vanilla NAM7 weight onto that range. Silence on a type means
+inherit the parent race's rule.
 
 ```toml
 # WhiteTail breed of BDDeerRace — males get one specific horn HDPT
@@ -352,7 +354,7 @@ tints. Silence on a type means inherit the parent race's rule.
 breeds = [
   {breed = "WhiteTail", race = "BDDeerRace"},
 ]
-headpart_probability = [
+race_customization = [
   {race = "WhiteTail", sex = "Male",
     EYEBROWS    = {probability = 1.0, headpart = ["BDDeerHorns1"]},
     FACIAL_HAIR = 0.0,
