@@ -325,10 +325,9 @@ class FurrifierWindow(QMainWindow):
         frame.setFrameShape(QFrame.Shape.StyledPanel)
         layout = QHBoxLayout(frame)
         self.armor_cb = QCheckBox("Furrify armor", frame)
-        self.schlongs_cb = QCheckBox("Schlongs (SOS)", frame)
         self.facegen_cb = QCheckBox("Build FaceGen", frame)
         self.debug_cb = QCheckBox("Debug logging", frame)
-        for cb in (self.armor_cb, self.schlongs_cb, self.facegen_cb):
+        for cb in (self.armor_cb, self.facegen_cb):
             cb.setChecked(True)
             layout.addWidget(cb)
         layout.addWidget(self.debug_cb)
@@ -461,7 +460,9 @@ class FurrifierWindow(QMainWindow):
             patch_filename=patch,
             race_scheme=self.scheme_combo.currentText(),
             furrify_armor=self.armor_cb.isChecked(),
-            furrify_schlongs=self.schlongs_cb.isChecked(),
+            # furrify_schlongs has no GUI surface — SOS handling is a
+            # no-op when SOS isn't in the load order, so the toggle was
+            # dead weight. CLI's --no-schlongs is still around if needed.
             build_facegen=self.facegen_cb.isChecked(),
             debug=self.debug_cb.isChecked(),
             log_file=self.log_file_edit.text().strip() or None,
