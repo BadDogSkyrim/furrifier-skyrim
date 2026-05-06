@@ -72,17 +72,19 @@ class TestClassifyTintPath:
         # Race catalogs can register their own keyword → class
         # mappings (loaded from [tint_keywords] in races/*.toml).
         # These are checked BEFORE the built-in table so a name like
-        # BDDeerHoofprint routes to Wolfpawprint instead of falling
-        # through to the generic Paint catch-all.
+        # BDDeerHoofprint routes to Hand instead of falling through
+        # to the generic Paint catch-all. (Class is named "Hand"
+        # because the layer covers paws, hooves, AND vanilla hand
+        # warpaints — vanilla wins for the canonical name.)
         path = (
             'textures/actors/character/BDDeerTextures/Tints/'
             'BDDeerHoofprint.dds')
         # Without the override: catch-all Paint.
         assert _classify_tint_path(path) == 'Paint'
-        # With the override: routed to Wolfpawprint.
+        # With the override: routed to Hand.
         assert _classify_tint_path(
-            path, extra_keywords=(('Hoofprint', 'Wolfpawprint'),)
-        ) == 'Wolfpawprint'
+            path, extra_keywords=(('Hoofprint', 'Hand'),)
+        ) == 'Hand'
 
     def test_extra_keywords_beat_built_in_table(self):
         # An author who wants to remap a built-in keyword can do so

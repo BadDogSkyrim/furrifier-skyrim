@@ -541,9 +541,9 @@ def _apply_race_catalog(ctx: RaceDefContext, data: dict,
         ctx.label_headpart_list(hp_id, labels)
 
     # [tint_keywords] — race catalog can extend the path classifier.
-    # e.g. {Hoofprint = "Wolfpawprint"} routes BDDeerHoofprint.dds
-    # to the Wolfpawprint class instead of falling through to Paint.
-    # Validated against TINT_CLASS_NAMES so typos surface loudly.
+    # e.g. {Hoofprint = "Hand"} routes BDDeerHoofprint.dds to the
+    # Hand class instead of falling through to Paint. Validated
+    # against TINT_CLASS_NAMES so typos surface loudly.
     for keyword, class_name in data.get('tint_keywords', {}).items():
         if class_name not in TINT_CLASS_NAMES:
             log.warning(

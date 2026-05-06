@@ -230,3 +230,5 @@ BDMinoHairMaleMohawkFeathers   = "MOHAWK,FUNKY,BOLD,FEATHERS"
 BDMinoHairMaleShaggy           = "MESSY,LONG"
 BDMinoHairNone                 = "BALD,BUZZ"
 
+[tint_keywords]
+Hoofprint = "Hand"

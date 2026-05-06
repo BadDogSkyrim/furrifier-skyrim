@@ -133,9 +133,9 @@ class TestTintKeywordsLoader:
     def test_tint_keywords_parsed_into_ctx(self, tmp_path, monkeypatch):
         ctx = self._load_with_data(tmp_path, monkeypatch,
             '[tint_keywords]\n'
-            'Hoofprint = "Wolfpawprint"\n'
+            'Hoofprint = "Hand"\n'
         )
-        assert ('Hoofprint', 'Wolfpawprint') in ctx.tint_keywords
+        assert ('Hoofprint', 'Hand') in ctx.tint_keywords
 
     def test_tint_keywords_routes_classify(self, tmp_path, monkeypatch):
         # End-to-end: the keyword loaded from TOML actually changes
@@ -143,14 +143,14 @@ class TestTintKeywordsLoader:
         from furrifier.furry_load import _classify_tint_path
         ctx = self._load_with_data(tmp_path, monkeypatch,
             '[tint_keywords]\n'
-            'Hoofprint = "Wolfpawprint"\n'
+            'Hoofprint = "Hand"\n'
         )
         path = (
             'textures/actors/character/BDDeerTextures/Tints/'
             'BDDeerHoofprint.dds')
         assert _classify_tint_path(
             path, extra_keywords=tuple(ctx.tint_keywords)
-        ) == 'Wolfpawprint'
+        ) == 'Hand'
 
     def test_unknown_class_name_warns_and_drops(
             self, tmp_path, monkeypatch, caplog):

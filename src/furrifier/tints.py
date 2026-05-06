@@ -26,7 +26,7 @@ TINT_CLASS_NAMES = [
     'BlackBlood', 'Bothiah', 'Forsworn', 'Frekles',
     'NordWarPaint', 'DarkElfWarPaint', 'ImperialWarPaint',
     'OrcWarPaint', 'RedguardWarPaint', 'WoodElfWarPaint',
-    'Wolfpawprint', 'Skull', 'Paint', 'Dirt',
+    'Hand', 'Skull', 'Paint', 'Dirt',
 ]
 
 

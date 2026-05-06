@@ -99,9 +99,9 @@ breeds = [
 # absorbs them into this table.
 [tint_keywords]
 # BDDeerHoofprint.dds is a paw-print-equivalent decoration; route it
-# to Wolfpawprint instead of letting it fall through to the generic
+# to Hand instead of letting it fall through to the generic
 # Paint catch-all.
-Hoofprint = "Wolfpawprint"
+Hoofprint = "Hand"
 
 [color_schemes.Dikdik]
 SkinTone = [["BDDeerCoatBay", 0.9], ["BDDeerCoatBayLight", 0.8], ["BDDeerCoatBrown", 0.9], ["BDDeerCoatWarmGray", 0.9]]
@@ -269,3 +269,4 @@ BDDeerMaleShaggy001            = "MESSY,LONG"
 BDDeerMane                     = "BOLD,LONG,MANE"
 BDDeerNoHair                   = "NEAT,BOLD,BALD,BUZZ"
 BDDeerHorns9                   = "EXCLUDE" # Giraffe
+

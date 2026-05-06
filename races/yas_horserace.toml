@@ -117,3 +117,6 @@ BDHorseMaleManeSimple           = "MESSY,SHORT"
 BDHorseUnicornHorn              = "EXCLUDE"
 BDHorseUnicornHornGold          = "EXCLUDE"
 BDHorseUnicornHornDark          = "EXCLUDE"
+
+[tint_keywords]
+Horseshoe = "Hand"

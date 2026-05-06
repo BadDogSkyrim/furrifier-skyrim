@@ -298,8 +298,14 @@ _TINT_PATH_KEYWORDS = [
     ('OrcWarPaint', 'OrcWarPaint'),
     ('RedguardWarPaint', 'RedguardWarPaint'),
     ('WoodElfWarPaint', 'WoodElfWarPaint'),
-    ('wolfpawprint', 'Wolfpawprint'),
-    ('pawprint', 'Wolfpawprint'),
+    ('femaleheadwarpaint_08', 'Hand'),
+    ('maleheadwarpaint_08', 'Hand'),
+    ('wolfpawprint', 'Hand'),
+    ('pawprint', 'Hand'),
+    ('femaleheadredguardwarpaint_03', 'Skull'),
+    ('maleheadredguardwarpaint_02', 'Skull'),
+    ('femaleheadwarpaint_09', 'Skull'),
+    ('maleheadwarpaint_09', 'Skull'),
     ('Skull', 'Skull'),
     ('WarPaint', 'Paint'),
     ('warpaint', 'Paint'),
@@ -317,9 +323,9 @@ def _classify_tint_path(
     `extra_keywords` is an optional list of (keyword, class_name)
     pairs that are checked BEFORE the built-in `_TINT_PATH_KEYWORDS`,
     so a race catalog can route mod-specific names like
-    ``BDDeerHoofprint`` to a class (``Wolfpawprint``) without editing
-    the built-in table. Populated from ``[tint_keywords]`` sections
-    in ``races/*.toml``.
+    ``BDDeerHoofprint`` to a class (``Hand``) without editing the
+    built-in table. Populated from ``[tint_keywords]`` sections in
+    ``races/*.toml``.
     """
     # Use filename only — directory names like "TintMasks" would
     # false-match keywords like "Mask"
@@ -356,7 +362,7 @@ def build_race_tints(
 
     `extra_keywords` is forwarded to `_classify_tint_path` so race
     catalogs can route mod-specific tint filenames (e.g.
-    ``BDDeerHoofprint`` → ``Wolfpawprint``) without a Python edit.
+    ``BDDeerHoofprint`` → ``Hand``) without a Python edit.
     """
     import struct
     from .tints import RaceTintData
