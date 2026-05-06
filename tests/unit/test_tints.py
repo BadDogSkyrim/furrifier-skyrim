@@ -53,6 +53,64 @@ class TestClassifyTintPath:
         assert _classify_tint_path(
             r'YAS\Dog\Tints\FemMuzzle05Tint.dds') == 'Muzzle'
 
+    def test_vanilla_khajiit_paint_is_warpaint(self):
+        # KhajiitPaint01-04 are the vanilla Khajiit warpaint masks.
+        # They must classify as 'Paint' (the warpaint class — index 31
+        # in TINT_CLASS_NAMES, in the decoration range, only applied
+        # when the NPC already has them) so they composite the right
+        # way. Regression for the long-standing concern that they
+        # might get tagged as e.g. 'Skin Tone' or 'Dirt' and break the
+        # blend stack.
+        for n in ('01', '02', '03', '04'):
+            path = (
+                f'textures/actors/character/character assets/'
+                f'tintmasks/khajiitpaint{n}.dds')
+            assert _classify_tint_path(path) == 'Paint', (
+                f'{path} misclassified')
+
+    def test_vanilla_khajiit_full_lockdown(self):
+        # Lock down every vanilla Khajiit tint mask under
+        # textures/actors/character/character assets/tintmasks/. A
+        # future tweak to the keyword table can't silently drift any
+        # of these without the test failing. Also pins the
+        # CheekColorLower / EyeSocketUpper fixes from 2026-05-06 so
+        # they don't regress (the bare "Cheek" / "EyeSocket"
+        # catch-alls used to win against vanilla's underscore-free
+        # filenames).
+        cases = {
+            'khajiitcheekcolor.dds': 'Cheek Color',
+            'khajiitcheekcolorlower.dds': 'Cheek Color Lower',
+            'khajiitchin.dds': 'Chin',
+            'khajiitdirt.dds': 'Dirt',
+            'khajiiteyeliner.dds': 'Eyeliner',
+            # No Upper/Lower suffix: falls through to the generic
+            # 'EyeSocket' keyword, which historically maps to Lower.
+            'khajiiteyesocket01.dds': 'EyeSocket Lower',
+            'khajiiteyesocket02.dds': 'EyeSocket Lower',
+            'khajiiteyesocketlower.dds': 'EyeSocket Lower',
+            'khajiiteyesocketupper.dds': 'EyeSocket Upper',
+            'khajiitforehead.dds': 'Forehead',
+            'khajiitlaughlines.dds': 'Laugh Lines',
+            'khajiitlipcolor.dds': 'Lip Color',
+            'khajiitneck.dds': 'Neck',
+            'khajiitnose01.dds': 'Nose',
+            'khajiitpaint01.dds': 'Paint',
+            'khajiitpaint02.dds': 'Paint',
+            'khajiitpaint03.dds': 'Paint',
+            'khajiitpaint04.dds': 'Paint',
+            'khajiitstripes01.dds': 'Stripes',
+            'khajiitstripes02.dds': 'Stripes',
+            'khajiitstripes03.dds': 'Stripes',
+            'khajiitstripes04.dds': 'Stripes',
+        }
+        for filename, expected in cases.items():
+            path = (
+                f'textures/actors/character/character assets/'
+                f'tintmasks/{filename}')
+            assert _classify_tint_path(path) == expected, (
+                f'{filename} expected {expected!r}, '
+                f'got {_classify_tint_path(path)!r}')
+
 
 class TestChooseTintPreset:
     def test_single_preset(self):

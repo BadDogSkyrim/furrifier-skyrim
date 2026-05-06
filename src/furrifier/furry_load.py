@@ -243,10 +243,21 @@ def build_race_headparts(plugins,
 
 _TINT_PATH_KEYWORDS = [
     ('SkinTone', 'Skin Tone'),
+    # Vanilla Skyrim splits the keyword with "Color" in the middle
+    # (e.g. KhajiitCheekColorLower.dds), so the more specific
+    # "CheekColorLower" keyword must come first or the bare "Cheek"
+    # catch-all wins and the lower mask is misclassified as upper.
+    ('CheekColorLower', 'Cheek Color Lower'),
+    ('CheekColorUpper', 'Cheek Color'),
     ('CheekLower', 'Cheek Color Lower'),
     ('CheekUpper', 'Cheek Color'),
     ('Cheek', 'Cheek Color'),
     ('Chin', 'Chin'),
+    # Same shape for vanilla EyeSocketUpper/Lower — match the full
+    # word before the bare "EyeSocket" fallback (which historically
+    # maps to Lower).
+    ('EyeSocketLower', 'EyeSocket Lower'),
+    ('EyeSocketUpper', 'EyeSocket Upper'),
     ('EyeLower', 'EyeSocket Lower'),
     ('EyeUpper', 'EyeSocket Upper'),
     ('EyeSocket', 'EyeSocket Lower'),
