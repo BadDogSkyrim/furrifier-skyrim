@@ -46,7 +46,7 @@ subraces = [
   {id = "YASSailorRace"          , name = "Sailor"               , basis = "NordRace"         , furry = "CellanRace"},
   {id = "YASMoragTongRace"       , name = "Morag Tong"           , basis = "DarkElfRace"      , furry = "YASBaghaRace"},
   {id = "YASDragonBridgeRace"    , name = "Dragon Bridge Denizen", basis = "NordRace"         , furry = "YASBaghaRace"},
-  {id = "YASRoriksteadRace"      , name = "Rorikstead Denizen"   , basis = "NordRace"         , furry = "BDHorseRace"},
+  {id = "YASAlikrRace"           , name = "Alikr"                , basis = "RedguardRace"     , furry = "BDHorseRace"},
 ]
 
 # Faction-wide race overrides: all members become the listed race.
@@ -71,18 +71,14 @@ DragonBridgeFourShieldsInnFaction  = "YASDragonBridgeRace"
 DragonBridgeHorgeirHouse           = "YASDragonBridgeRace"
 DragonBridgeLumberCampFaction      = "YASDragonBridgeRace"
 DLC2MoragTongFaction               = "YASMoragTongRace" # Probably doesn't work--based on leveled lists
-TownRoriksteadFaction              = "YASRoriksteadRace"
-RoriksteadManorFaction             = "YASRoriksteadRace"
-RoriksteadLemkilsFarmFaction       = "YASRoriksteadRace"
-RoriksteadCowflopFarmFaction       = "YASRoriksteadRace"
-ServicesRoriksteadMralkiFaction    = "YASRoriksteadRace"
-RoriksteadFrostfruitInnFaction     = "YASRoriksteadRace"
-
+MS08AlikrBaseFaction               = "YASAlikrRace"
+MS08AlikrFaction                   = "YASAlikrRace"
 
 
 # Per-NPC race overrides (by NPC EditorID).
 [npc_races]
 Jolf         = "YASSailorRace"
+Saadia       = "YASAlikrRace"
 
 # Reachmen (Forsworn) — forced to the Reachman subrace regardless of their
 # vanilla tag. Requires that this scheme defines the Reachman subrace above.
@@ -109,7 +105,7 @@ Gralnach     = "YASReachmanRaceChild"
 # the `races = [...]` table above — those NPCs already appear with
 # their furry race in every leveled list by default.
 [leveled_npcs]
-exclude_substrings = ["LCharOrc", "Thalmor", "Alikir", "Forsworn"]
+exclude_substrings = ["LCharOrc", "Thalmor", "Alikr", "Forsworn"]
 
 [[leveled_npcs.groups]]
 match_substrings = ["bandit"]

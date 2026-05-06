@@ -126,7 +126,7 @@ TintEyeliner = [["probability", 1.0], ["BDDeerFleshDark", 1]]
 TintNose = [["probability", 1.0], ["BDDeerFleshDark", 0.9]]
 
 [color_schemes.Goat]
-SkinTone = [["BDDeerCoatTan", 0.9], ["WHITE", 0.9]]
+SkinTone = [["BDDeerCoatTan", 0.9], ["White", 0.9]]
 TintNeck = [["probability", 0.7], ["BDDeerFaceFurWhite", 0.5], ["BDDeerFaceFurWhite", 0.3]]
 TintEyeUpper = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.5], ["BDDeerFaceFurWhite", 0.3], ["BDDeerFaceFurTan", 0.5], ["BDDeerFaceFurTan", 0.3], ["BDDeerFaceFurBlackBrown", 0.5]]
 TintEyeLower = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.5], ["BDDeerFaceFurWhite", 0.3], ["BDDeerFaceFurTan", 0.5], ["BDDeerFaceFurTan", 0.3], ["BDDeerFaceFurBlackBrown", 0.5]]
