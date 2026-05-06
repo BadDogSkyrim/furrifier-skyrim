@@ -381,7 +381,7 @@ class FurryContext:
         if breed is not None:
             breed_tint_rules = self.ctx.get_tint_rules(breed.name, sex_name)
         if breed_tint_rules is not None:
-            from .tints import choose_breed_tints
+            from .tints import choose_breed_tints, pick_uncovered_decorations
             race_data = self.race_tints.get((furry_race_id, npc_sex))
             if race_data is None:
                 tint_choices = []
@@ -389,6 +389,17 @@ class FurryContext:
                 tint_choices = choose_breed_tints(
                     npc_alias, breed_tint_rules, race_data,
                     self._form_id_for_edid)
+                # Hybrid: preserve vanilla decoration intent
+                # (Skull / Hand / Paint / Dirt) for any decoration
+                # class the breed didn't author rules for. Without
+                # this, a breed-tagged NPC like a Mino-LongHorn
+                # version of DA06LvlOrcMelee silently loses the
+                # vanilla skull paint just because the LongHorn
+                # rules only cover fur layers.
+                tint_choices.extend(pick_uncovered_decorations(
+                    npc_alias, breed_tint_rules, race_data,
+                    npc_tint_classes,
+                ))
         else:
             tint_choices = choose_furry_tints(
                 npc_alias, npc_sex, furry_race_id,

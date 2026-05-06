@@ -268,6 +268,70 @@ def choose_breed_tints(
     return choices
 
 
+def pick_uncovered_decorations(
+        npc_alias: str,
+        rules: list[BreedTintRule],
+        race_data: 'RaceTintData',
+        npc_tint_classes: set[str],
+) -> list[TintChoice]:
+    """For decoration classes NOT covered by any breed rule but present
+    on the vanilla NPC, pick a layer the same way `choose_furry_tints`
+    would. Used by the breed-driven path so a breed-tagged NPC still
+    inherits Skull/Hand/Paint/Dirt where the vanilla NPC wore one,
+    even when the breed config only authors fur layers.
+
+    "Covered" = at least one rule's `mask_substring` matches at least
+    one asset filename in that class. A rule whose probability rolls
+    OUT still counts as covered: the breed author has expressed
+    intent over that class ("sometimes Muzzle, sometimes not"), and
+    we don't second-guess by injecting from the standard pool.
+
+    Determinism: same hash salts as `choose_furry_tints` so the
+    decoration pick is stable per NPC across runs.
+    """
+    if not rules or not npc_tint_classes:
+        return []
+
+    rule_substrings = [r.mask_substring.lower() for r in rules]
+
+    def asset_is_covered(asset: 'TintAsset') -> bool:
+        fn_lc = asset.filename.lower()
+        return any(s in fn_lc for s in rule_substrings)
+
+    choices: list[TintChoice] = []
+    for class_name, assets in race_data.classes.items():
+        layer_id = class_name_to_layer(class_name)
+        if layer_id < TintLayer.DECORATION_LO:
+            continue  # fur layers are the breed's domain
+        if class_name not in npc_tint_classes:
+            continue  # vanilla didn't have this decoration
+        # Per-asset coverage: one breed rule that happens to match a
+        # single asset's filename (e.g. a BDMino "TintCheeckLower"
+        # mask that mis-classifies as Paint due to typo) shouldn't
+        # silence the class entirely. Pick from the assets the breed
+        # didn't author intent over.
+        uncovered = [a for a in assets if not asset_is_covered(a)]
+        if not uncovered:
+            continue  # every asset of this class already covered
+        asset_idx = (hash_string(npc_alias, 529, len(uncovered))
+                     if len(uncovered) > 1 else 0)
+        asset = uncovered[asset_idx]
+        if not asset.presets:
+            continue
+        preset_idx = choose_tint_preset(
+            npc_alias, 1455, asset.presets, skip_first=True)
+        if preset_idx is None:
+            continue
+        preset = asset.presets[preset_idx]
+        choices.append(TintChoice(
+            tini=asset.index,
+            tinc=preset[0],
+            tinv=preset[1],
+            tias=preset[2],
+        ))
+    return choices
+
+
 def _randomize_index_list(hash_str: str, seed: int, list_len: int) -> list[int]:
     """Deterministic permutation of [0..list_len-1], keyed on the
     (hash_str, seed) pair."""
