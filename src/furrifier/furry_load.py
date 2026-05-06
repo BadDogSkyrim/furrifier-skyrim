@@ -309,8 +309,18 @@ _TINT_PATH_KEYWORDS = [
 ]
 
 
-def _classify_tint_path(path: str) -> str:
-    """Determine tint class name from a texture filename."""
+def _classify_tint_path(
+        path: str,
+        extra_keywords: "tuple[tuple[str, str], ...] | None" = None) -> str:
+    """Determine tint class name from a texture filename.
+
+    `extra_keywords` is an optional list of (keyword, class_name)
+    pairs that are checked BEFORE the built-in `_TINT_PATH_KEYWORDS`,
+    so a race catalog can route mod-specific names like
+    ``BDDeerHoofprint`` to a class (``Wolfpawprint``) without editing
+    the built-in table. Populated from ``[tint_keywords]`` sections
+    in ``races/*.toml``.
+    """
     # Use filename only — directory names like "TintMasks" would
     # false-match keywords like "Mask"
     from pathlib import PurePosixPath
@@ -323,6 +333,11 @@ def _classify_tint_path(path: str) -> str:
     if p.stem.endswith('Old') or p.stem.endswith('_old'):
         return 'Old'
 
+    if extra_keywords:
+        for keyword, class_name in extra_keywords:
+            if keyword.lower() in filename:
+                return class_name
+
     for keyword, class_name in _TINT_PATH_KEYWORDS:
         if keyword.lower() in filename:
             return class_name
@@ -330,11 +345,18 @@ def _classify_tint_path(path: str) -> str:
     return 'Paint'  # fallback for unrecognized paths
 
 
-def build_race_tints(plugins) -> dict[tuple, 'RaceTintData']:
+def build_race_tints(
+        plugins,
+        extra_keywords: "tuple[tuple[str, str], ...] | None" = None,
+        ) -> dict[tuple, 'RaceTintData']:
     """Build tint data for all races, keyed by (race_edid, sex).
 
     Walks each RACE record's Head Data tint masks and extracts
     TintAsset entries organized by class name.
+
+    `extra_keywords` is forwarded to `_classify_tint_path` so race
+    catalogs can route mod-specific tint filenames (e.g.
+    ``BDDeerHoofprint`` → ``Wolfpawprint``) without a Python edit.
     """
     import struct
     from .tints import RaceTintData
@@ -350,7 +372,8 @@ def build_race_tints(plugins) -> dict[tuple, 'RaceTintData']:
 
             for sex, sex_enum in [(Sex.MALE_ADULT, Sex.MALE_ADULT),
                                   (Sex.FEMALE_ADULT, Sex.FEMALE_ADULT)]:
-                tint_data = _extract_tint_section(record, sex)
+                tint_data = _extract_tint_section(
+                    record, sex, extra_keywords=extra_keywords)
                 if tint_data.classes:
                     result[(edid, sex)] = tint_data
                     # Child races share parent tint data
@@ -361,7 +384,10 @@ def build_race_tints(plugins) -> dict[tuple, 'RaceTintData']:
     return result
 
 
-def _extract_tint_section(record: Record, sex: Sex) -> 'RaceTintData':
+def _extract_tint_section(
+        record: Record, sex: Sex,
+        extra_keywords: "tuple[tuple[str, str], ...] | None" = None,
+        ) -> 'RaceTintData':
     """Extract tint data for one sex from a RACE record's Head Data."""
     import struct
     from .tints import RaceTintData
@@ -439,7 +465,8 @@ def _extract_tint_section(record: Record, sex: Sex) -> 'RaceTintData':
                 presets.append((color_fid, intensity, tirs))
             j += 1
 
-        class_name = _classify_tint_path(tint_path)
+        class_name = _classify_tint_path(
+            tint_path, extra_keywords=extra_keywords)
 
         asset = TintAsset(
             index=tini,

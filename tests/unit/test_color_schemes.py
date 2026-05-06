@@ -110,6 +110,63 @@ class TestColorSchemeLoader:
         assert ctx.color_schemes['B'][0].color_choices == (('y', 1.0),)
 
 
+class TestTintKeywordsLoader:
+    """Race-catalog [tint_keywords] sections feed
+    `_classify_tint_path`'s extra_keywords path so mod-specific tint
+    filenames route to the right TintLayer class without editing the
+    built-in keyword table."""
+
+    def _load_with_data(self, tmp_path, monkeypatch, races_toml: str):
+        races_dir = tmp_path / 'races'
+        races_dir.mkdir()
+        (races_dir / 'r.toml').write_text(races_toml)
+        schemes_dir = tmp_path / 'schemes'
+        schemes_dir.mkdir()
+        (schemes_dir / 's.toml').write_text(
+            'races = [{vanilla = "NordRace", furry = "Z"}]\n')
+        from furrifier import race_defs
+        monkeypatch.setattr(
+            race_defs, '_find_resource_dir',
+            lambda name: schemes_dir if name == 'schemes' else races_dir)
+        return race_defs.load_scheme('s')
+
+    def test_tint_keywords_parsed_into_ctx(self, tmp_path, monkeypatch):
+        ctx = self._load_with_data(tmp_path, monkeypatch,
+            '[tint_keywords]\n'
+            'Hoofprint = "Wolfpawprint"\n'
+        )
+        assert ('Hoofprint', 'Wolfpawprint') in ctx.tint_keywords
+
+    def test_tint_keywords_routes_classify(self, tmp_path, monkeypatch):
+        # End-to-end: the keyword loaded from TOML actually changes
+        # what _classify_tint_path returns when threaded through.
+        from furrifier.furry_load import _classify_tint_path
+        ctx = self._load_with_data(tmp_path, monkeypatch,
+            '[tint_keywords]\n'
+            'Hoofprint = "Wolfpawprint"\n'
+        )
+        path = (
+            'textures/actors/character/BDDeerTextures/Tints/'
+            'BDDeerHoofprint.dds')
+        assert _classify_tint_path(
+            path, extra_keywords=tuple(ctx.tint_keywords)
+        ) == 'Wolfpawprint'
+
+    def test_unknown_class_name_warns_and_drops(
+            self, tmp_path, monkeypatch, caplog):
+        # Typo in the class name → loud warning, entry dropped so it
+        # can't silently misclassify masks downstream.
+        import logging
+        with caplog.at_level(logging.WARNING, logger='furrifier.race_defs'):
+            ctx = self._load_with_data(tmp_path, monkeypatch,
+                '[tint_keywords]\n'
+                'Hoofprint = "Wolfpawprnt"\n'  # typo
+            )
+        assert ctx.tint_keywords == []
+        assert any(
+            'unknown TintLayer class' in r.message for r in caplog.records)
+
+
 class TestColorsReferenceOnHeadpartProbability:
     def _load_with_data(self, tmp_path, monkeypatch, races_toml: str):
         races_dir = tmp_path / 'races'

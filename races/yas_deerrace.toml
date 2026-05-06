@@ -90,6 +90,19 @@ breeds = [
   {breed = "WhiteTail", race = "BDDeerRace", probability = 0.20},
 ]
 
+# Mod-specific tint mask filenames the built-in classifier doesn't
+# know about. Keyword is a substring (case-insensitive) of the TINT
+# filename; the value is a TintLayer class name (must match a
+# `TINT_CLASS_NAMES` entry — typos surface as a warning at scheme
+# load time). NOTE: this is a top-level table, must come AFTER any
+# bare key=value pairs (e.g. breeds = [...]) — TOML otherwise
+# absorbs them into this table.
+[tint_keywords]
+# BDDeerHoofprint.dds is a paw-print-equivalent decoration; route it
+# to Wolfpawprint instead of letting it fall through to the generic
+# Paint catch-all.
+Hoofprint = "Wolfpawprint"
+
 [color_schemes.Dikdik]
 SkinTone = [["BDDeerCoatBay", 0.9], ["BDDeerCoatBayLight", 0.8], ["BDDeerCoatBrown", 0.9], ["BDDeerCoatWarmGray", 0.9]]
 TintNeck = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.9], ["BDDeerFaceFurWhite", 0.8]]

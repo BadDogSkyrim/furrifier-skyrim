@@ -86,6 +86,14 @@ class RaceDefContext:
         # BreedTintRule (one per mask). Headpart_probability rows reference
         # a scheme by name via `colors = "NAME"`.
         self.color_schemes: dict[str, list[BreedTintRule]] = {}
+        # User-supplied keyword → TintLayer-class-name mappings, merged
+        # from every race catalog's [tint_keywords] section. Checked
+        # BEFORE the built-in _TINT_PATH_KEYWORDS table at classify
+        # time, so a race-specific name like "BDDeerHoofprint" routes
+        # to the right class instead of falling through to the
+        # generic "Paint" catch-all. Order is "first registered wins"
+        # within a single classify() call.
+        self.tint_keywords: list[tuple[str, str]] = []
 
 
     def set_race(self, vanilla_id: str, furry_id: str) -> None:
@@ -513,18 +521,37 @@ def _parse_color_choices(entries: list) -> tuple[
     return tuple(choices), probability
 
 
-def _apply_race_catalog(ctx: RaceDefContext, data: dict) -> None:
+def _apply_race_catalog(ctx: RaceDefContext, data: dict,
+                        scheme_name: str = '<race catalog>') -> None:
     """Merge one race catalog file's data into the context.
 
     Race catalog files contain headpart equivalents and labels that
     describe the furry headparts available in a furry-race mod. They
     are scheme-independent — every load picks them up regardless of
     which scheme was selected.
+
+    `scheme_name` is used purely for warning messages (e.g. to flag
+    an unknown TintLayer class name in a particular file).
     """
+    from .tints import TINT_CLASS_NAMES
+
     for h in data.get('headpart_equivalents', []):
         ctx.assign_headpart(h['vanilla'], h['furry'])
     for hp_id, labels in data.get('headpart_labels', {}).items():
         ctx.label_headpart_list(hp_id, labels)
+
+    # [tint_keywords] — race catalog can extend the path classifier.
+    # e.g. {Hoofprint = "Wolfpawprint"} routes BDDeerHoofprint.dds
+    # to the Wolfpawprint class instead of falling through to Paint.
+    # Validated against TINT_CLASS_NAMES so typos surface loudly.
+    for keyword, class_name in data.get('tint_keywords', {}).items():
+        if class_name not in TINT_CLASS_NAMES:
+            log.warning(
+                f"{scheme_name}: [tint_keywords] {keyword!r} maps to "
+                f"unknown TintLayer class {class_name!r}; dropping. "
+                f"Valid classes: {sorted(TINT_CLASS_NAMES)}")
+            continue
+        ctx.tint_keywords.append((str(keyword), str(class_name)))
 
     # Color schemes — load before headpart_probability rows so that
     # `colors = "..."` references can resolve.
@@ -601,7 +628,7 @@ def _load_race_catalogs(ctx: RaceDefContext) -> None:
     for path in files:
         with open(path, 'rb') as f:
             data = tomllib.load(f)
-        _apply_race_catalog(ctx, data)
+        _apply_race_catalog(ctx, data, scheme_name=path.name)
         log.debug(
             f"Loaded race catalog {path.name}: "
             f"{len(data.get('headpart_equivalents', []))} equivalents, "

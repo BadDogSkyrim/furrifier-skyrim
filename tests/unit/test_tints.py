@@ -68,6 +68,31 @@ class TestClassifyTintPath:
             assert _classify_tint_path(path) == 'Paint', (
                 f'{path} misclassified')
 
+    def test_extra_keywords_route_mod_specific_path(self):
+        # Race catalogs can register their own keyword → class
+        # mappings (loaded from [tint_keywords] in races/*.toml).
+        # These are checked BEFORE the built-in table so a name like
+        # BDDeerHoofprint routes to Wolfpawprint instead of falling
+        # through to the generic Paint catch-all.
+        path = (
+            'textures/actors/character/BDDeerTextures/Tints/'
+            'BDDeerHoofprint.dds')
+        # Without the override: catch-all Paint.
+        assert _classify_tint_path(path) == 'Paint'
+        # With the override: routed to Wolfpawprint.
+        assert _classify_tint_path(
+            path, extra_keywords=(('Hoofprint', 'Wolfpawprint'),)
+        ) == 'Wolfpawprint'
+
+    def test_extra_keywords_beat_built_in_table(self):
+        # An author who wants to remap a built-in keyword can do so
+        # via tint_keywords; the extra list runs first.
+        path = 'somerace/tints/SomeStripes.dds'
+        assert _classify_tint_path(path) == 'Stripes'  # built-in
+        assert _classify_tint_path(
+            path, extra_keywords=(('Stripes', 'Spots'),)
+        ) == 'Spots'
+
     def test_vanilla_khajiit_full_lockdown(self):
         # Lock down every vanilla Khajiit tint mask under
         # textures/actors/character/character assets/tintmasks/. A

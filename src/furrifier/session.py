@@ -172,7 +172,8 @@ def build_session_over_plugins(
     log.info("Building race-headpart index...")
     race_headparts = build_race_headparts(list(plugin_set), headparts)
     log.info("Building race-tint index...")
-    race_tints = build_race_tints(list(plugin_set))
+    race_tints = build_race_tints(
+        list(plugin_set), extra_keywords=tuple(ctx.tint_keywords))
 
     # Pull any prior patch out of the override index so the new one
     # fully replaces it. No-op on a fresh plugin_set.
