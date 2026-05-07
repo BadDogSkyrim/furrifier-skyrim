@@ -176,6 +176,7 @@ TintNose = [["probability", 1.0], ["BDDeerFleshDark", 0.9]]
 [[race_customization]]
 race = "Dikdik"
 sex = "both"
+weight_range = [0, 50] # Dikdiks are small and light.
 EYEBROWS = {headpart = ["BDDeerHorns6"]}
 FACIAL_HAIR = 0.0
 colors = "Dikdik"
@@ -197,6 +198,7 @@ colors = "ElkMoose"
 [[race_customization]]
 race = "Gazelle"
 sex = "both"
+weight_range = [0, 60] # Gazelles are small and light.
 EYEBROWS = {headpart = ["BDDeerHorns3"]}
 FACIAL_HAIR = 0.0
 colors = "Gazelle"
@@ -211,6 +213,7 @@ colors = "Goat"
 [[race_customization]]
 race = "Moose"
 sex = "male"
+weight_range = [40, 100] # Moose are large and heavy.
 EYEBROWS = {headpart = ["BDDeerHorns8"]}
 FACIAL_HAIR = 0.4
 colors = "ElkMoose"
@@ -225,6 +228,7 @@ colors = "ElkMoose"
 [[race_customization]]
 race = "Reindeer"
 sex = "both"
+weight_range = [30, 100] # Reindeer are mid-sized.
 EYEBROWS = {headpart = ["BDDeerHornsReindeer"]}
 FACIAL_HAIR = 0.4
 colors = "Reindeer"
@@ -232,6 +236,7 @@ colors = "Reindeer"
 [[race_customization]]
 race = "WhiteTail"
 sex = "male"
+weight_range = [0, 70] # WhiteTail are medium-sized.
 EYEBROWS = {headpart = ["BDDeerHorns1"]}
 FACIAL_HAIR = 0.2
 colors = "WhiteTail"
@@ -239,6 +244,7 @@ colors = "WhiteTail"
 [[race_customization]]
 race = "WhiteTail"
 sex = "female"
+weight_range = [0, 70] # WhiteTail are medium-sized.
 EYEBROWS = 0.0
 FACIAL_HAIR = 0.0
 colors = "WhiteTail"

@@ -105,7 +105,7 @@ Gralnach     = "YASReachmanRaceChild"
 # the `races = [...]` table above — those NPCs already appear with
 # their furry race in every leveled list by default.
 [leveled_npcs]
-exclude_substrings = ["LCharOrc", "Thalmor", "Alikr", "Forsworn"]
+exclude_substrings = ["LCharOrc", "OnlyOrc", "OnlyRedguard", "HorseSaddled", "Thalmor", "Alikr", "Forsworn"]
 
 [[leveled_npcs.groups]]
 match_substrings = ["bandit"]
