@@ -62,6 +62,63 @@ def _variant_names(base_race: str) -> tuple[str, ...]:
         base_race + s for s in _RACE_VARIANT_SUFFIXES)
 
 
+# Stamped into the patch's TES4 CNAM (author) at save time. Future
+# runs treat any plugin whose author starts with this prefix as
+# furrifier output. RNAM-based detection couldn't catch normal-race
+# assignments (RNAM stays at the vanilla race) or subrace assignments
+# (RNAM points at a patch-created subrace EDID we didn't track) —
+# plugin identity sidesteps both.
+FURRIFIER_AUTHOR_PREFIX = "SkyrimFurrifier"
+
+
+def furrifier_patch_names(plugin_set) -> set[str]:
+    """Lowercased filenames of every loaded plugin whose TES4 author
+    marks it as furrifier output."""
+    names: set[str] = set()
+    for plugin in plugin_set:
+        author = plugin.header.author or ""
+        if author.startswith(FURRIFIER_AUTHOR_PREFIX) and plugin.file_path:
+            names.add(plugin.file_path.name.lower())
+    return names
+
+
+def is_furrified(plugin_set, npc: Record,
+                 furrifier_names: set[str]) -> bool:
+    """True if any record in the NPC's override chain came from a
+    furrifier patch. Plugin-identity check, independent of RNAM."""
+    abs_fid = npc.normalize_form_id(npc.form_id)
+    chain = plugin_set.get_override_chain(abs_fid)
+    if chain is None:
+        return False
+    for rec in chain:
+        if rec.plugin is None or rec.plugin.file_path is None:
+            continue
+        if rec.plugin.file_path.name.lower() in furrifier_names:
+            return True
+    return False
+
+
+def find_pre_furry_record(plugin_set, npc: Record,
+                          furrifier_names: set[str]) -> Optional[Record]:
+    """Walk override chain top-to-bottom; return the first record
+    whose source plugin isn't a furrifier patch.
+
+    Returns None if every record in the chain came from a furrifier
+    patch (NPC originated in a furry plugin and has no non-furry
+    source we could re-derive from).
+    """
+    abs_fid = npc.normalize_form_id(npc.form_id)
+    chain = plugin_set.get_override_chain(abs_fid)
+    if chain is None:
+        return None
+    for rec in reversed(list(chain)):
+        if rec.plugin is None or rec.plugin.file_path is None:
+            continue
+        if rec.plugin.file_path.name.lower() not in furrifier_names:
+            return rec
+    return None
+
+
 class FurryContext:
     """All state needed to furrify NPCs, armor, and schlongs."""
 
@@ -82,6 +139,7 @@ class FurryContext:
         self.race_tints = race_tints
         self.plugin_set = plugin_set
         self.max_tint_layers = max_tint_layers
+        self._furrifier_patch_names_cache: Optional[set[str]] = None
         # Statistics (populated during furrification)
         self.stats_race_counts: dict[str, int] = {}   # furry_race_id -> count
         self.stats_hair_male: dict[str, int] = {}     # headpart_edid -> count
@@ -91,6 +149,15 @@ class FurryContext:
     def _copy_record(self, record, source_plugin=None):
         """Copy a record into the patch, with string fallback resolution."""
         return self.patch.copy_record(record, source_plugin)
+
+
+    def furrifier_patch_names(self) -> set[str]:
+        """Cached set of lowercased filenames for plugins whose TES4
+        author marks them as prior furrifier output."""
+        if self._furrifier_patch_names_cache is None:
+            self._furrifier_patch_names_cache = furrifier_patch_names(
+                self.plugin_set)
+        return self._furrifier_patch_names_cache
 
     # -- NPC furrification --
 
@@ -610,6 +677,7 @@ class FurryContext:
 
     def furrify_all_npcs(self, plugins, only_npc: Optional[str] = None,
                          cancel_event: "Optional[threading.Event]" = None,
+                         preserve_existing: bool = False,
                          ) -> int:
         """Furrify all NPCs across the load order. Returns count.
 
@@ -622,6 +690,14 @@ class FurryContext:
 
         `cancel_event` (when set) is checked once per NPC; raises
         `main.CancelledError` so the caller can drop out of the run.
+
+        `preserve_existing` (default False): when True, NPCs whose
+        winning override is already a furrifier output (RNAM points at
+        a scheme target race) are skipped so a prior patch's
+        per-NPC choices are preserved. When False (default), the
+        override chain is walked back to the topmost non-furry record
+        and re-furrified — picking up classifier / scheme fixes.
+        See PLAN_FURRIFIER_REFURRIFY.md.
         """
         from .facegen import _matches_only_npc
         from .main import _check_cancel
@@ -640,7 +716,10 @@ class FurryContext:
             if not winning:
                 log.warning(f"--only={only_npc!r} matched no NPC")
 
+        furrifier_names = self.furrifier_patch_names()
         count = 0
+        rederived = 0
+        preserved = 0
         processed = 0
         total = len(winning)
         for obj_id, npc in winning.items():
@@ -648,9 +727,28 @@ class FurryContext:
             processed += 1
             if (processed % 500) == 0:
                 log.debug(f"  NPCs: {processed}/{total}")
+
+            if is_furrified(self.plugin_set, npc, furrifier_names):
+                if preserve_existing:
+                    preserved += 1
+                    continue
+                pre = find_pre_furry_record(
+                    self.plugin_set, npc, furrifier_names)
+                if pre is None:
+                    continue
+                rederived += 1
+                npc = pre
+
             result = self.furrify_npc(npc)
             if result is not None:
                 count += 1
+
+        if rederived:
+            log.info(
+                f"Re-derived {rederived} already-furrified NPCs from "
+                f"pre-furry overrides")
+        if preserved:
+            log.info(f"Preserved {preserved} already-furrified NPCs")
 
         log.debug(f"Total NPCs furrified: {count}")
         return count

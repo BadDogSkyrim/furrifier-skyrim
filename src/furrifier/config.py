@@ -53,6 +53,12 @@ class FurrifierConfig:
     # for visual diffing against a CK-baked reference.
     only_npc: Optional[str] = None
 
+    # When True, skip NPCs whose winning override is already a furrifier
+    # output (RNAM points at a scheme target race). Use to extend a
+    # curated patch with new mods' NPCs without re-deriving the existing
+    # ones. See PLAN_FURRIFIER_REFURRIFY.md.
+    preserve_existing: bool = False
+
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> FurrifierConfig:
         patch = args.patch or cls.patch_filename
@@ -72,6 +78,7 @@ class FurrifierConfig:
             facegen_limit=args.facegen_limit,
             facetint_size=args.facetint_size,
             only_npc=args.only_npc,
+            preserve_existing=args.preserve_existing,
         )
 
 
@@ -150,10 +157,52 @@ def build_parser() -> argparse.ArgumentParser:
                              "case-insensitively, or hex form-id object "
                              'index). Skips armor, schlongs, and leveled-'
                              'list extension; useful for visual diffing.')
+    parser.add_argument('--preserve-existing', action='store_true',
+                        help='Skip NPCs whose winning override is already '
+                             'furrified (RNAM points at a scheme target '
+                             'race). Default: re-derive from the topmost '
+                             'non-furry override to pick up scheme/'
+                             'classifier fixes.')
     return parser
 
 
+def resolve_log_path(config: FurrifierConfig) -> Optional[Path]:
+    """Absolute log path for `config`, applying:
+    - log_file unset → <output_dir>/furrify.log
+    - log_file is a bare filename → <output_dir>/<filename>
+    - log_file has a directory (absolute or relative) → honored as-is
+    - log_file without a suffix → ".log" appended
+
+    Output directory resolves output_dir → game_data_dir → esplib's
+    find_game_data. Returns None if log_file is unset and no output
+    dir resolves; returns the bare path unchanged if we have a name
+    but no directory to anchor it."""
+    def with_log_suffix(p: Path) -> Path:
+        return p if p.suffix else p.with_suffix(".log")
+
+    user = Path(config.log_file) if config.log_file else None
+    if user is not None and (user.is_absolute() or user.parent != Path('.')):
+        return with_log_suffix(user)
+    try:
+        if config.output_dir:
+            target: Optional[Path] = Path(config.output_dir)
+        elif config.game_data_dir:
+            target = Path(config.game_data_dir)
+        else:
+            from esplib import find_game_data
+            target = find_game_data("tes5")
+    except Exception:
+        target = None
+    if target is None:
+        return with_log_suffix(user) if user is not None else None
+    name = user.name if user is not None else "furrify.log"
+    return with_log_suffix(target / name)
+
+
 def setup_logging(config: FurrifierConfig) -> None:
+    resolved = resolve_log_path(config)
+    if resolved is not None:
+        config.log_file = str(resolved)
     level = logging.DEBUG if config.debug else logging.INFO
     handlers = [logging.StreamHandler()]
     if config.log_file:

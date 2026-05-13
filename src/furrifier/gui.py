@@ -326,10 +326,16 @@ class FurrifierWindow(QMainWindow):
         layout = QHBoxLayout(frame)
         self.armor_cb = QCheckBox("Furrify armor", frame)
         self.facegen_cb = QCheckBox("Build FaceGen", frame)
+        self.skip_furry_cb = QCheckBox("Skip furry NPCs", frame)
+        self.skip_furry_cb.setToolTip(
+            "Skip NPCs whose winning override is already a furrifier "
+            "output. Use to extend a curated patch with new mods' NPCs "
+            "without re-deriving the existing ones.")
         self.debug_cb = QCheckBox("Debug logging", frame)
         for cb in (self.armor_cb, self.facegen_cb):
             cb.setChecked(True)
             layout.addWidget(cb)
+        layout.addWidget(self.skip_furry_cb)
         layout.addWidget(self.debug_cb)
         layout.addStretch(1)
         # Face-tint output size. "Auto" preserves the compositor's
@@ -407,8 +413,13 @@ class FurrifierWindow(QMainWindow):
             self.output_dir_edit.setText(path)
 
     def _browse_log_file(self) -> None:
+        start_dir = (self.log_file_edit.text().strip()
+                     or self.output_dir_edit.text().strip()
+                     or self.data_dir_edit.text().strip()
+                     or "")
         path, _ = QFileDialog.getSaveFileName(
-            self, "Log file", "", "Log files (*.log);;All files (*)")
+            self, "Log file", start_dir,
+            "Log files (*.log);;All files (*)")
         if path:
             self.log_file_edit.setText(path)
 
@@ -470,6 +481,7 @@ class FurrifierWindow(QMainWindow):
             output_dir=self.output_dir_edit.text().strip() or None,
             facegen_limit=facegen_limit,
             facetint_size=self.facetint_size_combo.currentData(),
+            preserve_existing=self.skip_furry_cb.isChecked(),
         )
 
     def _build_load_order(
@@ -587,6 +599,10 @@ class FurrifierWindow(QMainWindow):
         # Attach file handler if not already. Keeps the same handler
         # across Preview picks and Run clicks so the log file captures
         # the whole session.
+        from .config import resolve_log_path
+        resolved = resolve_log_path(config)
+        if resolved is not None:
+            config.log_file = str(resolved)
         if self._file_handler is None and config.log_file:
             try:
                 log_path = Path(config.log_file).resolve()
@@ -625,13 +641,18 @@ class FurrifierWindow(QMainWindow):
                     self._file_handler.baseFilename, config.log_file)
 
     def _remove_log_handler(self) -> None:
-        # File handler stays attached for the window's life; Run end
-        # just restores the log level so Preview doesn't inherit the
-        # Run-side debug bump if debug was off for Preview.
+        # Restore the root log level and detach + close the file
+        # handler so the log file isn't held open between runs. The
+        # next Preview Load / Run reopens it via _install_log_handler.
         if hasattr(self, "_saved_root_level"):
             root = logging.getLogger()
             root.setLevel(self._saved_root_level or logging.INFO)
             self._persistent_handler.setLevel(root.level)
+        if self._file_handler is not None:
+            root = logging.getLogger()
+            root.removeHandler(self._file_handler)
+            self._file_handler.close()
+            self._file_handler = None
 
 
 # --- plugin picker ----------------------------------------------------------

@@ -97,7 +97,10 @@ def _run_furrification_body(
     log.info(f"  Scheme: {config.race_scheme}")
     log.info(f"  Patch: {config.patch_filename}")
     log.info(f"  Armor: {config.furrify_armor}")
-    log.info(f"  Schlongs: {config.furrify_schlongs}")
+    log.info(f"  Build FaceGen: {config.build_facegen}")
+    log.info(f"  Skip furry NPCs: {config.preserve_existing}")
+    log.info(f"  Tint size: {config.facetint_size or 'auto'}")
+    log.info(f"  FaceGen limit: {config.facegen_limit or 'none'}")
 
     # Everything up through race/flst/preset furrification is the
     # same for full runs and for live preview. setup_session owns it.
@@ -117,7 +120,8 @@ def _run_furrification_body(
     emit("Furrifying NPCs")
     log.info("Furrifying NPCs...")
     npc_count = furry.furrify_all_npcs(
-        plugin_set, only_npc=config.only_npc, cancel_event=cancel_event)
+        plugin_set, only_npc=config.only_npc, cancel_event=cancel_event,
+        preserve_existing=config.preserve_existing)
     log.info(f"Furrified {npc_count} NPCs")
 
     # Extend leveled NPC lists with furry duplicates. --only mode skips

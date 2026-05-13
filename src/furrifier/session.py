@@ -35,8 +35,9 @@ from esplib import (
 )
 from esplib.record import Record
 
+from . import __version__
 from .config import FurrifierConfig
-from .context import FurryContext
+from .context import FURRIFIER_AUTHOR_PREFIX, FurryContext
 from .furry_load import (
     build_race_headparts,
     build_race_tints,
@@ -108,11 +109,18 @@ def load_plugins(
     else:
         output_dir = data_dir
 
+    log.info("Data dir (read): %s", data_dir)
+    log.info("Output dir (write): %s", output_dir)
     emit("Loading plugins")
     log.info("Loading plugins...")
     patch_name = config.patch_filename.lower()
     if load_order is None:
         load_order = LoadOrder.from_game("tes5", active_only=True)
+        log.debug("Load order source: plugins.txt (active_only=True), "
+                  "%d entries", len(load_order.plugins))
+    else:
+        log.debug("Load order source: caller-supplied, %d entries",
+                  len(load_order.plugins))
     load_order.plugins = [p for p in load_order.plugins
                           if p.lower() != patch_name]
     plugin_set = PluginSet(load_order)
@@ -125,7 +133,14 @@ def load_plugins(
         string_dirs.append(str(game_strings))
     plugin_set.string_search_dirs = string_dirs
     plugin_set.load_all()
-    log.info("Loaded %d plugins", len(plugin_set))
+    log.info("Loaded %d of %d plugins from load order",
+             len(plugin_set), len(load_order.plugins))
+    if log.isEnabledFor(logging.DEBUG):
+        loaded_names = {(p.file_path.name.lower() if p.file_path else "")
+                        for p in plugin_set}
+        for name in load_order.plugins:
+            tag = "OK" if name.lower() in loaded_names else "MISSING"
+            log.debug("  [%s] %s", tag, name)
 
     return LoadedPlugins(
         plugin_set=plugin_set,
@@ -182,6 +197,10 @@ def build_session_over_plugins(
     patch_path = output_dir / config.patch_filename
     patch = Plugin.new_plugin(patch_path)
     patch.plugin_set = plugin_set
+    # Stamp the TES4 author so future runs can identify this patch
+    # as our output (see context.is_furrified). Engine ignores CNAM;
+    # xEdit shows it; detection uses startswith(FURRIFIER_AUTHOR_PREFIX).
+    patch.header.author = f"{FURRIFIER_AUTHOR_PREFIX} {__version__}"
 
     furry = FurryContext(
         patch=patch,
