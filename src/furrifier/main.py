@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -92,6 +93,8 @@ def _run_furrification_body(
         # Phase boundaries are the natural cancel checkpoints — work
         # inside a phase is opaque to us, so we sample between phases.
         _check_cancel(cancel_event)
+
+    t_run_start = time.perf_counter()
 
     log.info("Skyrim Furrifier v0.1.0")
     log.info(f"  Scheme: {config.race_scheme}")
@@ -183,6 +186,10 @@ def _run_furrification_body(
         _run_facegen(config, patch, plugin_set,
                      session.data_dir, session.output_dir, progress,
                      cancel_event=cancel_event)
+
+    t_total = time.perf_counter() - t_run_start
+    mins, secs = divmod(int(round(t_total)), 60)
+    log.info("Furrification complete in %dm %02ds", mins, secs)
 
     # Print warning/error summary (after FaceGen so its warnings roll up too)
     _print_log_summary(log_counter)
