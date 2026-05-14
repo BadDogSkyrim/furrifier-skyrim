@@ -279,22 +279,23 @@ def composite_to_png_and_dds(data_root: Path, form_id: str,
     if entry is None:
         raise SystemExit(f"no NPC with form_id={form_id}")
 
-    print(f"[npc] {entry['label']} 0x{entry['form_id']} "
-          f"race={entry.get('race_edid')} female={entry.get('is_female')}")
-    print(f"[npc] QNAM base color = {entry.get('qnam_color')}")
-    print(f"[npc] {len(entry['tints'])} tint layers")
+    log.debug("[npc] %s 0x%s race=%s female=%s",
+              entry['label'], entry['form_id'],
+              entry.get('race_edid'), entry.get('is_female'))
+    log.debug("[npc] QNAM base color = %s", entry.get('qnam_color'))
+    log.debug("[npc] %d tint layers", len(entry['tints']))
     for t in entry["tints"]:
         name = Path(t["mask"]).name
-        print(f"       tini={t['tini']:3d} color={tuple(t['color'])} "
-              f"v={t['intensity']:.2f}  {name}")
+        log.debug("       tini=%3d color=%s v=%.2f  %s",
+                  t['tini'], tuple(t['color']), t['intensity'], name)
 
     with AssetResolver(data_root, bsa_readers=[]) as resolver:
         png_path = build_facetint_png(
             entry, resolver, out_dir, output_size=output_size)
         dds_path = build_facetint_dds(
             entry, resolver, out_dir, output_size=output_size)
-    print(f"[png]  {png_path} ({png_path.stat().st_size} bytes)")
-    print(f"[dds]  {dds_path} ({dds_path.stat().st_size} bytes)")
+    log.debug("[png]  %s (%d bytes)", png_path, png_path.stat().st_size)
+    log.debug("[dds]  %s (%d bytes)", dds_path, dds_path.stat().st_size)
     return png_path, dds_path
 
 

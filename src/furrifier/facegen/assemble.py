@@ -239,8 +239,8 @@ def build_facegen_nif(npc_info: dict, resolver: AssetResolver,
     form_id = npc_info["form_id"]
     base_plugin = npc_info["base_plugin"]
 
-    print(f"[npc] 0x{form_id} ({npc_info.get('npc_edid')})")
-    print(f"[npc] {len(npc_info['headparts'])} headparts")
+    log.debug("[npc] 0x%s (%s)", form_id, npc_info.get('npc_edid'))
+    log.debug("[npc] %d headparts", len(npc_info['headparts']))
 
     dst_path.parent.mkdir(parents=True, exist_ok=True)
     if dst_path.exists():
@@ -261,7 +261,7 @@ def build_facegen_nif(npc_info: dict, resolver: AssetResolver,
     try:
         dst.root.write_properties()
     except Exception as e:
-        print(f"[warn] root.write_properties failed: {e}")
+        log.warning("root.write_properties failed for %s: %s", form_id, e)
 
     # Open each headpart source nif once; gather shapes + per-bone bind-pose
     # TRANSLATIONS from the source nif's top-level NiNode stubs. CK's Ctrl-F4
@@ -345,8 +345,8 @@ def build_facegen_nif(npc_info: dict, resolver: AssetResolver,
     skin_tint_color = (tuple(c / 255.0 for c in qnam_color)
                        if qnam_color else None)
     for edid, hdpt_type, _src_nif, src_shape, morphed_verts, tex_over in sources:
-        print(f"[copy] {edid} (type={hdpt_type}, source shape "
-              f"'{src_shape.name}', {len(src_shape.verts)} verts)")
+        log.debug("[copy] %s (type=%s, source shape '%s', %d verts)",
+                  edid, hdpt_type, src_shape.name, len(src_shape.verts))
         face_tint = facegen_detail_rel if hdpt_type == HDPT_TYPE_FACE else None
         copy_shape(dst, fg, src_shape, rename_to=edid,
                    facegen_detail_path=face_tint,
@@ -380,7 +380,7 @@ def build_facegen_nif(npc_info: dict, resolver: AssetResolver,
 
     dst.save()
 
-    print(f"[save] {dst_path} ({os.path.getsize(dst_path)} bytes)")
+    log.debug("[save] %s (%d bytes)", dst_path, os.path.getsize(dst_path))
     return dst
 
 

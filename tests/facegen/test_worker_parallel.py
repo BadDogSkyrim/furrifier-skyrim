@@ -104,10 +104,12 @@ def test_parallel_bake_matches_serial(dervenin_workitem, tmp_path):
     parallel_out = tmp_path / "parallel"
     parallel_out.mkdir()
     parallel_item = _make_workitem(info, parallel_out)
+    # Pass no log queue so the worker keeps stderr logging — exercises
+    # the path where the parent didn't set up a QueueListener.
     with ProcessPoolExecutor(
             max_workers=1,
             initializer=_worker_init,
-            initargs=(str(VANILLA_ASSETS), False)) as pool:
+            initargs=(str(VANILLA_ASSETS), False, None, 20)) as pool:
         parallel_result = list(pool.map(_bake_one, [parallel_item]))[0]
     assert parallel_result.ok, parallel_result.error
 
@@ -146,6 +148,58 @@ def test_pick_worker_count_default_leaves_one_core():
     assert 1 <= n <= 8
     if cpu > 1:
         assert n <= cpu - 1
+
+
+def _emit_worker_log_record(_unused) -> str:
+    """Top-level so it's pickleable for ProcessPoolExecutor (closures
+    aren't). Emits one log record from inside the worker so the test
+    can assert it crossed the process boundary. The `_unused` arg is
+    so `pool.map([None])` can call it — `map` always passes one arg."""
+    import logging as _logging
+    _logging.getLogger("furrifier.facegen.worker.test").warning(
+        "hello-from-worker")
+    return "ok"
+
+
+def test_worker_logs_reach_parent_via_queue(tmp_path):
+    """Worker log records must arrive at the parent's root handlers via
+    the QueueListener. Without this plumbing, frozen-GUI users see no
+    worker output at all."""
+    import logging
+    import logging.handlers
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor
+    from furrifier.facegen._worker import _worker_init
+
+    log_queue = multiprocessing.Manager().Queue()
+    received: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record):
+            received.append(record)
+
+    capture = _Capture(level=logging.DEBUG)
+    listener = logging.handlers.QueueListener(
+        log_queue, capture, respect_handler_level=True)
+    listener.start()
+    try:
+        # data_dir doesn't need to exist for this test — _worker_init
+        # only fails if AssetResolver.for_data_dir does, and that path
+        # is tolerant of a non-game dir (it just finds zero BSAs).
+        with ProcessPoolExecutor(
+                max_workers=1,
+                initializer=_worker_init,
+                initargs=(str(tmp_path), False, log_queue,
+                          logging.DEBUG)) as pool:
+            result = list(pool.map(_emit_worker_log_record, [None]))[0]
+        assert result == "ok"
+    finally:
+        listener.stop()
+
+    messages = [r.getMessage() for r in received]
+    assert "hello-from-worker" in messages, (
+        f"worker log record didn't cross the process boundary; "
+        f"received={messages}")
 
 
 def test_workitem_pickleable(dervenin_workitem, tmp_path):

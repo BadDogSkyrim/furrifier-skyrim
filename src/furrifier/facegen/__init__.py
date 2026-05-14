@@ -14,6 +14,8 @@ sibling modules:
 from __future__ import annotations
 
 import logging
+import logging.handlers
+import multiprocessing
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -284,11 +286,29 @@ def build_facegen_for_patch(
     # progress UI responsive on a 4000-NPC run.
     chunksize = max(1, min(8, len(work_items) // (n_workers * 4) or 1))
 
+    # Cross-process log forwarding: workers push LogRecords onto this
+    # queue via QueueHandler; the QueueListener thread in this process
+    # re-dispatches each record through the root logger's handlers
+    # (which the GUI / CLI configured via setup_logging). Without this
+    # plumbing every worker log message is invisible — fine on the CLI
+    # because pynifly's basicConfig accidentally captures stderr, but
+    # the frozen GUI build has no console and would lose them entirely.
+    log_queue: multiprocessing.Queue = multiprocessing.Manager().Queue()
+    root_logger = logging.getLogger()
+    listener = logging.handlers.QueueListener(
+        log_queue, *root_logger.handlers, respect_handler_level=True)
+    listener.start()
+
+    # Workers should match the parent's level so DEBUG bakes still see
+    # the [copy]/[save] trace.
+    worker_log_level = root_logger.getEffectiveLevel()
+
     try:
         with ProcessPoolExecutor(
                 max_workers=n_workers,
                 initializer=_worker_init,
-                initargs=(str(data_dir), throttle)) as pool:
+                initargs=(str(data_dir), throttle,
+                          log_queue, worker_log_level)) as pool:
             for i, result in enumerate(
                     pool.map(_bake_one, work_items, chunksize=chunksize)):
                 _check_cancel(cancel_event)
@@ -308,6 +328,8 @@ def build_facegen_for_patch(
         # until workers drain; for a hard interrupt re-raise after the
         # pool tears down so the parent sees it.
         raise
+    finally:
+        listener.stop()
 
     t_total = time.perf_counter() - t_run_start
     log.info("FaceGen: %d succeeded, %d failed in %.1fs (%d DDSes encoded)",

@@ -233,8 +233,18 @@ def setup_logging(config: FurrifierConfig) -> None:
     handlers = [logging.StreamHandler()]
     if config.log_file:
         handlers.append(logging.FileHandler(config.log_file))
+    # force=True wins over pynifly's import-time logging.basicConfig
+    # (pyn/niflytools.py:17 sets level=DEBUG before we get here). Without
+    # force, our basicConfig is a no-op because the root logger already
+    # has handlers, and pynifly's chatty DEBUG output spills to stderr.
     logging.basicConfig(
         level=level,
         format='%(levelname)s: %(message)s',
         handlers=handlers,
+        force=True,
     )
+    # pynifly's "Reading tris from..." debug stream is interesting for
+    # debugging but unwanted at INFO. Pin its logger at WARNING unless
+    # the user explicitly asked for debug.
+    if not config.debug:
+        logging.getLogger("pynifly").setLevel(logging.WARNING)

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import atexit
 import logging
+import logging.handlers
 import os
 import time
 from dataclasses import dataclass
@@ -82,8 +83,17 @@ def _set_below_normal_priority() -> None:
         log.debug("could not set BELOW_NORMAL priority: %s", exc)
 
 
-def _worker_init(data_dir_str: str, throttle: bool) -> None:
-    """Per-worker initializer: opens BSAs once and stashes the resolver.
+def _worker_init(data_dir_str: str, throttle: bool,
+                 log_queue: Optional[Any] = None,
+                 log_level: int = logging.INFO) -> None:
+    """Per-worker initializer: configures logging, opens BSAs once, and
+    stashes the resolver.
+
+    `log_queue` is a `multiprocessing.Queue` the parent listens on via a
+    `QueueListener` — every log record we emit here gets re-dispatched
+    through the parent's handlers (file, stream, GUI log pane). Without
+    it, worker logs spill to stderr only — fine for the CLI, invisible
+    in the frozen GUI build.
 
     Called by `ProcessPoolExecutor(initializer=...)` exactly once per
     worker process. The resolver is closed at worker exit via atexit
@@ -91,8 +101,29 @@ def _worker_init(data_dir_str: str, throttle: bool) -> None:
     global _resolver
     if throttle:
         _set_below_normal_priority()
+    if log_queue is not None:
+        _install_queue_logging(log_queue, log_level)
     _resolver = AssetResolver.for_data_dir(Path(data_dir_str))
     atexit.register(_close_resolver)
+
+
+def _install_queue_logging(log_queue: Any, level: int) -> None:
+    """Wire the worker's root logger so every record goes onto
+    `log_queue` instead of stderr. Replaces any handlers pynifly's
+    import-time `basicConfig` installed."""
+    root = logging.getLogger()
+    # Clear pre-existing handlers — pynifly imports add a StreamHandler
+    # at DEBUG via niflytools.py's module-level basicConfig, which would
+    # otherwise double-emit (once to stderr, once via the queue).
+    for h in list(root.handlers):
+        root.removeHandler(h)
+    root.addHandler(logging.handlers.QueueHandler(log_queue))
+    root.setLevel(level)
+    # Match the parent's pynifly suppression (see config.setup_logging).
+    # Workers don't have a config object, so we just pin it here when
+    # parent isn't running at DEBUG.
+    if level > logging.DEBUG:
+        logging.getLogger("pynifly").setLevel(logging.WARNING)
 
 
 def _close_resolver() -> None:
