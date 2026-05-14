@@ -332,10 +332,18 @@ class FurrifierWindow(QMainWindow):
             "output. Use to extend a curated patch with new mods' NPCs "
             "without re-deriving the existing ones.")
         self.debug_cb = QCheckBox("Debug logging", frame)
+        self.throttle_cb = QCheckBox("Throttle FaceGen", frame)
+        self.throttle_cb.setToolTip(
+            "Cap FaceGen at one BELOW_NORMAL-priority worker so the "
+            "machine stays responsive. Wall-time roughly matches the "
+            "old serial path; useful for long bakes you want to leave "
+            "running.")
         for cb in (self.armor_cb, self.facegen_cb):
             cb.setChecked(True)
-            layout.addWidget(cb)
+        layout.addWidget(self.armor_cb)
         layout.addWidget(self.skip_furry_cb)
+        layout.addWidget(self.facegen_cb)
+        layout.addWidget(self.throttle_cb)
         layout.addWidget(self.debug_cb)
         layout.addStretch(1)
         # Face-tint output size. "Auto" preserves the compositor's
@@ -482,6 +490,7 @@ class FurrifierWindow(QMainWindow):
             facegen_limit=facegen_limit,
             facetint_size=self.facetint_size_combo.currentData(),
             preserve_existing=self.skip_furry_cb.isChecked(),
+            facegen_throttle=self.throttle_cb.isChecked(),
         )
 
     def _build_load_order(
