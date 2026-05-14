@@ -59,6 +59,17 @@ class FurrifierConfig:
     # ones. See PLAN_FURRIFIER_REFURRIFY.md.
     preserve_existing: bool = False
 
+    # FaceGen worker pool size. None = auto (cpu_count-1, capped at 8).
+    # Set explicitly via --workers or FURRIFY_FACEGEN_WORKERS env for
+    # benchmarking; 1 reproduces the pre-parallel serial path.
+    facegen_workers: Optional[int] = None
+
+    # When True, cap facegen workers to 1 and demote them to
+    # BELOW_NORMAL priority on Windows. For users who want to leave a
+    # bake running while doing other work — costs back the parallelism
+    # speedup, but keeps the foreground responsive.
+    facegen_throttle: bool = False
+
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> FurrifierConfig:
         patch = args.patch or cls.patch_filename
@@ -79,6 +90,8 @@ class FurrifierConfig:
             facetint_size=args.facetint_size,
             only_npc=args.only_npc,
             preserve_existing=args.preserve_existing,
+            facegen_workers=args.facegen_workers,
+            facegen_throttle=args.facegen_throttle,
         )
 
 
@@ -163,6 +176,19 @@ def build_parser() -> argparse.ArgumentParser:
                              'race). Default: re-derive from the topmost '
                              'non-furry override to pick up scheme/'
                              'classifier fixes.')
+    parser.add_argument('--workers', dest='facegen_workers', type=int,
+                        metavar='N',
+                        help='FaceGen worker process count. Default: '
+                             'cpu_count-1, capped at 8. Set to 1 for the '
+                             'serial baseline; >1 for parallel bake. '
+                             'Overridden by --throttle. Also honored via '
+                             'FURRIFY_FACEGEN_WORKERS env var.')
+    parser.add_argument('--throttle', dest='facegen_throttle',
+                        action='store_true',
+                        help='Cap FaceGen at one BELOW_NORMAL-priority '
+                             'worker so the machine stays responsive. '
+                             'Wall-time matches the serial path; intended '
+                             'for "leave it running" overnight bakes.')
     return parser
 
 

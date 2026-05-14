@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -27,6 +28,12 @@ from .assets import AssetResolver
 from .assemble import build_facegen_nif
 from .composite import build_facetint_dds, build_facetint_png
 from .extract import extract_npc_info
+from ._worker import (
+    _WorkItem,
+    _bake_one,
+    _pick_worker_count,
+    _worker_init,
+)
 
 
 log = logging.getLogger("furrifier.facegen")
@@ -139,7 +146,9 @@ def build_facegen_for_patch(
         limit: Optional[int] = None,
         facetint_size: Optional[int] = None,
         only_npc: Optional[str] = None,
-        cancel_event: "Optional[threading.Event]" = None) -> tuple[int, int]:
+        cancel_event: "Optional[threading.Event]" = None,
+        workers: Optional[int] = None,
+        throttle: bool = False) -> tuple[int, int]:
     """Build FaceGen files for every NPC override in `patch`.
 
     `data_dir` is the Skyrim install Data folder — source of headpart
@@ -224,44 +233,90 @@ def build_facegen_for_patch(
     t_run_start = time.perf_counter()
     dds_count = 0
 
-    # One resolver for the run — the BSA extraction cache builds up
-    # across NPCs, so shared vanilla headpart nifs only get pulled once.
     from ..main import _check_cancel
-    with AssetResolver.for_data_dir(data_dir) as resolver:
-        for i, npc in enumerate(npcs):
-            # Check before the try/except so a cancel propagates out
-            # rather than being swallowed as a per-NPC failure.
-            _check_cancel(cancel_event)
-            if progress:
-                progress(f"FaceGen {i + 1}/{total}")
-            edid_for_log = npc.editor_id or f"0x{int(npc.form_id):08X}"
-            try:
-                base_plugin = base_plugin_for(npc, patch)
-                t0 = time.perf_counter()
-                info = extract_npc_info(npc, plugin_set, base_plugin)
-                t1 = time.perf_counter()
-                form_id = info["form_id"]
-                build_facegen_nif(info, resolver,
-                                  facegeom_root / base_plugin / f"{form_id}.nif")
-                t2 = time.perf_counter()
-                if info.get("tints"):
-                    tint_dir = facetint_root / base_plugin
-                    build_facetint_dds(info, resolver, tint_dir,
-                                       output_size=facetint_size)
-                    dds_count += 1
-                t3 = time.perf_counter()
-                t_extract += t1 - t0
-                t_nif += t2 - t1
-                t_tint += t3 - t2
-                succeeded += 1
-            except Exception as exc:
-                log.warning("FaceGen skipped %s: %s", edid_for_log, exc)
-                failed += 1
+
+    # Phase A (serial, in main process): resolve each NPC's headparts /
+    # tints / morphs into a plain `info` dict via `extract_npc_info`.
+    # This is pure-Python record traversal; doing it here means workers
+    # don't need plugin_set at all and the info dicts pickle trivially.
+    work_items: list[_WorkItem] = []
+    for i, npc in enumerate(npcs):
+        _check_cancel(cancel_event)
+        if progress:
+            progress(f"FaceGen extract {i + 1}/{total}")
+        edid = npc.editor_id or str(npc.form_id)
+        try:
+            base_plugin = base_plugin_for(npc, patch)
+            t0 = time.perf_counter()
+            info = extract_npc_info(npc, plugin_set, base_plugin)
+            t_extract += time.perf_counter() - t0
+            form_id = info["form_id"]
+            work_items.append(_WorkItem(
+                edid=edid,
+                info=info,
+                nif_path=facegeom_root / base_plugin / f"{form_id}.nif",
+                tint_dir=facetint_root / base_plugin if info.get("tints") else None,
+                facetint_size=facetint_size,
+            ))
+        except Exception as exc:
+            log.warning("FaceGen extract skipped %s: %s", edid, exc)
+            failed += 1
+
+    if not work_items:
+        # Every NPC failed extract — nothing to bake, don't bother
+        # spinning up workers just to teach them to do nothing.
+        log.info("FaceGen: no NPCs survived extract; skipping bake phase")
+        return succeeded, failed
+
+    # Phase B (parallel): bake nif + tint DDS per NPC across worker
+    # processes. Workers each hold one long-lived AssetResolver — its
+    # BSA extract cache and image cache amortise across that worker's
+    # chunk the same way the old single-resolver path did, just split
+    # N ways.
+    n_workers = workers if workers and workers > 0 else _pick_worker_count(throttle)
+    n_workers = min(n_workers, len(work_items))
+    log.info("FaceGen: %d worker process%s%s",
+             n_workers, "" if n_workers == 1 else "es",
+             " (throttled, BELOW_NORMAL priority)" if throttle else "")
+
+    # chunksize tuned so workers don't starve on small batches but
+    # batches large enough to amortise pickle overhead. ~8 keeps the
+    # progress UI responsive on a 4000-NPC run.
+    chunksize = max(1, min(8, len(work_items) // (n_workers * 4) or 1))
+
+    try:
+        with ProcessPoolExecutor(
+                max_workers=n_workers,
+                initializer=_worker_init,
+                initargs=(str(data_dir), throttle)) as pool:
+            for i, result in enumerate(
+                    pool.map(_bake_one, work_items, chunksize=chunksize)):
+                _check_cancel(cancel_event)
+                if progress:
+                    progress(f"FaceGen {i + 1}/{total}")
+                if result.ok:
+                    succeeded += 1
+                    dds_count += result.dds_written
+                    t_nif += result.t_nif
+                    t_tint += result.t_tint
+                else:
+                    log.warning("FaceGen skipped %s: %s",
+                                result.edid, result.error)
+                    failed += 1
+    except KeyboardInterrupt:
+        # ProcessPoolExecutor.shutdown(wait=True) on __exit__ will block
+        # until workers drain; for a hard interrupt re-raise after the
+        # pool tears down so the parent sees it.
+        raise
 
     t_total = time.perf_counter() - t_run_start
     log.info("FaceGen: %d succeeded, %d failed in %.1fs (%d DDSes encoded)",
              succeeded, failed, t_total, dds_count)
     if succeeded:
+        # Note: t_nif and t_tint are SUMMED wall-time across workers.
+        # Per-NPC averages stay meaningful (sum/N), but elapsed wall
+        # time is t_total — which is lower than t_extract+t_nif+t_tint
+        # because parallelism overlaps them.
         log.info("FaceGen phase totals (avg/NPC ms):  "
                  "extract=%.0f  nif=%.0f  tint_dds=%.0f  total=%.0f",
                  1000 * t_extract / succeeded,

@@ -237,7 +237,9 @@ def _run_facegen(config, patch, plugin_set, data_dir, output_dir, progress,
                                 limit=config.facegen_limit,
                                 facetint_size=config.facetint_size,
                                 only_npc=config.only_npc,
-                                cancel_event=cancel_event)
+                                cancel_event=cancel_event,
+                                workers=config.facegen_workers,
+                                throttle=config.facegen_throttle)
 
     if not config.profile_file:
         _run()
