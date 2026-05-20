@@ -269,6 +269,12 @@ class FurryContext:
         scheme assignments. Used by the leveled-list extension to assign
         a specific furry race to a duplicated NPC.
         """
+        # Skyrim.esm:0x000007 is the Player base NPC. Overriding it from
+        # a patch crashes chargen's face load — leave it alone.
+        if (npc.plugin is not None and
+                npc.plugin.normalize_form_id(npc.form_id).value == 0x07):
+            return None
+
         # Skip chargen presets
         acbs = npc['ACBS']
         if acbs and acbs['flags'].IsCharGenFacePreset:

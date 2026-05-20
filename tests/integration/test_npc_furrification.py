@@ -157,6 +157,17 @@ def _get_template_chain(npc, plugin_set):
 class TestNPCFurrification:
     """Furrify NPCs and verify results survive save/reload."""
 
+    def test_player_is_skipped(self, furry_ctx, plugin_set):
+        """The Player NPC (Skyrim.esm:0x000007) must never be furrified —
+        overriding it from a patch crashes chargen's face load."""
+        player = plugin_set.get_record_by_edid('NPC_', 'Player')
+        assert player is not None, "Player NPC not in fixture plugin set"
+        assert player.plugin.normalize_form_id(
+            player.form_id).value == 0x07
+
+        assert furry_ctx.furrify_npc(player) is None
+
+
     def test_balgruuf(self, furrify_and_check, plugin_set, races_by_obj,
                       all_headparts, race_tints):
         """Balgruuf: race stays NordRace, base data preserved."""
