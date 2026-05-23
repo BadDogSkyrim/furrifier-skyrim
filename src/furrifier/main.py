@@ -150,6 +150,11 @@ def _run_furrification_body(
         armor_count = furry.furrify_all_armor(plugin_set)
         log.info(f"Modified {armor_count} armor records")
 
+        from .briarheart import patch_briarheart_armor
+        briarheart_count = patch_briarheart_armor(plugin_set, patch)
+        if briarheart_count:
+            log.info(f"Briarheart patch: {briarheart_count} record(s)")
+
     # Furrify schlongs (skipped under --only).
     if config.furrify_schlongs and config.only_npc is None:
         from .schlongs import furrify_all_schlongs
