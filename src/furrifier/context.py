@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 
 # Bodypart flags that indicate armor needing furry race support
 FURRIFIABLE_BODYPARTS = (
-    Bodypart.HEAD | Bodypart.HAIR | Bodypart.HANDS |
+    Bodypart.HEAD | Bodypart.HAIR |
     Bodypart.LONGHAIR | Bodypart.CIRCLET | Bodypart.SCHLONG
 )
 
