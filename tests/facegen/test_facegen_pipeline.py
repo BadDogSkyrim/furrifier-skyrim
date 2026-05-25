@@ -351,13 +351,18 @@ def test_manifest_tint_entries_carry_tinp():
 # ----------------------------------------------------------------- DDS TINT --
 
 
-def test_dds_size_close_to_reference(npc_output):
-    """Texconv produces a full mipmap chain (10 levels for 512²); CK
-    stops at 9, so there's ~36 bytes of size variance."""
-    ours_sz = npc_output["our_dds"].stat().st_size
-    ref_sz = npc_output["ref_dds"].stat().st_size
-    assert abs(ours_sz - ref_sz) < 1024, (
-        f"ours {ours_sz} ref {ref_sz} diff exceeds 1KB"
+def test_dds_size_matches_single_level_bc7(npc_output):
+    """Output is BC7_UNORM with no mip chain (matching shipped vanilla),
+    so size = 148 byte header + (w/4)*(h/4)*16 byte block payload. The
+    CK reference is DXT5 + mips at a different size and isn't a fair
+    comparison anymore."""
+    img = Image.open(npc_output["our_dds"])
+    w, h = img.size
+    expected = 148 + (w // 4) * (h // 4) * 16
+    actual = npc_output["our_dds"].stat().st_size
+    assert actual == expected, (
+        f"ours {actual} != expected single-level BC7 {expected} "
+        f"for {w}x{h} (mips snuck back in?)"
     )
 
 

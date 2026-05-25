@@ -1,14 +1,16 @@
 """Minimal DDS writer for BC7 face-tint output.
 
 What we need: read an RGBA image (numpy uint8), produce a Skyrim-
-loadable BC7_UNORM DDS with a full mip chain. That's it.
+loadable BC7_UNORM DDS. No mip chain — Skyrim's shipped vanilla
+face tints have mipMapCount=1 (single level only), since face tints
+are always rendered close-up. Skipping mips saves ~25% on file size.
 
 DDS file layout for BC7:
 
     [4 bytes]   magic  = "DDS "
     [124 bytes] DDS_HEADER  (size=124, FourCC="DX10")
     [20 bytes]  DDS_HEADER_DXT10  (DXGI_FORMAT_BC7_UNORM, TEXTURE2D)
-    [...]       block data, mip 0 first, then mip 1, etc.
+    [...]       block data, single mip level
 
 References: Microsoft's DDS_HEADER / DDS_HEADER_DXT10 docs and the
 DirectXTex source. Headers are tiny but every byte matters — Skyrim's
@@ -18,10 +20,8 @@ from __future__ import annotations
 
 import struct
 from pathlib import Path
-from typing import Iterator
 
 import numpy as np
-from PIL import Image
 
 from . import bc7
 
@@ -42,7 +42,7 @@ _DXGI_FORMAT_BC7_UNORM = 98
 _D3D10_RESOURCE_DIMENSION_TEXTURE2D = 3
 
 
-def _build_dds_header(width: int, height: int, mip_count: int,
+def _build_dds_header(width: int, height: int,
                       block_payload_bytes: int) -> bytes:
     pixelformat = struct.pack(
         "<I I 4s I I I I I",
@@ -54,9 +54,6 @@ def _build_dds_header(width: int, height: int, mip_count: int,
     flags = (_DDSD_CAPS | _DDSD_HEIGHT | _DDSD_WIDTH
              | _DDSD_PIXELFORMAT | _DDSD_LINEARSIZE)
     caps1 = _DDSCAPS_TEXTURE
-    if mip_count > 1:
-        flags |= _DDSD_MIPMAPCOUNT
-        caps1 |= _DDSCAPS_COMPLEX | _DDSCAPS_MIPMAP
 
     header = struct.pack(
         "<I I I I I I I 11I 32s 5I",
@@ -65,7 +62,7 @@ def _build_dds_header(width: int, height: int, mip_count: int,
         height, width,                    # dwHeight, dwWidth
         block_payload_bytes,              # dwPitchOrLinearSize (mip 0 size)
         0,                                # dwDepth
-        mip_count,                        # dwMipMapCount
+        1,                                # dwMipMapCount
         *([0] * 11),                      # reserved1
         pixelformat,
         caps1, 0, 0, 0,                   # caps1..4
@@ -82,42 +79,11 @@ def _build_dds_header(width: int, height: int, mip_count: int,
     return _DDS_MAGIC + header + dxt10
 
 
-def _mip_chain(rgba: np.ndarray, *,
-               min_size: int = 4) -> Iterator[np.ndarray]:
-    """Yield successive mip levels (RGBA uint8) from full size down to
-    ``min_size`` × ``min_size``. Each level is the previous level
-    Lanczos-resampled to half resolution. Stops at the first level
-    where either dimension would drop below ``min_size``."""
-    yield rgba
-    h, w = rgba.shape[:2]
-    cur = Image.fromarray(rgba, "RGBA")
-    while w > min_size and h > min_size:
-        w >>= 1
-        h >>= 1
-        cur = cur.resize((w, h), Image.Resampling.LANCZOS)
-        yield np.asarray(cur)
-
-
-def encode_bc7_with_mips(rgba: np.ndarray, *,
-                         uber_level: int = 0,
-                         perceptual: bool = True) -> tuple[bytes, int]:
-    """Compress ``rgba`` plus its mip chain to a single packed BC7
-    byte stream. Returns ``(payload, mip_count)``."""
-    chunks: list[bytes] = []
-    count = 0
-    for mip in _mip_chain(rgba):
-        chunks.append(bc7.encode_image(
-            mip, uber_level=uber_level, perceptual=perceptual))
-        count += 1
-    return b"".join(chunks), count
-
-
 def write_bc7_dds(path: Path, rgba: np.ndarray, *,
                   uber_level: int = 0,
                   perceptual: bool = True) -> Path:
-    """Encode ``rgba`` (numpy uint8, shape ``[H, W, 4]``) plus a Lanczos-
-    generated mip chain and write the result to ``path`` as a
-    BC7_UNORM DDS. Returns ``path``."""
+    """Encode ``rgba`` (numpy uint8, shape ``[H, W, 4]``) and write the
+    result to ``path`` as a single-level BC7_UNORM DDS. Returns ``path``."""
     if rgba.dtype != np.uint8:
         raise TypeError(f"rgba must be uint8, got {rgba.dtype}")
     if rgba.ndim != 3 or rgba.shape[2] != 4:
@@ -127,11 +93,10 @@ def write_bc7_dds(path: Path, rgba: np.ndarray, *,
         raise ValueError(
             f"width and height must be multiples of 4, got {w}x{h}")
 
-    payload, mip_count = encode_bc7_with_mips(
+    payload = bc7.encode_image(
         rgba, uber_level=uber_level, perceptual=perceptual)
-    # Mip 0's payload size in bytes = (w/4) * (h/4) * 16.
     mip0_bytes = (w >> 2) * (h >> 2) * 16
-    header = _build_dds_header(w, h, mip_count, mip0_bytes)
+    header = _build_dds_header(w, h, mip0_bytes)
 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
