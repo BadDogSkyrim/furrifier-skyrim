@@ -583,9 +583,16 @@ class FacegenSceneWidget(QWidget):
         shapes_raw = load_nif_shapes(nif_path)
         shape_models: list[ShapeModel] = []
         all_verts = []
+        head_shape_present = False
         for s in shapes_raw:
             if len(s["verts"]) == 0 or len(s["tris"]) == 0:
+                log.warning(
+                    "%s: dropping shape %r — %d verts, %d tris",
+                    nif_path.name, s.get("name", "<unnamed>"),
+                    len(s["verts"]), len(s["tris"]))
                 continue
+            if s.get("facegen_detail"):
+                head_shape_present = True
             geom = FacegenShapeGeometry()
             geom.populate_from(s)
             # Face shape gets diffuse + tint composited; everyone else
@@ -619,8 +626,15 @@ class FacegenSceneWidget(QWidget):
                 float(center_np[2]),
                 float(center_np[1]))
         else:
+            log.warning("%s: no shapes loaded — scene is empty",
+                        nif_path.name)
             center = QVector3D(0.0, 0.0, 0.0)
             radius = 50.0
+        if not head_shape_present:
+            log.warning(
+                "%s: no head shape in baked nif (no shape carries the "
+                "FacegenDetail texture slot) — preview will show "
+                "everything except the face", nif_path.name)
 
         saved_cam: Optional[tuple] = None
         if preserve_camera:

@@ -441,6 +441,11 @@ class PreviewPane(QWidget):
             return
         self.scene.set_busy(False)
         self.status_label.setText(f"Bake failed: {message}")
+        # Also surface in the log pane so the failure is preserved in
+        # scrollback and the log file. The worker already log.exception's
+        # the underlying error; this one-liner makes the user-facing
+        # message itself easy to find in context.
+        log.error("Bake failed for request #%d: %s", request_id, message)
 
     # ----- helpers ---------------------------------------------------------
 
