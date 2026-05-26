@@ -34,6 +34,7 @@ from esplib import (
     find_strings_dir,
 )
 from esplib.record import Record
+from esplib.utils import BinaryReader
 
 from . import __version__
 from .config import FurrifierConfig
@@ -84,6 +85,73 @@ class LoadedPlugins:
     output_dir: Path
 
 
+def read_plugin_masters(path: Path) -> list[str]:
+    """Return the masters declared in a plugin's TES4 header.
+
+    Reads only the first 64KB (enough for any TES4 header). Returns
+    [] on any read/parse error — callers treat masters as a
+    best-effort hint, not a hard requirement.
+    """
+    try:
+        with open(path, "rb") as f:
+            data = f.read(65536)
+        reader = BinaryReader(data)
+        header = Record.from_bytes(reader)
+        if header.signature != "TES4":
+            return []
+        return [sub.get_string() for sub in header.subrecords
+                if sub.signature == "MAST"]
+    except Exception:
+        return []
+
+
+def expand_load_order_with_masters(load_order: LoadOrder,
+                                   data_dir: Path) -> int:
+    """First pass: ensure every plugin's masters are in the load order.
+
+    Reads each plugin's TES4.MAST list off disk and inserts any
+    missing master just ahead of its first dependent. Transitively
+    handles a master's own masters. Mutates ``load_order.plugins``
+    in place. Returns the count of masters added.
+
+    Plugins not present on disk are skipped (we can't read their
+    masters). Masters that are themselves missing from the data dir
+    are still added to the load order so PluginSet's "MISSING" log
+    line surfaces them — same behavior as a stale plugins.txt entry.
+    """
+    added = 0
+    processed: set[str] = set()
+    i = 0
+    while i < len(load_order.plugins):
+        name = load_order.plugins[i]
+        key = name.lower()
+        if key in processed:
+            i += 1
+            continue
+        processed.add(key)
+        path = data_dir / name
+        if not path.is_file():
+            i += 1
+            continue
+        existing_lower = {p.lower() for p in load_order.plugins}
+        insertions = 0
+        for master in read_plugin_masters(path):
+            if master.lower() in existing_lower:
+                continue
+            load_order.plugins.insert(i + insertions, master)
+            existing_lower.add(master.lower())
+            log.info("Pulled in missing master %r (required by %r)",
+                     master, name)
+            added += 1
+            insertions += 1
+        # If we inserted, leave i pointed at the first inserted master
+        # so the next iteration walks INTO it and expands its masters
+        # too. Otherwise advance past the current plugin.
+        if insertions == 0:
+            i += 1
+    return added
+
+
 def load_plugins(
         config: FurrifierConfig,
         load_order: Optional[LoadOrder] = None,
@@ -123,6 +191,13 @@ def load_plugins(
                   len(load_order.plugins))
     load_order.plugins = [p for p in load_order.plugins
                           if p.lower() != patch_name]
+    # Pre-pass: pull in any master plugins the caller didn't include.
+    # Saves the user from hand-tracking master chains, and prevents
+    # silent FormID-resolution failures when an override references
+    # a master that wasn't selected.
+    added = expand_load_order_with_masters(load_order, data_dir)
+    if added:
+        log.info("Pulled in %d missing master plugin(s)", added)
     plugin_set = PluginSet(load_order)
     string_dirs = []
     strings_dir = find_strings_dir("tes5")

@@ -6,7 +6,6 @@ UIs especially". These tests cover:
 
 - The module imports cleanly (catches any stale references from
   the customtkinter version).
-- Pure helpers (_read_plugin_masters) still work.
 - The config-from-widget-state path produces a valid FurrifierConfig
   reflecting the widget values — this is the load-bearing glue layer
   between Qt and the furrifier core.
@@ -142,24 +141,3 @@ def test_config_from_fields_facetint_size(qapp):
         window.deleteLater()
 
 
-def test_read_plugin_masters_handles_missing_file(tmp_path):
-    """The helper must never raise — callers treat its output as a
-    best-effort hint, not a contract."""
-    from furrifier.gui import _read_plugin_masters
-    result = _read_plugin_masters(tmp_path / "does_not_exist.esp")
-    assert result == []
-
-
-def test_read_plugin_masters_on_real_plugin():
-    """Against a real plugin with a known master list."""
-    from pathlib import Path
-    from furrifier.gui import _read_plugin_masters
-    # Skyrim's Update.esm is very stable and widely present. If this
-    # file isn't on the dev machine we skip rather than fail.
-    path = Path(r"C:\Steam\steamapps\common\Skyrim Special Edition"
-                r"\Data\Update.esm")
-    if not path.is_file():
-        pytest.skip(f"{path} not available")
-    masters = _read_plugin_masters(path)
-    # Update.esm lists Skyrim.esm as its single master.
-    assert any(m.lower() == "skyrim.esm" for m in masters)

@@ -41,38 +41,15 @@ from PySide6.QtWidgets import (
 )
 
 from esplib import LoadOrder, find_game_data
-from esplib.record import Record
-from esplib.utils import BinaryReader
 
 from .config import FurrifierConfig
 from .main import run_furrification
 from .race_defs import list_available_schemes
+from .session import read_plugin_masters
 from .session_cache import SessionCache
 
 
 PLUGIN_EXTS = {".esp", ".esm", ".esl"}
-
-
-def _read_plugin_masters(path: Path) -> list[str]:
-    """Return the masters declared in a plugin's TES4 header.
-
-    Reads and parses only the header record, not the full plugin body.
-    Returns [] on any read/parse error — callers treat masters as a
-    best-effort hint, not a hard requirement.
-    """
-    try:
-        # TES4 is the first record; 64KB is enough even for plugins with
-        # long master lists and override-record blocks.
-        with open(path, "rb") as f:
-            data = f.read(65536)
-        reader = BinaryReader(data)
-        header = Record.from_bytes(reader)
-        if header.signature != "TES4":
-            return []
-        return [sub.get_string() for sub in header.subrecords
-                if sub.signature == "MAST"]
-    except Exception:
-        return []
 
 
 def _asset_path(name: str) -> Path:
@@ -838,7 +815,7 @@ class PluginPickerDialog(QDialog):
         if cached is not None:
             return cached
         path = self._data_dir / name
-        masters = _read_plugin_masters(path) if path.is_file() else []
+        masters = read_plugin_masters(path) if path.is_file() else []
         self._master_cache[key] = masters
         return masters
 
