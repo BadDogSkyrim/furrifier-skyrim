@@ -8,6 +8,8 @@ variants of armor and headparts; schlongs (if present) are reassigned to apply o
 
 It operates on your entire active load order by default — change what's included by changing what mods are active, or by selecting them explictly at run time.
 
+Furrification is deterministic: you get the same furry appearance every run, as long as you don't change your load order. If you add, say, a hair mod you may get different hair assignments.
+
 The kit ships two executables:
 
 - **`furrify_skyrim_gui.exe`** — a GUI with a live 3D preview pane. Double-click to launch;
@@ -31,7 +33,7 @@ Options:
 |------|-------------|---------|
 | `--scheme NAME` | Race assignment scheme (see below) | `all_races` |
 | `--patch FILE` | Output patch filename | `YASNPCPatch.esp` |
-| `--data-dir PATH` | Skyrim Data dir for READING source assets | auto-detected |
+| `--data-dir PATH` | Skyrim Data dir for READING source assets (usually the game folder) | auto-detected |
 | `-o`, `--output DIR` | Directory to WRITE patch + FaceGenData | same as `--data-dir` |
 | `--no-armor` | Skip armor furrification | |
 | `--no-schlongs` | Don't alter SOS (schlong) compatibility | ignored if SOS not loaded |
@@ -52,7 +54,7 @@ meshes\actors\character\FaceGenData\FaceGeom\<plugin>\<formid>.nif
 textures\actors\character\FaceGenData\FaceTint\<plugin>\<formid>.dds
 ```
 
-That means you can launch the game directly after a run — no Creation Kit step required.
+That means you can launch the game directly after a run — no Creation Kit step required. Facegen is significantly faster than CK (~20 min vs 2 hours).
 
 If you pass `--no-facegen` or want to re-bake in the CK anyway, the old workflow still
 works: load the patch in Creation Kit (CKPE recommended), select all actors, press
@@ -60,11 +62,12 @@ Ctrl-F4 to bake. Any mod that generates faces on the fly will also work.
 
 ## GUI usage
 
-`furrify_skyrim_gui.exe` exposes every CLI option as a form field plus a live preview pane
-on the right: pick an NPC, see how they'd look under the current scheme. Changing the
+`furrify_skyrim_gui.exe` exposes every CLI option as a form field.
+
+It also provides a live preview pane so you can see what particular NPCs look like under your chosen scheme. Click `Load NPCs`, type the name (editor ID) of the NPC, and you'll see their head with all settings. Changing the
 scheme or plugin set refreshes the preview automatically. Buttons on the preview side:
 
-- **Load NPCs** — build the session and populate the picker.
+- **Load NPCs** — load up the NPCs and furrify them if that hasn't been done.
 - **◀ / ▶** — browse the NPCs you've previewed.
 - **Reframe** — reset the camera to its default framing if you've orbited off the head.
 
@@ -107,9 +110,7 @@ Run anyway**. Subsequent launches don't prompt.
 
 If you edit a scheme TOML and don't see the change in the next run,
 make sure you're editing the file **next to the exe**
-(`furrify_skyrim/schemes/*.toml`), not the source-tree copy under
-your dev checkout. The kit-bundled copies are stamped at build
-time; the live exe reads from the loose `schemes/` folder beside it.
+(`furrify_skyrim/schemes/*.toml`).
 
 # Customizing the furrification
 
@@ -136,13 +137,10 @@ edit the text files.
 
 - **Schemes** (`schemes/*.toml`) say *which* furry race a given vanilla race, faction, or
   NPC becomes. You pick a scheme at runtime with `--scheme NAME`.
-- **Race catalogs** (`races/*.toml`) describe the furry races - primarily headparts at
-  this point - defining vanilla headparts they're equivalent to and what labels apply to
-  them for label-based matching. Every file in `races/` is loaded at startup, regardless
-  of which scheme you picked.
+- **Race catalogs** (`races/*.toml`) describe the furry races. Every file in `races/` is loaded at startup, regardless which scheme you picked.
 
 The split means if you're just using existing race mods you can define schemes without
-touching race data. If you're providing a race you don't need to specify how it is used.
+touching race data. If you're providing a new furry race you don't need to specify how it is used.
 
 ## Schemes
 
@@ -156,7 +154,7 @@ combo both pick it up automatically). Furrifier ships with four:
 | `all_races`  | Default. Maps every vanilla humanoid race to a Yiffy Age (YAS) furry race. Includes Cellans (otters) and ungulates. Some NPCs are furrified outside Skyrim's races, e.g. Skaal are jackals, Falkreath is all deer, and so forth.   |
 | `cats_dogs`  | Cats and dogs only, like it says on the box. Canids are human, felines mer. |
 | `legacy`     | Original BDFurrySkyrim mappings (Imperial → Vaalsark, Breton → Kettu, etc.).  |
-| `user`       | A minimal starting point for your own customizations. Edit, run. Save a copy so it doesn't get overwritten when the furrifier updates. |
+| `user`       | A minimal starting point for your own customizations. Edit, run. Save a copy with a different name so it doesn't get overwritten when the furrifier updates. |
 
 ### Scheme file sections
 
@@ -240,15 +238,13 @@ Useful conventions:
   `OrcRace → BDMinoRace` is in the top-of-file `races = [...]` table,
   every Orc bandit is already a Mino bandit; listing `BDMinoRace` here
   too just stacks duplicates of Nord bandits *also* turning into Minos.
-  Use this section for races that only show up via subraces or NPC
-  overrides (e.g. Cellan, Vaalsark, Deer, Horse, Bagha).
+  Use this section for races that are otherwise unrepresented.
 - **`match_substrings` is case-insensitive substring matching** on the
   LVLN's EditorID. Skyrim names them `LCharBanditMelee`,
   `LCharNecromancer`, etc., so `["bandit"]` is enough to catch the
   whole bandit family.
 - **`exclude_substrings`** at the section root applies before group
-  matching — a useful escape hatch for LVLNs whose names happen to
-  collide with one of your group rules but shouldn't be touched
+  matching — a useful escape hatch for LVLNs that shouldn't be touched
   (vanilla example: skipping Thalmor lists so they stay all-Altmer).
 - Omit the `[leveled_npcs]` section entirely to skip the whole pass.
   `cats_dogs.toml` and `user.toml` ship without it; `all_races.toml`
@@ -265,11 +261,12 @@ The shipped four (`all_races`, `cats_dogs`, `legacy`, `user`) are furrifier's de
 can edit them directly, but your edits will be overwritten the next time you update
 furrifier.
 
-## Races: furry headpart catalogs
+## New Furry Races
 
 The race files provide race definitions. If you want to include new races and customize
-how they are used, this is where you go. Right now the only real customization is
-headparts. In the future we plan to give you more control over tint layers and morphs.
+how they are used, define the race customization here.
+
+The system is designed to work with no customization at all. Try it, see what you get, start adding specific definitions to fix what you don't like.
 
 Headpart defition is the bridge between vanilla headpart EditorIDs and the furry headparts
 a given mod provides. It's how furrifier knows that `MaleEyesHumanAmber` should become
@@ -310,20 +307,22 @@ YASCatMaleHairDreads001 = "DREADS,BOLD,FUNKY,LONG"
 
 The headpart_labels attempt to prevent an NPC from getting wholly inappropriate headparts, primarily hair. The NPC is given a set of labels derived from their current hair, outfit, and other data. Hair is selected for their furry model that best matches those labels.
 
+EXCLUDE is a special value - it prevents the headpart from being assigned at all.
+
 ### Breeds
 
 A **breed** is a constrained visual flavor of a parent furry race. The
 engine still sees the parent race (RNAM is unchanged); breeds only
 narrow which headparts and tints the furrifier picks. Use them when one
 furry race covers several intended looks — e.g. a generic Mino race
-plus distinct CapeBuffalo / Bison / Yak breeds.
+plus distinct CapeBuffalo / Bison / Cattle breeds.
 
 Define breeds in any `races/*.toml` alongside the parent race's other
 catalog data:
 
 ```toml
 breeds = [
-  # probability=0 (default) means CapeBuffalo only auto-assigns via
+  # probability=0 (default) means CapeBuffalo is only assigned via
   # explicit faction / NPC / leveled-list entries below.
   {breed = "CapeBuffalo", race = "BDMinoRace"},
   # probability>0 distributes auto-assignment within the parent race:
@@ -338,56 +337,66 @@ accepted in a scheme — `races =`, `subraces[].furry`, `[faction_races]`,
 `[npc_races]`, `[[leveled_npcs.groups]] races`  — a breed name can stand
 in. That's how you steer specific NPCs onto a breed.
 
-Breed-specific headpart and tint constraints go on the same
-`race_customization` table the race uses, but with the breed name in
-the `race` field. Both `EYEBROWS = 0.5` (flat probability, existing
-form) and `EYEBROWS = {probability = 1.0, headpart = ["..."]}`
-(structured) are accepted; the flat form keeps existing entries
-working. A `tints = [...]` block on the same row constrains layered
-tints. A `weight_range = [low, high]` field linearly remaps the
-NPC's vanilla NAM7 weight onto that range. Silence on a type means
-inherit the parent race's rule.
+### Tint Keywords
 
 ```toml
-# WhiteTail breed of BDDeerRace — males get one specific horn HDPT
-# and no facial hair; tints are constrained to the listed colors only.
-breeds = [
-  {breed = "WhiteTail", race = "BDDeerRace"},
-]
-race_customization = [
-  {race = "WhiteTail", sex = "Male",
-    EYEBROWS    = {probability = 1.0, headpart = ["BDDeerHorns1"]},
-    FACIAL_HAIR = 0.0,
-    tints = [
-      {mask = "SkinTone",   colors = ["BDDeerFaceFurWhite"], probability = 1.0},
-      {mask = "TintMuzzle", colors = ["BDDeerFaceFurWhite", "BDDeerFaceFurBlack"], probability = 0.5},
-    ],
-  },
-  {race = "WhiteTail", sex = "Female",
-    EYEBROWS    = 0.0,
-    FACIAL_HAIR = 0.0,
-    tints = [
-      {mask = "SkinTone",   colors = ["BDDeerFaceFurWhite"]},
-      {mask = "TintMuzzle", colors = ["BDDeerFaceFurWhite", "BDDeerFaceFurBlack"], probability = 0.5},
-    ],
-  },
-]
+[tint_keywords]
+Hoofprint = "Hand"
 ```
 
-Mask matching: the `mask` field is a substring matched against the
-parent race's TINI tint-mask filename (e.g. `"SkinTone"` matches
-`Actors\…\TintMasks\SkinTone.dds`). Substrings are intentional — fur-
-pattern variants all classify as `Paint` but have distinct filenames
-(`WolfStripes.dds`, `LeopardSpots.dds`), so substring matching is the
-only way to disambiguate them. Color EDIDs that aren't among the
-parent TINI's existing presets are dropped with a warning; a fully-
-unresolved rule is dropped entirely (the breed can constrain the
+Some tint layers have specific meanings--Blackblood and Boethiah tattoos, hand and skull tattos. This allows those keywords to be identified: e.g, use the `Hoofprint` tattoo wherever a `Hand` tattoo is found.
+
+### Color Schemes
+
+```toml
+[color_schemes.WhiteTail]
+SkinTone = [["BDDeerCoatBay", 0.9], ["BDDeerCoatBayLight", 0.8], ["BDDeerCoatBrown", 0.9]]
+TintMuzzle = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.9], ["BDDeerFaceFurWhite", 0.8]]
+TintNeck = [["probability", 1.0], ["BDDeerFaceFurWhite", 0.9], ["BDDeerFaceFurWhite", 0.8]]
+TintMuzzleUpper = [["probability", 0.75], ["BDDeerFaceFurBlackBrown", 0.2], ["BDDeerFaceFurTan", 0.3]]
+TintLaughline = [["probability", 1.0], ["BDDeerFaceFurBlack", 1], ["BDDeerFaceFurBlackBrown", 1]]
+TintEyeliner = [["probability", 1.0], ["BDDeerFleshDark", 1]]
+TintNose = [["probability", 1.0], ["BDDeerFleshDark", 0.9]]
+```
+
+Your race may provide many tint layers that will look terrible if used all at once. Defining color schemes allows you to reduce the chaos and provide specific looks. Here `WhiteTail` (deer) is the name of the scheme. It restricts the skin tone (fur) to various shades of brown. `["BDDeerCoatBayLight", 0.8]` specifies that if the light bay color is applied, use 0.8 intensity/opacity. All WhiteTail deer get a `TintMuzzle` tint, but only 75% of them get a `TintMuzzleUpper` tint.
+
+If colors are omitted, all colors defined for the tint layer are allowed. If `probability` is omitted, it defaults to 1.0.
+
+The `mask` field is a substring matched against the
+race's TINI tint-mask filename (e.g. `"TintMuzzle"` matches
+`"Actors\…\TintMasks\TintMuzzle.dds"`). Matching the file name allows us 
+to distinguish different types of `Paint` tint layers.
+
+Colors are specified by editor ID. Any that aren't among the
+tint layer's presets are dropped with a warning; a fully-
+unresolved rule is dropped entirely (the color scheme can constrain the
 parent's palette but can't introduce new colors).
 
-The breed's tint list is **exhaustive** — only the listed layers are
+The color scheme's tint list is **exhaustive** — only the listed layers are
 applied. If you set `tints = []`, no tint subrecords are emitted at
 all. Silence (no `tints = ` key) defers to the parent race's tints,
 which is the unconstrained pool.
+
+### Race Customization
+
+```toml
+[[race_customization]]
+race = "WhiteTail"
+sex = "male"
+weight_range = [0, 70] # WhiteTail are medium-sized.
+EYEBROWS = {probability = 1.0, headpart = ["BDDeerHorns1"]}
+FACIAL_HAIR = 0.2
+colors = "WhiteTail"
+```
+
+Race appearance can be customized over and above the race definition in the plugin file. 
+- **race** - The race, subrace, or breed
+- **sex** - `male`, `female`, or `both`
+- **weight_range** - remaps the NPC's weight onto that range (e.g. no fat cheetahs)
+- **EYEBROWS** - which eyebrow headpart(s) to use. `probability` of 1.0 can be omitted. `headpart` can be a list. 
+- **FACIAL_HAIR** - same format as EYEBROWS; a single number is interpreted as a probability across all headparts.
+- **colors** - Color scheme to use; must have been defined already
 
 ### Adding your own race catalog
 
