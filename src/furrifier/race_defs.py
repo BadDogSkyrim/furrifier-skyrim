@@ -23,7 +23,7 @@ from .models import (
     Breed, BreedTintRule, HeadpartRule, LeveledNpcEntry, LeveledNpcGroup,
     RaceAssignment, Subrace,
 )
-from .util import hash_string
+from .util import hash_string, parse_probability, parse_range
 
 log = logging.getLogger(__name__)
 
@@ -357,17 +357,20 @@ class RaceDefContext:
         (low, high). Default behavior with no registration is (0,100)
         i.e. identity. Used to make e.g. all Mino NPCs weigh at least
         50 regardless of their vanilla weight.
+
+        Goes through `parse_range`, so `[high, low]` is taken as min..max
+        (rather than inverting the remap) and a non-numeric entry warns
+        and leaves the range unregistered.
         """
-        if not (0.0 <= low <= 100.0 and 0.0 <= high <= 100.0):
+        rng = parse_range([low, high],
+                          f"weight_range for {race_or_breed!r} {sex!r}")
+        if rng is None:
+            return
+        if not (0.0 <= rng[0] <= 100.0 and 0.0 <= rng[1] <= 100.0):
             log.warning(
                 f"weight_range for {race_or_breed!r} {sex!r}: values "
-                f"[{low}, {high}] outside vanilla 0-100 NAM7 range")
-        if low > high:
-            log.warning(
-                f"weight_range for {race_or_breed!r} {sex!r}: low={low} "
-                f">  high={high}; the remap will invert weights "
-                f"(probably not intended)")
-        self.weight_ranges[(race_or_breed, sex)] = (float(low), float(high))
+                f"[{rng[0]}, {rng[1]}] outside vanilla 0-100 NAM7 range")
+        self.weight_ranges[(race_or_breed, sex)] = rng
 
 
     def get_weight_range(self, race_or_breed: str,
@@ -470,9 +473,13 @@ def _parse_leveled_npcs(data: dict, ctx: 'RaceDefContext',
                     f"{scheme_path.name}: {rule_label} missing required "
                     f"'probability' key; skipping")
                 continue
+            prob = parse_probability(
+                rule['probability'],
+                f"{scheme_path.name}: {rule_label} probability")
+            if prob is None:
+                continue
             races.append(LeveledNpcEntry(
-                race=str(rule['race']),
-                probability=float(rule['probability'])))
+                race=str(rule['race']), probability=prob))
 
         ctx.leveled_npc_groups.append(LeveledNpcGroup(
             match_substrings=list(group.get('match_substrings', [])),
@@ -544,10 +551,13 @@ def _parse_color_choices(entries: list) -> tuple[
     """Parse the entry list for one mask in a [color_schemes.X] block.
 
     Each entry is `[edid, intensity]` (intensity defaults to 1.0 when
-    omitted). The literal token `["probability", X]` is a magic row that
-    sets the layer-apply probability for the rule.
+    omitted). Intensity is a slider written onto the NPC, so it takes a
+    `[lo, hi]` range as well as a bare number — each NPC then draws its
+    own value from that range. The literal token `["probability", X]` is
+    a magic row that sets the layer-apply probability for the rule.
 
-    Returns (color_choices, probability).
+    Returns (color_choices, probability), with every intensity normalized
+    to a `(lo, hi)` tuple.
     """
     choices: list[tuple[str, float]] = []
     probability = 1.0
@@ -564,9 +574,13 @@ def _parse_color_choices(entries: list) -> tuple[
                     "color-scheme `probability` row missing value; "
                     "defaulting to 1.0")
                 continue
-            probability = float(entry[1])
+            probability = parse_probability(
+                entry[1], "color-scheme probability row", probability)
             continue
-        intensity = float(entry[1]) if len(entry) >= 2 else 1.0
+        intensity = (parse_range(entry[1], f"color-scheme {token} intensity")
+                     if len(entry) >= 2 else (1.0, 1.0))
+        if intensity is None:
+            continue
         choices.append((str(token), intensity))
     return tuple(choices), probability
 
@@ -662,18 +676,26 @@ def _apply_race_catalog(ctx: RaceDefContext, data: dict,
             # probability (existing format) or a structured table
             # {probability=..., headpart=[...]} (Phase 2).
             if isinstance(value, dict):
+                prob = parse_probability(
+                    value.get('probability', 1.0),
+                    f"{race} {key} probability", 1.0)
                 ctx.set_headpart_rule(
                     race, sex, key,
-                    probability=float(value.get('probability', 1.0)),
+                    probability=prob,
                     headpart_whitelist=tuple(value.get('headpart', ())),
                 )
             else:
-                ctx.set_headpart_probability(race, sex, key, float(value))
+                # A headpart gate is a probability, so no [lo, hi] here.
+                prob = parse_probability(value, f"{race} {key}")
+                if prob is not None:
+                    ctx.set_headpart_probability(race, sex, key, prob)
     for entry in data.get('breeds', []):
         ctx.set_breed(
             name=entry['breed'],
             parent_race_edid=entry['race'],
-            probability=float(entry.get('probability', 0.0)),
+            probability=parse_probability(
+                entry.get('probability', 0.0),
+                f"breed {entry['breed']} probability", 0.0),
         )
 
 

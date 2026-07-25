@@ -190,11 +190,21 @@ class BreedTintRule:
     with a warning. `probability` gates whether the layer applies at
     all (decoupled from picking — decision spec'd 2026-05-04).
 
+    Each intensity is a `(lo, hi)` range the NPC draws its own TINV from;
+    a bare number normalizes to the degenerate range, so both catalog
+    forms resolve through one path (see `util.parse_range`).
+
     See PLAN_FURRIFIER_BREEDS.md.
     """
     mask_substring: str
-    color_choices: tuple[tuple[str, float], ...]
+    color_choices: tuple[tuple[str, tuple], ...]
     probability: float = 1.0
+
+    def __post_init__(self) -> None:
+        from .util import parse_range
+        self.color_choices = tuple(
+            (edid, parse_range(intensity))
+            for edid, intensity in self.color_choices)
 
 
 @dataclass

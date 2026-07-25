@@ -197,6 +197,38 @@ class TestChooseBreedTints:
         assert choices[0].tini == 5
         assert choices[0].tinv == 0.8
 
+    def _ranged_intensity_choices(self, npc):
+        """One breed rule whose colour intensity is a [lo, hi] range."""
+        asset = TintAsset(
+            index=5,
+            filename=r'YAS\Deer\Tints\TintLaughline.dds',
+            layer_type=0,
+            layer_class='Laugh Lines',
+            presets=[(0x12345, 1.0, 0)],
+        )
+        race_data = RaceTintData()
+        race_data.classes = {'Laugh Lines': [asset]}
+        rule = BreedTintRule(
+            mask_substring='TintLaughLine',
+            color_choices=(('SomeColor', [0.4, 0.9]),),
+            probability=1.0,
+        )
+        return choose_breed_tints(
+            npc, [rule], race_data,
+            form_id_for_edid=lambda edid: (
+                0x12345 if edid == 'SomeColor' else None),
+        )
+
+    def test_ranged_intensity_varies_per_npc(self):
+        """`["SomeColor", [0.4, 0.9]]` gives each NPC its own TINV inside
+        the band, deterministically on the NPC's alias."""
+        assert round(self._ranged_intensity_choices('TestNPC')[0].tinv, 4) == 0.472
+        assert round(self._ranged_intensity_choices('OtherNPC')[0].tinv, 4) == 0.444
+
+    def test_ranged_intensity_is_stable(self):
+        assert (self._ranged_intensity_choices('TestNPC')[0].tinv
+                == self._ranged_intensity_choices('TestNPC')[0].tinv)
+
 
 class TestRandomizeIndexList:
     def test_is_full_permutation(self):

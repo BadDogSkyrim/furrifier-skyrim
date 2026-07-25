@@ -25,9 +25,8 @@ from esplib import flst_add, flst_contains, flst_forms, flst_remove
 from esplib import glob_copy_as
 from esplib.vmad import VmadData, PROP_OBJECT
 
-from .armor import get_bodypart_flags
 from .models import Bodypart
-from .util import short_race_name as _short_race_name
+from .util import get_bodypart_flags, short_race_name as _short_race_name
 
 log = logging.getLogger(__name__)
 

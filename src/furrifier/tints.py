@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from .models import BreedTintRule, Sex, TintAsset, TintLayer
-from .util import hash_string
+from .util import hash_string, pick_range
 
 log = logging.getLogger(__name__)
 
@@ -262,7 +262,13 @@ def choose_breed_tints(
             choices.append(TintChoice(
                 tini=asset.index,
                 tinc=color_fid,
-                tinv=intensity,  # breed-specified, not parent default
+                # Breed-specified, not the parent default. Drawn from the
+                # entry's [lo, hi] range (a bare number is degenerate, so
+                # every NPC gets it verbatim as before). Keyed on the LAYER
+                # as well as the colour, so one colour reused across two
+                # layers doesn't draw the same alpha for both.
+                tinv=pick_range(intensity, npc_alias,
+                                f"tint.{rule.mask_substring}.{edid}"),
                 tias=tirs,
             ))
     return choices

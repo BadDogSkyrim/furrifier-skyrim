@@ -36,6 +36,7 @@ from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtWidgets import QWidget
 
 from ..facegen import AssetResolver
+from ..facegen.texture import load_texture
 
 
 log = logging.getLogger("furrifier.preview.scene_widget")
@@ -273,7 +274,7 @@ def resolve_and_convert_diffuse(
     png_path = temp_dir / (src.stem + ".png")
     if not png_path.exists():
         try:
-            Image.open(src).convert("RGBA").save(png_path)
+            load_texture(src, "RGBA").save(png_path)
         except Exception as exc:
             log.warning("texture decode failed %s: %s", rel, exc)
             return None
@@ -500,9 +501,9 @@ class FacegenSceneWidget(QWidget):
                 log.warning("head diffuse missing: %s", diffuse_relpath)
                 return None
             diffuse = np.asarray(
-                Image.open(diffuse_path).convert("RGBA"),
+                load_texture(diffuse_path, "RGBA"),
                 dtype=np.float32) / 255.0
-            tint_img = Image.open(facetint_path).convert("RGBA")
+            tint_img = load_texture(facetint_path, "RGBA")
             # Tint is typically 512; head diffuse is typically 2048.
             # Upsample tint to match so we don't lose diffuse detail.
             if tint_img.size != (diffuse.shape[1], diffuse.shape[0]):

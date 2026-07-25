@@ -24,7 +24,7 @@ class TestBreedTintRule:
                           color_choices=(('Cinnamon', 0.8),
                                          ('Sable', 0.6)),
                           probability=0.5)
-        assert r.color_choices == (('Cinnamon', 0.8), ('Sable', 0.6))
+        assert r.color_choices == (('Cinnamon', (0.8, 0.8)), ('Sable', (0.6, 0.6)))
 
 
 class TestSetGetTintRules:
@@ -73,7 +73,7 @@ class TestSetGetTintRules:
                           color_choices=(('CougarSpecific', 1.0),))])
         rules = ctx.get_tint_rules('Cougar', 'Male')
         assert rules is not None
-        assert rules[0].color_choices == (('CougarSpecific', 1.0),)
+        assert rules[0].color_choices == (('CougarSpecific', (1.0, 1.0)),)
 
     def test_sex_specific_then_sex_agnostic(self):
         """Sex fallback: (name, 'Male') → (name, None)."""

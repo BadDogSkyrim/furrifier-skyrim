@@ -23,7 +23,7 @@ from .headparts import (
     load_npc_labels, find_similar_headpart, _should_assign,
     _PROBABILITY_GATED_TYPES, _ci_lookup, _is_excluded,
 )
-from .util import hash_string, short_race_name
+from .util import get_bodypart_flags, hash_string, short_race_name
 from .tints import choose_breed_tints, choose_furry_tints
 
 log = logging.getLogger(__name__)
@@ -1418,8 +1418,6 @@ class FurryContext:
 
         Returns count of ARMA records modified.
         """
-        from .armor import get_bodypart_flags
-
         # furry_obj -> list of (vanilla_obj, vanilla_norm_fid)
         furry_obj_to_vanilla: dict[int, list[tuple[int, FormID]]] = {}
         for a in self.ctx.assignments.values():

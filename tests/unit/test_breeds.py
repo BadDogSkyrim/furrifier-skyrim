@@ -470,3 +470,25 @@ class TestWeightRangeTomlLoader:
                 ']\n')
         assert ctx.get_weight_range('BDMinoRace', 'Male') == (0.0, 100.0)
         assert any('weight_range must be' in r.message for r in caplog.records)
+
+
+class TestWeightRangeIsOrderInsensitive:
+    """A weight_range written backwards is taken as min..max rather than
+    inverting the remap; a non-numeric one warns instead of raising."""
+
+    def test_reversed_pair_is_swapped(self):
+        ctx = RaceDefContext()
+        ctx.set_weight_range('BDMinoRace', None, 100.0, 50.0)
+        assert ctx.get_weight_range('BDMinoRace', 'Male') == (50.0, 100.0)
+
+    def test_equal_bounds_are_kept(self):
+        ctx = RaceDefContext()
+        ctx.set_weight_range('BDMinoRace', None, 60.0, 60.0)
+        assert ctx.get_weight_range('BDMinoRace', 'Male') == (60.0, 60.0)
+
+    def test_non_numeric_warns_and_registers_nothing(self, caplog):
+        ctx = RaceDefContext()
+        ctx.set_weight_range('BDMinoRace', None, 'heavy', 100.0)
+        assert 'weight_range' in caplog.text
+        # falls back to the identity remap, not a broken half-registered one
+        assert ctx.get_weight_range('BDMinoRace', 'Male') == (0.0, 100.0)

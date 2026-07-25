@@ -27,7 +27,7 @@ class TestBreedTintRuleShape:
             mask_substring='SkinTone',
             color_choices=(('A', 1.0), ('B', 0.5)),
         )
-        assert r.color_choices == (('A', 1.0), ('B', 0.5))
+        assert r.color_choices == (('A', (1.0, 1.0)), ('B', (0.5, 0.5)))
 
     def test_default_probability_is_one(self):
         r = BreedTintRule(mask_substring='X', color_choices=(('A', 1.0),))
@@ -59,11 +59,11 @@ class TestColorSchemeLoader:
         assert len(scheme) == 2
 
         skin = next(r for r in scheme if r.mask_substring == 'SkinTone')
-        assert skin.color_choices == (('A', 1.0), ('B', 1.0))
+        assert skin.color_choices == (('A', (1.0, 1.0)), ('B', (1.0, 1.0)))
         assert skin.probability == 1.0
 
         muzzle = next(r for r in scheme if r.mask_substring == 'TintMuzzle')
-        assert muzzle.color_choices == (('C', 1.0), ('D', 0.7))
+        assert muzzle.color_choices == (('C', (1.0, 1.0)), ('D', (0.7, 0.7)))
         assert muzzle.probability == 0.5
 
     def test_single_element_entry_defaults_intensity_to_one(
@@ -76,7 +76,8 @@ class TestColorSchemeLoader:
         )
         scheme = ctx.color_schemes['Cattle']
         rule = scheme[0]
-        assert rule.color_choices == (('A', 1.0), ('B', 1.0), ('C', 0.7))
+        assert rule.color_choices == (
+            ('A', (1.0, 1.0)), ('B', (1.0, 1.0)), ('C', (0.7, 0.7)))
 
     def test_probability_magic_row_default_one_when_absent(
             self, tmp_path, monkeypatch):
@@ -96,7 +97,7 @@ class TestColorSchemeLoader:
         )
         rule = ctx.color_schemes['Ankole'][0]
         assert rule.color_choices == (
-            ('Tan', 0.8), ('Tan', 0.6), ('White', 0.5))
+            ('Tan', (0.8, 0.8)), ('Tan', (0.6, 0.6)), ('White', (0.5, 0.5)))
 
     def test_multiple_schemes_in_one_file(self, tmp_path, monkeypatch):
         ctx = self._load_with_data(tmp_path, monkeypatch,
@@ -106,8 +107,8 @@ class TestColorSchemeLoader:
             'M = [["y", 1.0]]\n'
         )
         assert 'A' in ctx.color_schemes and 'B' in ctx.color_schemes
-        assert ctx.color_schemes['A'][0].color_choices == (('x', 1.0),)
-        assert ctx.color_schemes['B'][0].color_choices == (('y', 1.0),)
+        assert ctx.color_schemes['A'][0].color_choices == (('x', (1.0, 1.0)),)
+        assert ctx.color_schemes['B'][0].color_choices == (('y', (1.0, 1.0)),)
 
 
 class TestTintKeywordsLoader:
@@ -198,7 +199,7 @@ class TestColorsReferenceOnHeadpartProbability:
         rules = ctx.get_tint_rules('CapeBuffalo', 'Male')
         assert rules is not None and len(rules) == 1
         assert rules[0].mask_substring == 'SkinTone'
-        assert rules[0].color_choices == (('BDMinoCoatBlack', 1.0),)
+        assert rules[0].color_choices == (('BDMinoCoatBlack', (1.0, 1.0)),)
 
 
 class TestSexNormalization:
@@ -263,3 +264,49 @@ class TestSexNormalization:
             'EYEBROWS = 0.7\n'
         )
         assert ctx.get_headpart_probability('X', 'Male', 'EYEBROWS') == 0.7
+
+
+class TestProbabilityRejectsRanges:
+    """A probability is a plain number — a `[lo, hi]` there behaves exactly
+    like its midpoint, and used to crash the catalog load on float(list)."""
+
+    def _load(self, tmp_path, monkeypatch, races_toml):
+        races_dir = tmp_path / 'races'
+        races_dir.mkdir()
+        (races_dir / 'r.toml').write_text(races_toml)
+        schemes_dir = tmp_path / 'schemes'
+        schemes_dir.mkdir()
+        (schemes_dir / 's.toml').write_text(
+            'races = [{vanilla = "NordRace", furry = "Z"}]\n')
+        from furrifier import race_defs
+        monkeypatch.setattr(
+            race_defs, '_find_resource_dir',
+            lambda name: schemes_dir if name == 'schemes' else races_dir)
+        return race_defs.load_scheme('s')
+
+    def test_ranged_headpart_gate_warns_and_skips(self, tmp_path, monkeypatch,
+                                                  caplog):
+        ctx = self._load(
+            tmp_path, monkeypatch,
+            '[[race_customization]]\nrace = "YASMinoRace"\nsex = "Male"\n'
+            'FACIAL_HAIR = [0.2, 0.5]\nEYEBROWS = 0.4\n')
+
+        assert 'a probability takes a plain number' in caplog.text
+        assert '0.35' in caplog.text                     # the midpoint to use
+        # the bad key is skipped; the good one still loads
+        assert ctx.get_headpart_probability(
+            'YASMinoRace', 'Male', 'FACIAL_HAIR') == 1.0   # unset: no gate
+        assert ctx.get_headpart_probability(
+            'YASMinoRace', 'Male', 'EYEBROWS') == 0.4
+
+    def test_ranged_color_scheme_probability_row_warns(self, tmp_path,
+                                                       monkeypatch, caplog):
+        ctx = self._load(
+            tmp_path, monkeypatch,
+            '[color_schemes.X]\n'
+            'SkinTone = [["probability", [0.5, 0.9]], ["A", 1.0]]\n')
+
+        assert 'a probability takes a plain number' in caplog.text
+        rule = ctx.color_schemes['X'][0]
+        assert rule.probability == 1.0                   # falls back, no crash
+        assert rule.color_choices == (('A', (1.0, 1.0)),)

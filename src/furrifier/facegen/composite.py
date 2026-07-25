@@ -34,6 +34,7 @@ import numpy as np
 from PIL import Image
 
 from .assets import AssetResolver
+from .texture import load_texture, open_texture
 
 
 log = logging.getLogger("furrifier.facegen.composite")
@@ -48,7 +49,7 @@ def load_mask_rgba(path: Path, target_size: int | None = None) -> np.ndarray:
     """Load a DDS/PNG/JPG as RGBA float32 in [0, 1], optionally resampled
     to target_size x target_size via Lanczos. Vanilla masks are 512x512;
     pass a bigger target_size to upscale for higher-resolution output."""
-    im = Image.open(path).convert("RGBA")
+    im = load_texture(path, "RGBA")
     if target_size is not None and im.size != (target_size, target_size):
         im = im.resize((target_size, target_size), Image.Resampling.LANCZOS)
     return np.asarray(im, dtype=np.float32) / 255.0
@@ -136,7 +137,7 @@ def composite_layers(resolver: AssetResolver, tints: list[dict],
     # Determine canvas size: output_size if supplied, else first
     # RESOLVABLE mask's native size. (Can't just use tints[0] — it might
     # be the one that's missing.) Fallback when nothing resolves:
-    # vanilla 512x512. Read only the header via Image.open — PIL is lazy
+    # vanilla 512x512. Read only the header via open_texture — PIL is lazy
     # and won't decode pixels without .convert/.load, so the probe is
     # near-free. Skipping the decode here is what keeps the first
     # resolvable mask from being decoded twice (once for probe, once
@@ -146,7 +147,7 @@ def composite_layers(resolver: AssetResolver, tints: list[dict],
         for t in tints:
             p = resolver.resolve(t["mask"])
             if p is not None:
-                with Image.open(p) as im:
+                with open_texture(p) as im:
                     w, h = im.size
                 break
     else:

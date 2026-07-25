@@ -363,6 +363,17 @@ Your race may provide many tint layers that will look terrible if used all at on
 
 If colors are omitted, all colors defined for the tint layer are allowed. If `probability` is omitted, it defaults to 1.0.
 
+An intensity can also be written as a `[lo, hi]` range instead of a single
+number, in which case each NPC gets its own intensity drawn from that band:
+
+```toml
+SkinTone = [["BDDeerCoatBay", [0.7, 1.0]], ["BDDeerCoatBrown", 0.9]]
+```
+
+Every deer that lands on `BDDeerCoatBay` gets a slightly different opacity
+between 0.7 and 1.0, while `BDDeerCoatBrown` stays pinned at 0.9. The draw is
+deterministic — the same NPC gets the same value on every run.
+
 The `mask` field is a substring matched against the
 race's TINI tint-mask filename (e.g. `"TintMuzzle"` matches
 `"Actors\…\TintMasks\TintMuzzle.dds"`). Matching the file name allows us 
