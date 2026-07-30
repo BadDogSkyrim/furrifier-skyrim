@@ -172,6 +172,9 @@ races = [
 #    specific NPCs, etc.). `basis` is the vanilla race they derive from;
 #    the subrace only kicks in when an NPC matches that vanilla race AND
 #    whatever faction/NPC rule promotes them to the subrace.
+#    Subrace records are always created non-playable (the Playable flag
+#    is cleared even when the basis race is playable), so they stay out
+#    of the chargen race menu.
 subraces = [
   {id = "YASReachmanRace", name = "Reachmen", basis = "BretonRace", furry = "YASKonoiRace"},
   # ...

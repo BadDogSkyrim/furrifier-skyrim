@@ -8,8 +8,20 @@ furry race template, then verifies the result after save/reload.
 import pytest
 
 from conftest import (
-    requires_gamefiles, find_by_formid, run_verify_phase,
+    requires_gamefiles, find_by_formid, find_by_edid, run_verify_phase,
 )
+
+# RACE DATA flags: uint32 at offset 32, bit 0 = Playable.
+_DATA_FLAGS_OFFSET = 32
+_FLAG_PLAYABLE = 0x00000001
+
+
+def _is_playable(race):
+    data = race.get_subrecord('DATA')
+    assert data is not None, f"{race.editor_id}: DATA missing"
+    assert data.size >= _DATA_FLAGS_OFFSET + 4, \
+        f"{race.editor_id}: DATA too short ({data.size})"
+    return bool(data.get_uint32(_DATA_FLAGS_OFFSET) & _FLAG_PLAYABLE)
 
 
 pytestmark = requires_gamefiles
@@ -103,6 +115,46 @@ class TestRaceFurrification:
 
             assert any('Lykaios' in e for e in head_edids), \
                 f"Expected a Lykaios head part, got: {head_edids}"
+
+        furrify_and_check(write, verify)
+
+
+    def test_subraces_are_not_playable(self, furrify_and_check, ctx,
+                                       plugin_set):
+        """Patch-created subraces must have the Playable flag cleared,
+        while the furrified vanilla races they derive from keep it."""
+        assert ctx.subraces, "Scheme defines no subraces to check"
+        subrace_ids = sorted(ctx.subraces)
+        basis_ids = sorted({s.vanilla_basis for s in ctx.subraces.values()})
+
+
+        def write(furry_ctx):
+            pass
+
+
+        def verify(reloaded):
+            # Subraces whose basis or furry race isn't in the test load
+            # order are skipped by furrify_all_races, so only check the
+            # ones that made it into the patch.
+            checked = 0
+            for edid in subrace_ids:
+                rec = find_by_edid(reloaded, edid)
+                if rec is None:
+                    continue
+                assert not _is_playable(rec), \
+                    f"Subrace {edid} should not be playable"
+                checked += 1
+            assert checked, "No subraces were created to check"
+
+            # Furrifying a basis race must not disturb its own Playable
+            # flag (child bases are non-playable in vanilla already).
+            for edid in basis_ids:
+                rec = find_by_edid(reloaded, edid)
+                vanilla = plugin_set.get_record_by_edid('RACE', edid)
+                if rec is None or vanilla is None:
+                    continue
+                assert _is_playable(rec) == _is_playable(vanilla), \
+                    f"Basis race {edid} changed its Playable flag"
 
         furrify_and_check(write, verify)
 

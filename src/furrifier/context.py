@@ -37,6 +37,30 @@ FURRIFIABLE_BODYPARTS = (
 # Race EditorID variant suffixes, longest-match first.
 _RACE_VARIANT_SUFFIXES = ('ChildVampire', 'Vampire', 'Child')
 
+# RACE DATA layout: skill boosts (14) + padding (2) + male/female height
+# and weight (4 floats) puts the flags uint32 at offset 32. Bit 0 is
+# Playable — see is_child_race() in furry_load.py for bit 2 (Child).
+_RACE_DATA_FLAGS_OFFSET = 32
+_RACE_FLAG_PLAYABLE = 0x00000001
+
+
+def _set_race_playable(race: Record, playable: bool) -> bool:
+    """Set (or clear) the Playable flag in a RACE record's DATA flags.
+
+    Returns True if the flag was written, False if DATA is missing or
+    too short to hold the flags field.
+    """
+    data = race.get_subrecord('DATA')
+    if data is None or data.size < _RACE_DATA_FLAGS_OFFSET + 4:
+        return False
+    flags = data.get_uint32(_RACE_DATA_FLAGS_OFFSET)
+    if playable:
+        flags |= _RACE_FLAG_PLAYABLE
+    else:
+        flags &= ~_RACE_FLAG_PLAYABLE
+    data.set_uint32(_RACE_DATA_FLAGS_OFFSET, flags)
+    return True
+
 
 def _variant_suffix(race_edid: str) -> str:
     """Return the variant suffix on a race EditorID, or '' for adults.
@@ -1114,6 +1138,15 @@ class FurryContext:
                 full_sr.data = bytearray(
                     subrace.display_name.encode('cp1252') + b'\x00')
                 full_sr.modified = True
+
+            # Subraces are NPC-only variants (Reachmen, Skaal, ...) —
+            # the player picks the base race at chargen, so keep them
+            # out of the race menu. The basis race we copied is
+            # typically playable, so clear the flag explicitly.
+            if not _set_race_playable(new_race, False):
+                log.warning(
+                    f"Subrace {subrace.name}: DATA too short to clear "
+                    f"the Playable flag")
 
             # Furrify with the furry race's appearance
             self.furrify_race(new_race, furry_rec, target=new_race)
