@@ -15,6 +15,7 @@ from typing import Callable, Optional
 
 from esplib import LoadOrder
 
+from .build_info import version_string
 from .config import FurrifierConfig, build_parser, normalize_argv, setup_logging
 from .session import setup_session
 
@@ -96,7 +97,7 @@ def _run_furrification_body(
 
     t_run_start = time.perf_counter()
 
-    log.info("Skyrim Furrifier v0.1.0")
+    log.info(f"Skyrim Furrifier {version_string()}")
     log.info(f"  Scheme: {config.race_scheme}")
     log.info(f"  Patch: {config.patch_filename}")
     log.info(f"  Armor: {config.furrify_armor}")

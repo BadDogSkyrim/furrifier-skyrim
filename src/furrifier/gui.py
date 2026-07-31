@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 
 from esplib import LoadOrder, find_game_data
 
+from .build_info import version_string
 from .config import FurrifierConfig
 from .main import run_furrification
 from .race_defs import list_available_schemes
@@ -137,7 +138,7 @@ class _Worker(QThread):
 class FurrifierWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Skyrim Furrifier")
+        self.setWindowTitle(f"Skyrim Furrifier {version_string()}")
         self.resize(820, 820)
         self.setMinimumSize(720, 620)
 
@@ -358,6 +359,15 @@ class FurrifierWindow(QMainWindow):
         layout = QHBoxLayout(frame)
         self.phase_label = QLabel("Ready.", frame)
         layout.addWidget(self.phase_label, stretch=1)
+        # Build identity, always on screen. A bug report that quotes this
+        # tells us exactly which kit produced the output.
+        self.version_label = QLabel(version_string(), frame)
+        self.version_label.setStyleSheet("color: palette(mid);")
+        self.version_label.setToolTip(
+            "Furrifier version, build timestamp and source commit.\n"
+            "A trailing '+' means the build was cut from a tree with "
+            "uncommitted changes.")
+        layout.addWidget(self.version_label)
         # Single button doubles as Run / Cancel — its label tracks
         # worker state. _run_or_cancel_clicked dispatches.
         self.run_button = QPushButton("Run", frame)
