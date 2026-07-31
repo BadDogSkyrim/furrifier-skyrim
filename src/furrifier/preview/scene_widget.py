@@ -632,10 +632,21 @@ class FacegenSceneWidget(QWidget):
             center = QVector3D(0.0, 0.0, 0.0)
             radius = 50.0
         if not head_shape_present:
+            # Say exactly what was loaded and from where. The head is
+            # identified by the FacegenDetail slot, which PyNifly only
+            # surfaces when the FACEGEN_DETAIL_MAP shader flag is set —
+            # so "no head" can mean the shape is absent OR present with
+            # the flag missing, and those have completely different
+            # causes. Naming the shapes tells the two apart, and the
+            # full path matters because the preview's bake dir is
+            # deleted when the window closes.
             log.warning(
-                "%s: no head shape in baked nif (no shape carries the "
-                "FacegenDetail texture slot) — preview will show "
-                "everything except the face", nif_path.name)
+                "no head shape in %s (no shape carries the FacegenDetail "
+                "texture slot) — preview will show everything except the "
+                "face. Nif holds %d shape(s): %s",
+                nif_path, len(shapes_raw),
+                ", ".join(str(s.get("name", "<unnamed>"))
+                          for s in shapes_raw) or "<none>")
 
         saved_cam: Optional[tuple] = None
         if preserve_camera:

@@ -464,9 +464,15 @@ def extract_npc_info(npc: Record, plugin_set: PluginSet,
             file_idx = rnam_fid.file_index
             master_name = (masters[file_idx]
                            if 0 <= file_idx < len(masters) else "<self>")
-            log.debug(
-                "RNAM unresolved for %s: raw=%08X file_idx=%d master=%r",
-                npc.editor_id, int(rnam_fid), file_idx, master_name)
+            # WARNING, not DEBUG: an unresolved race contributes no
+            # head-part defaults, and the head comes *only* from there
+            # for NPCs that don't name a Face part in their own PNAMs.
+            # The bake then succeeds and writes a headless nif, which
+            # is indistinguishable from success unless we say so here.
+            log.warning(
+                "%s: race RNAM unresolved (raw=%08X file_idx=%d master=%r) "
+                "— no race head-part defaults, the baked nif will have no "
+                "head", npc.editor_id, int(rnam_fid), file_idx, master_name)
         else:
             race_edid = race.editor_id
 

@@ -42,6 +42,32 @@ from ..session_cache import SessionCache
 log = logging.getLogger("furrifier.preview.worker")
 
 
+def _log_bake_result(npc: Record, session, nif_path) -> None:
+    """Record what the bake actually produced, at DEBUG.
+
+    The preview's bake directory is deleted when the window closes, so
+    a headless preview leaves no artifact to inspect afterwards. This
+    puts the head-part set and the resolved race into the log, where it
+    survives — and names the race, since a race that fails to resolve is
+    what silently strips the head-part defaults.
+    """
+    if not log.isEnabledFor(logging.DEBUG):
+        return
+    try:
+        from ..facegen import base_plugin_for, extract_npc_info
+        info = extract_npc_info(npc, session.plugin_set,
+                                base_plugin_for(npc, session.patch))
+        parts = ", ".join(f"{h['hdpt_edid']}(type={h['hdpt_type']})"
+                          for h in info["headparts"])
+        log.debug("Preview bake %s -> %s", npc.editor_id, nif_path)
+        log.debug("  race=%s  headparts=%d [%s]  tints=%d",
+                  info.get("race_edid"), len(info["headparts"]),
+                  parts or "<none>", len(info.get("tints") or []))
+    except Exception:
+        # Diagnostics must never take the preview down with them.
+        log.debug("Preview bake diagnostics failed", exc_info=True)
+
+
 def _resolve_face_npc(npc: Record, plugin_set: PluginSet) -> Record:
     """Walk the TPLT chain until we hit the NPC whose face the game
     actually uses.
@@ -193,6 +219,7 @@ class PreviewWorker(QObject):
             assert self._temp_root is not None
             nif_path, dds_path = bake_facegen_for(
                 patched, self._session, out_dir=self._temp_root)
+            _log_bake_result(patched, self._session, nif_path)
 
             self.bake_ready.emit(
                 request_id, str(nif_path),
