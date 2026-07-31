@@ -56,17 +56,25 @@ def load_mask_rgba(path: Path, target_size: int | None = None) -> np.ndarray:
 
 
 def load_mask_coverage(path: Path, target_size: int | None = None) -> np.ndarray:
-    """Load a mask and return its grayscale coverage (2D float32 in [0, 1]).
+    """Load a mask and return its grayscale coverage (2D uint8, 0-255).
 
     Tint masks ship as RGB (alpha always 255), with grayscale coverage
     encoded in the RGB channels. Every compositor use eventually does
     `mask[..., 0] * 0.299 + mask[..., 1] * 0.587 + mask[..., 2] * 0.114`
     to extract that coverage; doing it once at load time (and caching the
     result) saves redundant luminance math across NPCs and shrinks the
-    cache footprint by 4x."""
+    cache footprint by 4x.
+
+    Stored as uint8 rather than float32 for a further 4x off the cache:
+    a 2048px entry is 4 MiB instead of 16. Nothing is lost — the source
+    DDS is 8-bit per channel, so the only error is the rounding of a
+    luminance weighting we'd otherwise recompute identically. Callers
+    scale by 1/255 into their own scratch buffer (see composite_layers).
+    """
     rgba = load_mask_rgba(path, target_size=target_size)
-    return (rgba[..., 0] * 0.299 + rgba[..., 1] * 0.587
-            + rgba[..., 2] * 0.114)
+    cov = (rgba[..., 0] * 0.299 + rgba[..., 1] * 0.587
+           + rgba[..., 2] * 0.114)
+    return np.clip(cov * 255.0 + 0.5, 0, 255).astype(np.uint8)
 
 
 # RACE's TINP (Tint Mask Type) code for the SkinTone layer.
@@ -178,8 +186,13 @@ def composite_layers(resolver: AssetResolver, tints: list[dict],
     # solid QNAM fill — same behavior as NPCs with no TINP=6 entry.
     skin_cov = load_cached(skin_layer["mask"], w) if skin_layer else None
     if skin_cov is not None:
-        np.multiply(base_rgb, skin_cov[..., None], out=acc_rgb)
-        acc_a[:] = skin_cov
+        # Coverage is cached as uint8; widen into scratch and scale to
+        # [0, 1]. The plain assignment casts straight into tmp1a's
+        # buffer, so no float temporary the size of the canvas appears.
+        tmp1a[:] = skin_cov
+        tmp1a *= 1.0 / 255.0
+        np.multiply(base_rgb, tmp1a[..., None], out=acc_rgb)
+        acc_a[:] = tmp1a
     elif base_color is not None:
         acc_rgb[:] = base_rgb
         acc_a.fill(1.0)
@@ -195,9 +208,11 @@ def composite_layers(resolver: AssetResolver, tints: list[dict],
         color = np.asarray(layer["color"][:3], dtype=np.float32) / 255.0
         intensity = float(layer["intensity"])
 
-        # contrib_a = cov * intensity  (cov comes from the shared cache;
-        # don't mutate it — write into our scratch buffer instead)
-        np.multiply(cov, intensity, out=tmp1a)
+        # contrib_a = (cov / 255) * intensity  (cov comes from the shared
+        # cache as uint8; don't mutate it — widen into our scratch buffer
+        # and fold the 1/255 into the intensity scale)
+        tmp1a[:] = cov
+        tmp1a *= intensity / 255.0
 
         # acc_rgb += contrib_a * (color - acc_rgb)
         # Algebraically identical to the classic alpha-over formula
@@ -236,7 +251,13 @@ def _composite_to_uint8(npc_info: dict, resolver: AssetResolver,
     acc = composite_layers(resolver, tints,
                            base_color=npc_info.get("qnam_color"),
                            output_size=output_size)
-    return np.clip(acc * 255.0, 0, 255).astype(np.uint8)
+    # Scale and clip in place. `np.clip(acc * 255.0, ...)` allocated a
+    # second full-canvas float32 array — 64 MiB at 2048px, per NPC, in
+    # every worker at once. `acc` is ours to consume; nobody reads it
+    # after this.
+    acc *= 255.0
+    np.clip(acc, 0, 255, out=acc)
+    return acc.astype(np.uint8)
 
 
 def build_facetint_png(npc_info: dict, resolver: AssetResolver,

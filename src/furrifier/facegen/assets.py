@@ -15,13 +15,96 @@ PyNifly / PIL can open them by path without changes.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import tempfile
+from collections import OrderedDict
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Any, Iterable, List, Optional
 
 
 log = logging.getLogger("furrifier.facegen.assets")
+
+
+# Per-process ceiling on the decoded-mask cache. Facegen runs one
+# resolver per worker process, so the real cost is this times the
+# worker count — 8 workers at the default is ~2 GiB.
+_DEFAULT_CACHE_MB = 256
+
+
+def _cache_budget_bytes() -> int:
+    raw = os.environ.get("FURRIFY_MASK_CACHE_MB")
+    if raw:
+        try:
+            mb = int(raw)
+            if mb > 0:
+                return mb * 1024 * 1024
+            log.warning("FURRIFY_MASK_CACHE_MB=%r must be positive; ignoring",
+                        raw)
+        except ValueError:
+            log.warning("FURRIFY_MASK_CACHE_MB=%r is not an int; ignoring", raw)
+    return _DEFAULT_CACHE_MB * 1024 * 1024
+
+
+class BoundedArrayCache:
+    """LRU cache of numpy arrays with a byte budget.
+
+    Replaces the plain dict this used to be. Unbounded, it grew by one
+    entry per (mask, canvas size) pair for the life of the worker — at a
+    2048px canvas that was tens of MiB apiece, and eight workers between
+    them exhausted a 64 GiB box mid-run. Every NPC whose composite
+    happened to land when memory was tight got skipped outright, with no
+    facegen written at all.
+
+    Dict-compatible for the two operations the compositor uses (`get`
+    and `__setitem__`) so callers can still hand in a plain dict.
+
+    An array larger than the whole budget is passed through uncached
+    rather than evicting everything for a single entry that can't help.
+    """
+
+    def __init__(self, max_bytes: Optional[int] = None):
+        self.max_bytes = (_cache_budget_bytes() if max_bytes is None
+                          else max_bytes)
+        self._entries: "OrderedDict[Any, Any]" = OrderedDict()
+        self.nbytes = 0
+        self.hits = 0
+        self.misses = 0
+        self.evictions = 0
+
+    def get(self, key, default=None):
+        try:
+            value = self._entries[key]
+        except KeyError:
+            self.misses += 1
+            return default
+        self._entries.move_to_end(key)
+        self.hits += 1
+        return value
+
+    def __setitem__(self, key, value) -> None:
+        size = int(getattr(value, "nbytes", 0))
+        if key in self._entries:
+            self.nbytes -= int(getattr(self._entries.pop(key), "nbytes", 0))
+        if size > self.max_bytes:
+            # Too big to ever be worth holding; hand it back uncached.
+            return
+        self._entries[key] = value
+        self.nbytes += size
+        while self.nbytes > self.max_bytes and len(self._entries) > 1:
+            _, evicted = self._entries.popitem(last=False)
+            self.nbytes -= int(getattr(evicted, "nbytes", 0))
+            self.evictions += 1
+
+    def __contains__(self, key) -> bool:
+        return key in self._entries
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def clear(self) -> None:
+        self._entries.clear()
+        self.nbytes = 0
 
 
 class AssetResolver:
@@ -52,7 +135,7 @@ class AssetResolver:
         # resolver just provides a place to hang it. Many NPCs of the
         # same race share masks, and Pillow's DDS decoder is expensive.
         # Key shape is opaque to the resolver.
-        self.image_cache: dict = {}
+        self.image_cache = BoundedArrayCache()
         # Temp dir for BSA extractions. Lazily created on first extract so
         # loose-only runs don't touch the temp filesystem.
         self._cache_dir: Optional[Path] = (
