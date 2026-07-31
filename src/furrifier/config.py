@@ -381,7 +381,17 @@ def setup_logging(config: FurrifierConfig) -> None:
     level = logging.DEBUG if config.debug else logging.INFO
     handlers = [logging.StreamHandler()]
     if config.log_file:
-        handlers.append(logging.FileHandler(config.log_file))
+        # Create the log's directory first. Logging is set up before the
+        # session, which is what normally mkdirs the output dir — so
+        # pointing -o at a folder that doesn't exist yet used to die
+        # here, on a FileHandler open, with a raw traceback and nothing
+        # done. Falling back to console-only beats refusing to run.
+        try:
+            Path(config.log_file).parent.mkdir(parents=True, exist_ok=True)
+            handlers.append(logging.FileHandler(config.log_file))
+        except OSError as exc:
+            print(f"warning: cannot write log to {config.log_file}: {exc}",
+                  file=sys.stderr)
     # force=True wins over pynifly's import-time logging.basicConfig
     # (pyn/niflytools.py:17 sets level=DEBUG before we get here). Without
     # force, our basicConfig is a no-op because the root logger already
