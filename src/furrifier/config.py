@@ -72,17 +72,27 @@ class FurrifierConfig:
     # speedup, but keeps the foreground responsive.
     facegen_throttle: bool = False
 
+    # Explicit plugin list (filenames, in load order) standing in for
+    # the game's active load order. None = use plugins.txt. Mirrors the
+    # GUI's plugin picker so a logged command line can reproduce a run
+    # made against a hand-picked subset.
+    plugin_selection: Optional[list] = None
+
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> FurrifierConfig:
         patch = args.patch or cls.patch_filename
         if Path(patch).suffix.lower() not in ('.esp', '.esm', '.esl'):
             patch += '.esp'
+        plugins = None
+        if args.plugins:
+            plugins = [p.strip() for p in args.plugins.split(',') if p.strip()]
         return cls(
             patch_filename=patch,
             race_scheme=args.scheme or cls.race_scheme,
-            furrify_armor=not args.no_armor,
-            furrify_schlongs=not args.no_schlongs,
-            build_facegen=not args.no_facegen,
+            furrify_armor=args.armor,
+            furrify_schlongs=args.schlongs,
+            build_facegen=args.facegen,
+            plugin_selection=plugins,
             debug=args.debug,
             log_file=args.log_file,
             game_data_dir=args.data_dir,
@@ -117,6 +127,23 @@ def normalize_argv(argv: list[str]) -> list[str]:
     return out
 
 
+def _add_toggle(parser: argparse.ArgumentParser, name: str, *,
+                default: bool, on_help: str, off_help: str,
+                dest: Optional[str] = None) -> None:
+    """Add a `--x` / `--no-x` pair sharing one dest.
+
+    Both spellings exist so `command_line()` can always name the state
+    it chose. Inferring "armor is on" from the absence of `--no-armor`
+    is exactly the ambiguity the logged line is supposed to remove.
+    """
+    dest = dest or name.replace('-', '_')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(f'--{name}', dest=dest, action='store_true',
+                       default=default, help=on_help)
+    group.add_argument(f'--no-{name}', dest=dest, action='store_false',
+                       help=off_help)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='furrify_skyrim',
@@ -133,14 +160,26 @@ def build_parser() -> argparse.ArgumentParser:
                         help='Race assignment scheme (default: all_races). '
                              'Any *.toml file in schemes/ is selectable.',
                         **scheme_kwargs)
-    parser.add_argument('--no-armor', action='store_true',
-                        help='Skip armor furrification')
-    parser.add_argument('--no-schlongs', action='store_true',
-                        help='Disable SOS (schlong) compatibility')
-    parser.add_argument('--no-facegen', action='store_true',
-                        help='Skip building per-NPC FaceGen nif + DDS '
-                             '(otherwise written alongside the patch under '
-                             'FaceGenData/)')
+    # Each toggle gets both spellings so a rendered command line can
+    # state what it chose rather than leaving it to be inferred from an
+    # absent flag. The `--no-*` forms are the originals; the positive
+    # ones are new, so old batch files keep working.
+    _add_toggle(parser, 'armor', default=True,
+                on_help='Furrify armor (default)',
+                off_help='Skip armor furrification')
+    _add_toggle(parser, 'schlongs', default=True,
+                on_help='Enable SOS (schlong) compatibility (default)',
+                off_help='Disable SOS (schlong) compatibility')
+    _add_toggle(parser, 'facegen', default=True,
+                on_help='Build per-NPC FaceGen nif + DDS (default)',
+                off_help='Skip building per-NPC FaceGen nif + DDS '
+                         '(otherwise written alongside the patch under '
+                         'FaceGenData/)')
+    parser.add_argument('--plugins', metavar='LIST',
+                        help='Comma-separated plugin filenames to load, in '
+                             'load order. Default: the game\'s active load '
+                             'order from plugins.txt. Mirrors the GUI\'s '
+                             'plugin picker.')
     parser.add_argument('--data-dir',
                         help='Path to Skyrim Data directory for READING '
                              'source assets (auto-detected if omitted)')
@@ -172,12 +211,13 @@ def build_parser() -> argparse.ArgumentParser:
                              "case-insensitively, or hex form-id object "
                              'index). Skips armor, schlongs, and leveled-'
                              'list extension; useful for visual diffing.')
-    parser.add_argument('--preserve-existing', action='store_true',
-                        help='Skip NPCs whose winning override is already '
-                             'furrified (RNAM points at a scheme target '
-                             'race). Default: re-derive from the topmost '
-                             'non-furry override to pick up scheme/'
-                             'classifier fixes.')
+    _add_toggle(parser, 'preserve-existing', default=False,
+                dest='preserve_existing',
+                on_help='Skip NPCs whose winning override is already '
+                        'furrified (RNAM points at a scheme target race).',
+                off_help='Re-derive furrified NPCs from the topmost '
+                         'non-furry override to pick up scheme/classifier '
+                         'fixes (default).')
     parser.add_argument('--workers', dest='facegen_workers', type=int,
                         metavar='N',
                         help='FaceGen worker process count. Default: '
@@ -185,12 +225,12 @@ def build_parser() -> argparse.ArgumentParser:
                              'serial baseline; >1 for parallel bake. '
                              'Overridden by --throttle. Also honored via '
                              'FURRIFY_FACEGEN_WORKERS env var.')
-    parser.add_argument('--throttle', dest='facegen_throttle',
-                        action='store_true',
-                        help='Cap FaceGen at one BELOW_NORMAL-priority '
-                             'worker so the machine stays responsive. '
-                             'Wall-time matches the serial path; intended '
-                             'for "leave it running" overnight bakes.')
+    _add_toggle(parser, 'throttle', default=False, dest='facegen_throttle',
+                on_help='Cap FaceGen at one BELOW_NORMAL-priority worker so '
+                        'the machine stays responsive. Wall-time matches the '
+                        'serial path; intended for "leave it running" '
+                        'overnight bakes.',
+                off_help='Use the normal FaceGen worker pool (default).')
     return parser
 
 
@@ -265,21 +305,27 @@ def command_line(config: FurrifierConfig, program: Optional[str] = None) -> str:
         flag('--data-dir', config.game_data_dir)
     if config.output_dir:
         flag('-o', config.output_dir)
-    if not config.furrify_armor:
-        argv.append('--no-armor')
-    if not config.furrify_schlongs:
-        argv.append('--no-schlongs')
-    if not config.build_facegen:
-        argv.append('--no-facegen')
-    if config.preserve_existing:
-        argv.append('--preserve-existing')
+    if config.plugin_selection:
+        # An explicit picker selection. Omitted when None, which means
+        # "the game's active load order" — the CLI default, and not
+        # something a frozen list could honestly stand in for.
+        flag('--plugins', ','.join(config.plugin_selection))
+
+    # Toggles are always stated, on or off. Their whole reason for
+    # being in the log is so nobody has to infer a setting from a flag
+    # that isn't there.
+    argv.append('--armor' if config.furrify_armor else '--no-armor')
+    argv.append('--schlongs' if config.furrify_schlongs else '--no-schlongs')
+    argv.append('--facegen' if config.build_facegen else '--no-facegen')
+    argv.append('--preserve-existing' if config.preserve_existing
+                else '--no-preserve-existing')
+    argv.append('--throttle' if config.facegen_throttle else '--no-throttle')
+
     if config.facetint_size:
         flag('--facetint-size', config.facetint_size)
     if config.facegen_limit:
         flag('--limit', config.facegen_limit)
-    if config.facegen_throttle:
-        argv.append('--throttle')
-    elif config.facegen_workers:
+    if config.facegen_workers and not config.facegen_throttle:
         # --throttle overrides --workers; emitting both would misdescribe
         # the run it claims to reproduce.
         flag('--workers', config.facegen_workers)

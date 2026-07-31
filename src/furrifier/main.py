@@ -215,7 +215,13 @@ def main() -> int:
     args = parser.parse_args(normalize_argv(sys.argv[1:]))
     config = FurrifierConfig.from_args(args)
     setup_logging(config)
-    return run_furrification(config)
+    load_order = None
+    if config.plugin_selection:
+        load_order = LoadOrder.from_list(
+            config.plugin_selection,
+            data_dir=config.game_data_dir,
+            game_id='tes5')
+    return run_furrification(config, load_order=load_order)
 
 
 class _LogCounter(logging.Handler):

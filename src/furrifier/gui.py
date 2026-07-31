@@ -478,6 +478,11 @@ class FurrifierWindow(QMainWindow):
             facetint_size=self.facetint_size_combo.currentData(),
             preserve_existing=self.skip_furry_cb.isChecked(),
             facegen_throttle=self.throttle_cb.isChecked(),
+            # Carried so the logged command line can reproduce a run
+            # made against a hand-picked plugin subset. None = active
+            # load order, which is also the CLI's default.
+            plugin_selection=(list(self._plugin_override)
+                              if self._plugin_override is not None else None),
         )
 
     def _build_load_order(
