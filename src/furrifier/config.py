@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import argparse
 import logging
-from dataclasses import dataclass, field
+import os
+import sys
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .race_defs import list_available_schemes
@@ -190,6 +192,107 @@ def build_parser() -> argparse.ArgumentParser:
                              'Wall-time matches the serial path; intended '
                              'for "leave it running" overnight bakes.')
     return parser
+
+
+def _quote(value: str) -> str:
+    """Quote an argument for a Windows batch file / cmd.exe.
+
+    Not shlex.quote — that emits POSIX single quotes, which cmd.exe
+    passes through literally and would break every path it touched.
+    """
+    text = str(value)
+    if text and not any(c in text for c in ' \t"&|<>^()'):
+        return text
+    # cmd has no escape for a double quote inside a quoted string; the
+    # convention that works for paths is to double it.
+    return '"' + text.replace('"', '""') + '"'
+
+
+def _program_name() -> str:
+    """What to put at the front of the reproduction command line.
+
+    A frozen run names the CLI exe rather than whatever is executing —
+    the GUI exe is windowed and would swallow the console output the
+    user is trying to capture. Both exes ship in the same folder.
+    """
+    if getattr(sys, 'frozen', False):
+        return 'furrify_skyrim.exe'
+    return 'python -m furrifier'
+
+
+def _log_is_default(config: FurrifierConfig) -> bool:
+    """Whether config.log_file is just the path the app would derive on
+    its own (<output dir>/furrify.log).
+
+    setup_logging writes the resolved absolute path back onto the
+    config, so by the time anything renders a command line, log_file
+    looks user-chosen even when it wasn't. Emitting it would pin the log
+    to that exact path — so a pasted command with a different -o would
+    keep writing its log to the *old* run's folder.
+    """
+    if not config.log_file:
+        return False
+    try:
+        derived = resolve_log_path(replace(config, log_file=None))
+    except Exception:
+        return False
+    if derived is None:
+        return False
+    return (os.path.normcase(os.path.abspath(config.log_file))
+            == os.path.normcase(os.path.abspath(derived)))
+
+
+def command_line(config: FurrifierConfig, program: Optional[str] = None) -> str:
+    """Render `config` as a command line that reproduces this run.
+
+    Only settings that differ from the parser's defaults are emitted, so
+    the line stays readable and says what was actually chosen. Paths are
+    always included when set — that's what makes it reproducible from a
+    batch file in another directory.
+    """
+    argv: list[str] = [program or _program_name()]
+
+    def flag(name: str, value) -> None:
+        argv.extend((name, _quote(value)))
+
+    defaults = FurrifierConfig()
+
+    if config.race_scheme != defaults.race_scheme:
+        flag('--scheme', config.race_scheme)
+    if config.patch_filename != defaults.patch_filename:
+        flag('--patch', config.patch_filename)
+    if config.game_data_dir:
+        flag('--data-dir', config.game_data_dir)
+    if config.output_dir:
+        flag('-o', config.output_dir)
+    if not config.furrify_armor:
+        argv.append('--no-armor')
+    if not config.furrify_schlongs:
+        argv.append('--no-schlongs')
+    if not config.build_facegen:
+        argv.append('--no-facegen')
+    if config.preserve_existing:
+        argv.append('--preserve-existing')
+    if config.facetint_size:
+        flag('--facetint-size', config.facetint_size)
+    if config.facegen_limit:
+        flag('--limit', config.facegen_limit)
+    if config.facegen_throttle:
+        argv.append('--throttle')
+    elif config.facegen_workers:
+        # --throttle overrides --workers; emitting both would misdescribe
+        # the run it claims to reproduce.
+        flag('--workers', config.facegen_workers)
+    if config.only_npc:
+        flag('--only', config.only_npc)
+    if config.log_file and not _log_is_default(config):
+        flag('--log', config.log_file)
+    if config.profile_file:
+        flag('--profile', config.profile_file)
+    if config.debug:
+        argv.append('--debug')
+
+    return ' '.join(argv)
 
 
 def resolve_log_path(config: FurrifierConfig) -> Optional[Path]:

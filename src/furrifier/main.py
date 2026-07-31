@@ -16,7 +16,9 @@ from typing import Callable, Optional
 from esplib import LoadOrder
 
 from .build_info import version_string
-from .config import FurrifierConfig, build_parser, normalize_argv, setup_logging
+from .config import (
+    FurrifierConfig, build_parser, command_line, normalize_argv, setup_logging,
+)
 from .session import setup_session
 
 log = logging.getLogger(__name__)
@@ -105,6 +107,10 @@ def _run_furrification_body(
     log.info(f"  Skip furry NPCs: {config.preserve_existing}")
     log.info(f"  Tint size: {config.facetint_size or 'auto'}")
     log.info(f"  FaceGen limit: {config.facegen_limit or 'none'}")
+    # The same run as a command line, ready to paste into a .bat. Chosen
+    # settings only — anything left at its default is omitted rather than
+    # spelled out, so the line shows what was actually decided.
+    log.info(f"  Command line: {command_line(config)}")
 
     # Everything up through race/flst/preset furrification is the
     # same for full runs and for live preview. setup_session owns it.
