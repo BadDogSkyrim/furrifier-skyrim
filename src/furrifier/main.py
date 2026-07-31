@@ -100,16 +100,11 @@ def _run_furrification_body(
     t_run_start = time.perf_counter()
 
     log.info(f"Skyrim Furrifier {version_string()}")
-    log.info(f"  Scheme: {config.race_scheme}")
-    log.info(f"  Patch: {config.patch_filename}")
-    log.info(f"  Armor: {config.furrify_armor}")
-    log.info(f"  Build FaceGen: {config.build_facegen}")
-    log.info(f"  Skip furry NPCs: {config.preserve_existing}")
-    log.info(f"  Tint size: {config.facetint_size or 'auto'}")
-    log.info(f"  FaceGen limit: {config.facegen_limit or 'none'}")
-    # The same run as a command line, ready to paste into a .bat. Chosen
-    # settings only — anything left at its default is omitted rather than
-    # spelled out, so the line shows what was actually decided.
+    # The run as a command line, ready to paste into a .bat. This
+    # replaces the old per-setting block: everything that isn't a
+    # default shows up here, and the defaults that matter are already
+    # logged where they're used — the scheme by race_defs on load, the
+    # patch by the save step, both directories by setup_session.
     log.info(f"  Command line: {command_line(config)}")
 
     # Everything up through race/flst/preset furrification is the
