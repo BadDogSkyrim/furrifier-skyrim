@@ -90,6 +90,42 @@ def test_inject_makes_override_visible(skyrim_plugin_set, tmp_path):
     )
 
 
+def test_inject_resolves_patch_local_formids(skyrim_plugin_set, tmp_path):
+    """A record the patch defines *itself* (a furrifier-created subrace)
+    must resolve after injection, even when the plugin_set's caches were
+    already warm.
+
+    `absolute_form_id()` is backed by `_game_index`, a name -> load-order
+    slot map built on first use. Furrification warms it long before the
+    patch is injected. If injection only clears `_override_index`, the
+    patch has no slot, `absolute_form_id()` returns None for it, and
+    every self-referencing FormID in the patch silently fails to
+    resolve — which made subrace NPCs bake headless facegen nifs.
+    """
+    patch = Plugin.new_plugin(tmp_path / "LocalFidPatch.esp")
+    patch.plugin_set = skyrim_plugin_set
+    patch.add_master("Skyrim.esm")
+
+    subrace = patch.new_record("RACE", edid="TestSubrace")
+    patch.add_record(subrace)
+    local_fid = subrace.form_id
+
+    # Warm the caches the way a real furrification run does, BEFORE
+    # injecting. This is the condition the bug needed.
+    skyrim_plugin_set.absolute_form_id("Skyrim.esm", 0x013296)
+    assert skyrim_plugin_set._game_index is not None, \
+        "precondition: game index should be warm before injection"
+
+    _inject_patch_into_plugin_set(skyrim_plugin_set, patch)
+
+    resolved = skyrim_plugin_set.resolve_form_id(local_fid, patch)
+    assert resolved is not None, (
+        "patch-local FormID did not resolve after injection — "
+        "a load-order-derived cache was left stale"
+    )
+    assert resolved.editor_id == "TestSubrace"
+
+
 def test_inject_is_idempotent(skyrim_plugin_set, tmp_path):
     """Calling inject twice with the same patch must not duplicate
     entries or corrupt the load order."""

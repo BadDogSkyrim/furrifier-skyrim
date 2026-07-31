@@ -93,7 +93,7 @@ def _uninject_patch_from_plugin_set(plugin_set: PluginSet,
         plugin_set.load_order.plugins.remove(patch_name)
     except ValueError:
         pass
-    plugin_set._override_index = None
+    plugin_set.invalidate()
 
 
 def _inject_patch_into_plugin_set(plugin_set: PluginSet, patch) -> None:
@@ -116,9 +116,13 @@ def _inject_patch_into_plugin_set(plugin_set: PluginSet, patch) -> None:
     plugin_set.load_order.plugins.append(name)
     plugin_set._plugins[name] = patch
     plugin_set._loaded_full[name] = True
-    # Invalidate the cached override index so the next query rebuilds
-    # it with the patch's records included.
-    plugin_set._override_index = None
+    # Invalidate the load-order-derived indexes so the next query
+    # rebuilds them with the patch included. `_game_index` matters as
+    # much as the override index: without it the patch has no
+    # load-order slot, and every FormID it defines itself (the
+    # furrifier-created subraces) fails to resolve — which made
+    # subrace NPCs bake headless facegen nifs.
+    plugin_set.invalidate()
 
 
 def _matches_only_npc(npc, only_npc: str) -> bool:
