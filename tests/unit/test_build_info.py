@@ -80,6 +80,25 @@ def test_spec_parses_the_same_version():
     assert m and m.group(1) == __version__
 
 
+def test_spec_persists_the_counter_after_collect():
+    """The counter must be written only once a kit actually exists.
+
+    The stamp has to be generated before Analysis, but PyInstaller can
+    fail later — most often refusing to clear dist/ while the previously
+    built kit is still running. Bumping the file up front burned a
+    number that no build ever shipped under.
+    """
+    spec = (REPO / "furrify_skyrim.spec").read_text(encoding="utf-8")
+    collect_at = spec.index("coll = COLLECT(")
+    writes = [i for i in range(len(spec))
+              if spec.startswith("_counter_path.write_text", i)]
+    assert len(writes) == 1, "counter should be written exactly once"
+    assert writes[0] > collect_at, (
+        "build_number.json is written before COLLECT — a failed build "
+        "would burn a number no kit shipped under"
+    )
+
+
 def teardown_module(module):
     # Leave the module in its real state for everything else.
     importlib.reload(build_info)
