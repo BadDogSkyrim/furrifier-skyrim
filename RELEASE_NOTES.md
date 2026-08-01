@@ -1,5 +1,68 @@
 # Release notes
 
+## v1.6.0 — 2026-08-01
+
+Three silent facegen failures fixed — each one produced NPCs with no
+head and reported success — plus a memory fix, and enough build
+identity to tell which kit you're running.
+
+### Fixed
+
+- **Headless NPCs on subraces.** NPCs assigned to a furrifier-created
+  subrace (Reachmen, Skaal, Sailors, ...) baked facegen nifs with eyes
+  and hair but no head, and kept whatever stale FaceTint DDS was lying
+  around. The patch was added to the plugin set without dropping the
+  cached load-order index, so every FormID the patch pointed at *itself*
+  failed to resolve — including the race whose Head Data supplies the
+  head. On a real run: 261 of 262 subrace NPCs affected, 0 of 1989
+  others. That run now reports 3611 succeeded / 3611 DDSes encoded, up
+  from 3595 / 3314.
+
+- **Headless NPCs when previewing after a Run.** A plugin's reference to
+  its own record resolved to the last entry in its master list instead.
+  Only reachable after a save — saving stamps local FormIDs to a
+  concrete index, which stopped the "is this local?" check from
+  matching. Live example: an NPC's race came back as
+  `ccBGSSSE001ReelLineAct`, a Creation Club fishing record, which
+  carries eyes and hair defaults but no Face part. Any write of a
+  self-reference into an already-saved patch was corrupting it; the
+  preview is simply where it showed.
+
+- **Out-of-memory failures during FaceGen.** The decoded-mask cache grew
+  without bound for the life of each worker — 16 MiB per mask at a
+  2048px canvas, eight workers at once, ~40 GiB on a 64 GiB machine.
+  NPCs whose composite landed while memory was tight were skipped
+  outright, no nif and no tint. The cache is now LRU-bounded (256 MiB
+  per worker, `FURRIFY_MASK_CACHE_MB` to override) and coverage is
+  cached as `uint8` instead of `float32`. Worst case per worker with 200
+  unique masks: 3.1 GiB → 0.25 GiB. Output is unchanged within rounding.
+
+- **Crash when `-o` pointed at a new folder.** Logging was set up before
+  the session created the output directory, so the first run into a
+  fresh folder died on the log file with a raw traceback.
+
+- **Subraces were playable.** They're NPC-only variants, so they no
+  longer appear in the chargen race menu.
+
+### New / changed
+
+- **Version and build number**, in the run log's first line, the GUI
+  title, and the GUI's bottom bar. The build number is a plain integer
+  that increments per build and resets when the version changes, so a
+  bug report can name exactly which kit produced it. Running from source
+  reports `(dev)`.
+
+- **The run's settings as a pasteable command line.** Replaces the old
+  per-setting block. Every toggle states itself (`--armor` as well as
+  `--no-armor`, and likewise for schlongs, facegen, preserve-existing,
+  throttle), and the plugin selection is included via the new
+  `--plugins` flag, so a GUI run can be re-run from a batch file.
+
+- **Diagnostics for a missing head.** If a bake ends up with no Face
+  part it now says so, naming the resolved race, what the race defaults
+  yielded, and the final head-part set. An unresolved race is a warning
+  rather than a debug line.
+
 ## v1.2.0 — 2026-04-26
 
 Bug fix on the install path, faster + better-looking face tints, a

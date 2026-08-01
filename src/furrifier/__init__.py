@@ -1,3 +1,3 @@
 """Furrifier - Batch NPC race conversion for Skyrim using esplib."""
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
