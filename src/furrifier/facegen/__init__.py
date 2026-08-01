@@ -154,8 +154,14 @@ def build_facegen_for_patch(
         only_npc: Optional[str] = None,
         cancel_event: "Optional[threading.Event]" = None,
         workers: Optional[int] = None,
-        throttle: bool = False) -> tuple[int, int]:
+        throttle: bool = False,
+        extra_npcs: "Optional[list]" = None) -> tuple[int, int]:
     """Build FaceGen files for every NPC override in `patch`.
+
+    `extra_npcs` are records to bake that don't live in the patch —
+    NPCs left alone by --preserve-existing, whose furry definition
+    belongs to an earlier patch. They still need faces built; leaving
+    them out made "preserve" mean "no face".
 
     `data_dir` is the Skyrim install Data folder — source of headpart
     nifs, chargen tris, tint masks (loose or BSA). `output_dir` is
@@ -192,6 +198,15 @@ def build_facegen_for_patch(
                      / "FaceGenData" / "FaceTint")
 
     raw = list(patch.get_records_by_signature("NPC_"))
+    if extra_npcs:
+        # Don't double-bake: the patch wins for anything it overrides.
+        in_patch = {int(n.form_id) & 0xFFFFFF for n in raw}
+        added = [n for n in extra_npcs
+                 if (int(n.form_id) & 0xFFFFFF) not in in_patch]
+        if added:
+            log.info("FaceGen: including %d preserved NPC(s) not in the "
+                     "patch", len(added))
+        raw.extend(added)
     # CharGen face presets are character-creator-only — never rendered
     # in-world, so baking facegen for them is wasted work.
     npcs = [n for n in raw if not _is_chargen_preset(n)]

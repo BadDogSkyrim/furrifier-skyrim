@@ -192,7 +192,8 @@ def _run_furrification_body(
         log.info("Building FaceGen...")
         _run_facegen(config, patch, plugin_set,
                      session.data_dir, session.output_dir, progress,
-                     cancel_event=cancel_event)
+                     cancel_event=cancel_event,
+                     extra_npcs=session.context.preserved_npcs)
 
     t_total = time.perf_counter() - t_run_start
     mins, secs = divmod(int(round(t_total)), 60)
@@ -240,7 +241,8 @@ class _LogCounter(logging.Handler):
 
 
 def _run_facegen(config, patch, plugin_set, data_dir, output_dir, progress,
-                 cancel_event: Optional[threading.Event] = None):
+                 cancel_event: Optional[threading.Event] = None,
+                 extra_npcs: Optional[list] = None):
     """Run the facegen builder, optionally under cProfile.
 
     When `config.profile_file` is set, dump raw stats to that path and
@@ -259,7 +261,8 @@ def _run_facegen(config, patch, plugin_set, data_dir, output_dir, progress,
                                 only_npc=config.only_npc,
                                 cancel_event=cancel_event,
                                 workers=config.facegen_workers,
-                                throttle=config.facegen_throttle)
+                                throttle=config.facegen_throttle,
+                                extra_npcs=extra_npcs)
 
     if not config.profile_file:
         _run()

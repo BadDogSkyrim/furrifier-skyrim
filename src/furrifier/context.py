@@ -164,6 +164,12 @@ class FurryContext:
         self.plugin_set = plugin_set
         self.max_tint_layers = max_tint_layers
         self._furrifier_patch_names_cache: Optional[set[str]] = None
+        # NPCs left alone under --preserve-existing: already furrified
+        # by an earlier patch, so we keep that patch's per-NPC choices
+        # rather than re-deriving. They get no record in our patch, but
+        # they still need FaceGen built from their existing definition —
+        # otherwise choosing "preserve" silently means "no face".
+        self.preserved_npcs: list = []
         # Statistics (populated during furrification)
         self.stats_race_counts: dict[str, int] = {}   # furry_race_id -> count
         self.stats_hair_male: dict[str, int] = {}     # headpart_edid -> count
@@ -769,6 +775,10 @@ class FurryContext:
             if is_furrified(self.plugin_set, npc, furrifier_names):
                 if preserve_existing:
                     preserved += 1
+                    # Keep the existing definition, but remember the
+                    # record so FaceGen can still bake it. Skipping it
+                    # outright left these NPCs with no nif and no tint.
+                    self.preserved_npcs.append(npc)
                     continue
                 pre = find_pre_furry_record(
                     self.plugin_set, npc, furrifier_names)

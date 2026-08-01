@@ -132,6 +132,7 @@ class PreviewWorker(QObject):
         # build populates it, a subsequent Run reuses the plugin load.
         self._cache = cache
         self._session: Optional[FurrificationSession] = None
+        self._config: Optional[FurrifierConfig] = None
         self._temp_root: Optional[Path] = None
         # Each bake request gets a monotonic ID. The GUI records the
         # latest ID it issued; stale completions can be ignored.
@@ -154,6 +155,11 @@ class PreviewWorker(QObject):
         try:
             self._session = self._cache.get_or_build_session(
                 config, load_order=load_order)
+            # Keep the live config. session.config is whatever the
+            # session was *built* with, and options that don't affect
+            # setup — Skip furry NPCs among them — aren't in the cache
+            # key, so a cached session carries a stale copy of them.
+            self._config = config
 
             if self._temp_root is None:
                 self._temp_root = Path(
@@ -194,21 +200,13 @@ class PreviewWorker(QObject):
                     "Preview: %s uses template traits — baking from %s",
                     npc.editor_id, face_npc.editor_id)
 
-            # If the NPC's top-of-chain override lives in the shared
-            # patch, a previous Run already furrified it and baking
-            # again would re-furrify a furry race (which
-            # determine_npc_race can't match → returns None). Use the
-            # existing record directly in that case.
-            if face_npc.plugin is self._session.patch:
-                patched = face_npc
-            else:
-                patched = self._session.context.furrify_npc(face_npc)
-                if patched is None:
-                    self.bake_failed.emit(
-                        request_id,
-                        f"{npc.editor_id}: scheme doesn't furrify this NPC "
-                        f"(wrong race, or CharGen preset)")
-                    return
+            patched = self._resolve_preview_record(face_npc)
+            if patched is None:
+                self.bake_failed.emit(
+                    request_id,
+                    f"{npc.editor_id}: scheme doesn't furrify this NPC "
+                    f"(wrong race, or CharGen preset)")
+                return
 
             # Before emitting, check we're still the latest request.
             # A newer request already overwrote us; the result would
@@ -227,6 +225,52 @@ class PreviewWorker(QObject):
         except Exception as exc:
             log.exception("Bake failed: %s", exc)
             self.bake_failed.emit(request_id, str(exc))
+
+    def _resolve_preview_record(self, npc: Record) -> Optional[Record]:
+        """The record the preview should bake, matching what a Run would
+        produce for this NPC. Returns None if the scheme doesn't cover it.
+
+        Three cases, in order:
+
+        1. Already in our own patch — a previous Run furrified it. Use it
+           as-is; re-furrifying a furry race would fail to match.
+        2. Already furrified by an *earlier* patch left in the load
+           order. Then the Skip-furry-NPCs setting decides, exactly as it
+           does in a Run: preserve means show that patch's NPC unchanged,
+           otherwise walk back to the topmost non-furry record and
+           re-derive under the current scheme.
+        3. Not furrified — furrify it normally.
+
+        Case 2 previously fell into the plain furrify path, where
+        determine_npc_race can't match an already-furry RNAM, so the
+        preview just refused with "scheme doesn't furrify this NPC".
+        """
+        from ..context import find_pre_furry_record, is_furrified
+
+        session = self._session
+        if npc.plugin is session.patch:
+            return npc
+
+        ctx = session.context
+        if is_furrified(session.plugin_set, npc, ctx.furrifier_patch_names()):
+            preserve = (self._config or session.config).preserve_existing
+            if preserve:
+                log.debug("Preview: %s is already furrified and "
+                          "preserve-existing is on — showing it as-is",
+                          npc.editor_id)
+                return npc
+            pre = find_pre_furry_record(
+                session.plugin_set, npc, ctx.furrifier_patch_names())
+            if pre is None:
+                log.debug("Preview: %s is furrified but has no non-furry "
+                          "record to re-derive from", npc.editor_id)
+                return None
+            log.debug("Preview: re-deriving %s from its %s record",
+                      npc.editor_id,
+                      pre.plugin.file_path.name if pre.plugin else "<?>")
+            npc = pre
+
+        return ctx.furrify_npc(npc)
 
     # ----- cleanup ---------------------------------------------------------
 
