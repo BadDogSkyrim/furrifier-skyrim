@@ -361,6 +361,14 @@ class FurryContext:
                 norm_fid = subrace_rec.normalize_form_id(
                     subrace_rec.form_id)
                 self.patch.write_form_id(rnam_sr, 0, norm_fid)
+                if log.isEnabledFor(logging.DEBUG):
+                    log.debug(
+                        "[rnam] %s -> %s: subrace fid=%08X norm=%08X "
+                        "written=%08X (patch masters=%d)",
+                        patched.editor_id, assigned_race_id,
+                        int(subrace_rec.form_id), int(norm_fid),
+                        rnam_sr.get_uint32(),
+                        len(self.patch.header.masters))
 
         # Remove vanilla character customization
         patched.remove_subrecords('FTST')

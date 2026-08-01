@@ -152,6 +152,11 @@ def _headpart_texture_overrides(
     return textures
 
 
+# HDPT.PNAM type code for the Face (head) part — the one that carries
+# the per-NPC FaceGen tint and whose absence yields a headless nif.
+HDPT_TYPE_FACE = 1
+
+
 def _hdpt_type(hdpt: Record) -> Optional[int]:
     """HDPT.PNAM type code: 0 Misc, 1 Face, 2 Eyes, 3 Hair, 4 Facial
     Hair, 5 Scar, 6 Eyebrows."""
@@ -302,6 +307,25 @@ def _extract_headparts(
         entry = _hdpt_entry(hdpt, plugin_set)
         if entry is not None:
             results.append(entry)
+
+    # A missing Face part is the difference between a normal facegen and
+    # a headless one, and it is otherwise completely silent: the bake
+    # succeeds and writes a nif with eyes and hair. Most NPCs never name
+    # a Face part in their own PNAMs, so it comes from the race defaults
+    # — meaning the interesting facts are which race we resolved and
+    # what its Head Data actually yielded.
+    if not any(e.get("hdpt_type") == HDPT_TYPE_FACE for e in results):
+        log.warning(
+            "%s: no Face head part — baked nif will have no head. "
+            "race=%s sex=%s, race defaults gave types %s (%d part(s), "
+            "%d unreadable), NPC PNAMs %d, final set: %s",
+            npc.editor_id,
+            race.editor_id if race is not None else "<unresolved>",
+            "female" if is_female else "male",
+            sorted(by_type.keys()), len(by_type), len(type_none),
+            len(pnam_srs),
+            ", ".join(f"{e['hdpt_edid']}(type={e.get('hdpt_type')})"
+                      for e in results) or "<none>")
     return results
 
 
