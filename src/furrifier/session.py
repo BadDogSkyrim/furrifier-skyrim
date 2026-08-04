@@ -290,7 +290,8 @@ def build_session_over_plugins(
 
     emit("Furrifying races")
     log.info("Furrifying races...")
-    race_count = furry.furrify_all_races()
+    race_count = furry.furrify_all_races(
+        reuse_existing_subraces=config.preserve_existing)
     log.info("Furrified %d races", race_count)
 
     emit("Furrifying headpart lists")
@@ -298,10 +299,21 @@ def build_session_over_plugins(
     flst_count = furry.furrify_all_headpart_lists(plugin_set)
     log.info("Modified %d headpart FormLists", flst_count)
 
-    emit("Furrifying race presets")
-    log.info("Furrifying race presets...")
-    preset_count = furry.furrify_race_presets(plugin_set)
-    log.info("Created %d race preset NPCs", preset_count)
+    # Race chargen presets, like leveled-list extension, create brand-new
+    # NPC records — so they're skipped under --preserve-existing for the
+    # same reason. That flag marks an additive pass over an existing
+    # furrifier patch, which has already repointed the races at furrified
+    # presets; re-deriving them here would stack a second set of
+    # duplicates. The inherited RPRM/RPRF FormIDs still resolve, since
+    # the earlier patch is a master of this one.
+    if not config.preserve_existing:
+        emit("Furrifying race presets")
+        log.info("Furrifying race presets...")
+        preset_count = furry.furrify_race_presets(plugin_set)
+        log.info("Created %d race preset NPCs", preset_count)
+    else:
+        log.info("Skipping race presets (--preserve-existing): "
+                 "the patch being extended already has them")
 
     _inject_patch_into_plugin_set(plugin_set, patch)
 

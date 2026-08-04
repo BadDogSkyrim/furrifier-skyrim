@@ -59,6 +59,12 @@ class FurrifierConfig:
     # output (RNAM points at a scheme target race). Use to extend a
     # curated patch with new mods' NPCs without re-deriving the existing
     # ones. See PLAN_FURRIFIER_REFURRIFY.md.
+    #
+    # Also reads as "this is an additive pass over an existing furrifier
+    # patch", and so suppresses the two passes that mint brand-new NPC
+    # records — leveled-list extension and race chargen presets — which
+    # would otherwise stack a second set of duplicates on top of the
+    # ones the earlier patch already contributed.
     preserve_existing: bool = False
 
     # FaceGen worker pool size. None = auto (cpu_count-1, capped at 8).
@@ -214,7 +220,10 @@ def build_parser() -> argparse.ArgumentParser:
     _add_toggle(parser, 'preserve-existing', default=False,
                 dest='preserve_existing',
                 on_help='Skip NPCs whose winning override is already '
-                        'furrified (RNAM points at a scheme target race).',
+                        'furrified (RNAM points at a scheme target race). '
+                        'Also skips the passes that mint new NPC records '
+                        '(leveled-list extension and race chargen presets), '
+                        'since the patch being extended already has them.',
                 off_help='Re-derive furrified NPCs from the topmost '
                          'non-furry override to pick up scheme/classifier '
                          'fixes (default).')

@@ -74,6 +74,21 @@ class TestCacheKeys:
         b = session_cache_key(other)
         assert a != b
 
+    def test_session_key_reacts_to_preserve_existing(self, base_config):
+        """preserve_existing gates race-preset furrification, which
+        happens during session build — so a cached session must not be
+        reused across a --preserve-existing change."""
+        a = session_cache_key(base_config)
+        other = FurrifierConfig(
+            patch_filename="P.esp",
+            race_scheme="all_races",
+            game_data_dir="C:/game/Data",
+            output_dir="C:/mods/out",
+            preserve_existing=not base_config.preserve_existing,
+        )
+        b = session_cache_key(other)
+        assert a != b
+
 
 class TestGetOrLoadPlugins:
     def test_caches_on_identical_key(self, monkeypatch, base_config):

@@ -199,7 +199,8 @@ Gralnach  = "YASReachmanRaceChild"
 #    section adds occasional duplicates of vanilla NPCs into existing
 #    LVLN leveled lists, so they show up at low rates in random
 #    encounters. Omit the whole `[leveled_npcs]` section to skip this
-#    pass entirely.
+#    pass entirely. Not honored under --preserve-existing — see
+#    "How leveled-NPC extension works".
 [leveled_npcs]
 exclude_substrings = ["LCharOrc", "Thalmor"]  # LVLNs whose EditorID contains any of these are skipped
 
@@ -236,6 +237,19 @@ Rolls are **deterministic**: the same scheme + load order produces the
 same set of duplicates every run. Tweaking probabilities will reshuffle
 who gets added.
 
+**The pass is skipped under `--preserve-existing`.** That flag marks an
+additive run layered over a patch a previous run already produced, and
+each duplicate here is a brand-new NPC record — re-running the pass
+would stack a second set of duplicates and a second set of leveled-list
+entries on top of the ones already there. A line saying so goes to the
+log. `--only` skips it too, for the same reason it skips armor and
+schlongs.
+
+`--no-facegen` does *not* skip it: baking heads in the Creation Kit
+instead is a legitimate workflow, and those runs still want the
+duplicates in the plugin. Just remember the new NPCs need facegen from
+somewhere, or they'll be grey-faced in game.
+
 Useful conventions:
 - **List races that don't already have a direct vanilla pairing.** If
   `OrcRace → BDMinoRace` is in the top-of-file `races = [...]` table,
@@ -251,7 +265,8 @@ Useful conventions:
   (vanilla example: skipping Thalmor lists so they stay all-Altmer).
 - Omit the `[leveled_npcs]` section entirely to skip the whole pass.
   `cats_dogs.toml` and `user.toml` ship without it; `all_races.toml`
-  uses it for ungulate / sailor / Skaal diversity.
+  uses it for ungulate / sailor / Skaal diversity. Passing
+  `--preserve-existing` skips it too, regardless of the scheme.
 
 ### Where to put your own preferences
 

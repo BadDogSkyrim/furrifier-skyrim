@@ -62,12 +62,16 @@ def plugin_cache_key(config: FurrifierConfig,
 def session_cache_key(config: FurrifierConfig) -> tuple:
     """Fingerprint that invalidates a fully-built session when any
     scheme-dependent field changes. Options like ``furrify_armor``
-    don't affect the session — they're consumed later."""
+    don't affect the session — they're consumed later.
+
+    ``preserve_existing`` does belong here: it gates race-preset
+    furrification, which happens during session build."""
     return (
         config.race_scheme,
         config.patch_filename,
         config.game_data_dir or "",
         config.output_dir or "",
+        config.preserve_existing,
     )
 
 

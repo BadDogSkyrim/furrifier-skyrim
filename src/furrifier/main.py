@@ -129,15 +129,30 @@ def _run_furrification_body(
         preserve_existing=config.preserve_existing)
     log.info(f"Furrified {npc_count} NPCs")
 
-    # Extend leveled NPC lists with furry duplicates. --only mode skips
-    # this — leveled-list extension creates NPC duplicates across the
-    # whole load order, which defeats the "one NPC for visual diffing"
-    # purpose of --only.
-    if ctx.leveled_npc_groups and config.only_npc is None:
-        log.info("Extending leveled NPC lists...")
-        new_count, list_count = furry.extend_leveled_npcs(plugin_set)
-        log.info(
-            f"Created {new_count} leveled-list NPCs across {list_count} lists")
+    # Extend leveled NPC lists with furry duplicates.
+    #
+    # Skipped under --preserve-existing, which marks an additive pass
+    # layered over an existing furrifier patch. Every duplicate here is a
+    # brand-new NPC record, so re-running the pass over a patch that
+    # already has them just stacks a second set of duplicates and a
+    # second set of LVLO entries. Note this is deliberately NOT gated on
+    # --facegen: baking heads in the CK instead is a legitimate workflow,
+    # and those users still want the duplicates in their plugin.
+    #
+    # --only mode also skips it — leveled-list extension creates NPC
+    # duplicates across the whole load order, which defeats the "one NPC
+    # for visual diffing" purpose of --only.
+    if ctx.leveled_npc_groups:
+        if config.preserve_existing:
+            log.info("Skipping leveled NPC lists (--preserve-existing): "
+                     "the patch being extended already has them")
+        elif config.only_npc is not None:
+            log.info("Skipping leveled NPC lists (--only)")
+        else:
+            log.info("Extending leveled NPC lists...")
+            new_count, list_count = furry.extend_leveled_npcs(plugin_set)
+            log.info(f"Created {new_count} leveled-list NPCs across "
+                     f"{list_count} lists")
 
     # Furrify armor (skipped under --only — armor is a load-order-wide
     # transform unrelated to a single NPC's facegen).
