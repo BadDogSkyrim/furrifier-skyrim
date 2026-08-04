@@ -18,11 +18,13 @@ whose furry race is absent are removed.
 from __future__ import annotations
 
 import logging
+import struct
 from typing import Optional
 
 from esplib import Plugin, Record
 from esplib import flst_add, flst_contains, flst_forms, flst_remove
 from esplib import glob_copy_as
+from esplib.utils import FormID
 from esplib.vmad import VmadData, PROP_OBJECT
 
 from .models import Bodypart
@@ -31,21 +33,58 @@ from .util import get_bodypart_flags, short_race_name as _short_race_name
 log = logging.getLogger(__name__)
 
 
+def _patch_get_or_copy(patch: Plugin, rec: Record) -> Record:
+    """Return the patch's override of `rec`, creating it only if absent.
+
+    The armor pass (context.furrify_all_armor) and the schlong passes
+    below both touch the same sheath ARMAs. Calling patch.copy_record()
+    unconditionally in each wrote two records sharing one FormID -- the
+    engine reads whichever it reaches first, so one pass's additions were
+    silently discarded. Always reuse an existing override.
+    """
+    norm_fid = rec.normalize_form_id(rec.form_id)
+    patch_fid = patch.denormalize_form_id(norm_fid)
+    existing = patch.get_record_by_form_id(patch_fid)
+    if existing is not None:
+        return existing
+    return patch.copy_record(rec)
+
+
+def _race_fids(rec: Record) -> set[int]:
+    """Normalized FormIDs of every race an ARMA references (RNAM + MODL)."""
+    fids: set[int] = set()
+    rnam = rec.get_subrecord('RNAM')
+    if rnam and rnam.size >= 4:
+        fids.add(rec.normalize_form_id(rnam.get_form_id()).value)
+    for sr in rec.get_subrecords('MODL'):
+        if sr.size >= 4:
+            fids.add(rec.normalize_form_id(sr.get_form_id()).value)
+    return fids
+
+
 def furrify_all_schlongs(plugins,
                          patch: Plugin,
                          race_assignments: dict[str, str],
                          furry_races: dict[str, list[str]],
                          races: dict[str, Record],
+                         subrace_edids: Optional[list[str]] = None,
                          ) -> int:
     """Add furry races to SOS addon race lists.
 
     race_assignments: vanilla_edid -> furry_edid
     furry_races: furry_edid -> list of vanilla_edids assigned to it
     races: edid -> Record for all known races
+    subrace_edids: names of the subraces we create, for the SOS setup
+        cloak fix (see `patch_sos_setup_races`)
 
     Returns count of quests modified.
     """
     count = 0
+    # The SFW build runs this pass with SOS absent from the load order.
+    # Track whether SOS is actually present so the setup-cloak fix below
+    # can stay quiet instead of warning about a record that was never
+    # supposed to be there.
+    saw_addon_quest = False
 
     # Build FormID lookups (normalized to load-order space)
     race_fid_by_edid = {}
@@ -83,6 +122,7 @@ def furrify_all_schlongs(plugins,
                 continue
 
             log.info(f"Found SOS quest: {quest.editor_id}")
+            saw_addon_quest = True
 
             # Extract the three FormList references
             compat_prop = sos_script.get_property('SOS_Addon_CompatibleRaces')
@@ -129,7 +169,118 @@ def furrify_all_schlongs(plugins,
     if arma_count:
         log.info(f"Added subrace support to {arma_count} SOS sheath ARMAs")
 
+    if subrace_edids and saw_addon_quest:
+        setup_count = patch_sos_setup_races(
+            plugins, patch, subrace_edids, race_fid_by_edid)
+        if setup_count:
+            log.info(f"Added {setup_count} subrace(s) to the SOS setup cloak")
+
     return count
+
+
+# The magic effect the SOS setup cloak applies to nearby NPCs; its script
+# is what hands out SOS_ActorSpell, and an actor that never gets that
+# spell is never considered for a schlong at all.
+_SOS_SETUP_MGEF_EDID = 'SOS_SetupNPCMagicEffect'
+_CTDA_GETISRACE = 69
+_CTDA_PARAM1_OFFSET = 12
+
+
+def patch_sos_setup_races(plugins, patch: Plugin,
+                          subrace_edids: list[str],
+                          race_fid_by_edid: dict[str, 'FormID'],
+                          ) -> int:
+    """Add our subraces to the SOS setup cloak's condition list.
+
+    `SOS_SetupNPCMagicEffect` gates itself on an OR-chain that reads
+    "GetIsPlayableRace == 1, OR the race is one of DefaultRace /
+    ElderRace / DremoraRace / DA13AfflictedRace / WerewolfBeastRace /
+    GiantRace, OR the actor is a vampire, OR is already schlongified."
+    In other words: playable races, plus a hand-picked list of the
+    non-playable ones SOS wants to cover anyway.
+
+    Our subraces (Sailor, Reachman, Skaal, Alikr, ...) are deliberately
+    non-playable — they exist only to give NPCs a distinct look and would
+    otherwise clutter the chargen race menu. That puts them outside every
+    branch of the chain, so the cloak never fires on them, they never
+    receive SOS_ActorSpell, and SOS never evaluates them for a schlong.
+    The symptom is specific and confusing: the MCM shows the race as
+    compatible and enabled at 100%, manual assignment works fine, but
+    automatic distribution silently never happens.
+
+    Fix it the same way SOS handles its own non-playable races — one more
+    `GetIsRace <subrace> == 1` OR-clause each. Child variants are left
+    out to match vanilla, where child races are non-playable and absent
+    from the list.
+
+    Returns the number of races added.
+    """
+    from .context import _variant_suffix
+
+    wanted: list[tuple[str, 'FormID']] = []
+    for edid in subrace_edids:
+        if 'Child' in _variant_suffix(edid):
+            continue
+        fid = race_fid_by_edid.get(edid)
+        if fid is not None:
+            wanted.append((edid, fid))
+    if not wanted:
+        return 0
+
+    # Winning override of the setup effect, across the load order.
+    mgef = None
+    for plugin in plugins:
+        for rec in plugin.get_records_by_signature('MGEF'):
+            if rec.editor_id == _SOS_SETUP_MGEF_EDID:
+                mgef = rec
+    if mgef is None:
+        log.warning(f"{_SOS_SETUP_MGEF_EDID} not found — subrace NPCs will "
+                    f"not be considered for schlongs")
+        return 0
+
+    patched = _patch_get_or_copy(patch, mgef)
+    conditions = patched.get_subrecords('CTDA')
+    if not conditions:
+        log.warning(f"{_SOS_SETUP_MGEF_EDID} has no conditions — refusing to "
+                    f"add any (an unconditional effect would apply to "
+                    f"every actor)")
+        return 0
+
+    # Reuse a real GetIsRace condition as the template so the flag byte,
+    # comparison value and trailing bytes match SOS's own exactly. Only
+    # the race FormID differs.
+    template = None
+    present: set[int] = set()
+    for sr in conditions:
+        data = bytes(sr.data)
+        if len(data) < _CTDA_PARAM1_OFFSET + 4:
+            continue
+        if struct.unpack('<I', data[8:12])[0] != _CTDA_GETISRACE:
+            continue
+        if template is None:
+            template = data
+        raw = struct.unpack(
+            '<I', data[_CTDA_PARAM1_OFFSET:_CTDA_PARAM1_OFFSET + 4])[0]
+        present.add(patched.normalize_form_id(FormID(raw)).value)
+
+    if template is None:
+        log.warning(f"{_SOS_SETUP_MGEF_EDID} has no GetIsRace condition to "
+                    f"use as a template")
+        return 0
+
+    added = 0
+    for edid, fid in wanted:
+        if fid.value in present:
+            continue
+        # CTDAs are the last subrecords on this record, so appending
+        # keeps them contiguous and in a valid position.
+        sr = patched.add_subrecord('CTDA', bytearray(template))
+        patch.write_form_id(sr, _CTDA_PARAM1_OFFSET, fid)
+        present.add(fid.value)
+        added += 1
+        log.debug(f"  SOS setup cloak: added {edid}")
+
+    return added
 
 
 def _furrify_schlong_armas(plugins, patch: Plugin,
@@ -155,27 +306,19 @@ def _furrify_schlong_armas(plugins, patch: Plugin,
             if not (get_bodypart_flags(arma) & Bodypart.SCHLONG):
                 continue
 
-            arma_obj = arma.form_id.value & 0x00FFFFFF
-            if arma_obj in seen_armas:
+            # Key on the normalized FormID, not the bare object index --
+            # unrelated ARMAs in different plugins share object indices.
+            arma_key = arma.normalize_form_id(arma.form_id).value
+            if arma_key in seen_armas:
                 continue
-            seen_armas.add(arma_obj)
+            seen_armas.add(arma_key)
 
-            existing: set[int] = set()
+            existing = _race_fids(arma)
             current_edids: list[str] = []
-            rnam = arma.get_subrecord('RNAM')
-            if rnam and rnam.size >= 4:
-                fid = arma.normalize_form_id(rnam.get_form_id()).value
-                existing.add(fid)
+            for fid in existing:
                 edid = race_edid_by_fid.get(fid)
                 if edid:
                     current_edids.append(edid)
-            for sr in arma.get_subrecords('MODL'):
-                if sr.size >= 4:
-                    fid = arma.normalize_form_id(sr.get_form_id()).value
-                    existing.add(fid)
-                    edid = race_edid_by_fid.get(fid)
-                    if edid:
-                        current_edids.append(edid)
 
             to_add: list[tuple[str, 'FormID']] = []
             for race_edid in current_edids:
@@ -189,13 +332,22 @@ def _furrify_schlong_armas(plugins, patch: Plugin,
             if not to_add:
                 continue
 
-            patched = patch.copy_record(arma)
+            patched = _patch_get_or_copy(patch, arma)
+            # Re-read from the patched record: the armor pass may already
+            # have added some of these races to this same override.
+            present = _race_fids(patched)
+            added_any = False
             for vanilla_edid, vanilla_fid in to_add:
+                if vanilla_fid.value in present:
+                    continue
                 sr = patched.add_subrecord('MODL', b'\x00\x00\x00\x00')
                 patch.write_form_id(sr, 0, vanilla_fid)
+                present.add(vanilla_fid.value)
+                added_any = True
                 log.debug(
                     f"  Added {vanilla_edid} to {arma.editor_id} races")
-            count += 1
+            if added_any:
+                count += 1
 
     return count
 
@@ -333,17 +485,9 @@ def _furrify_schlong_lists(compat_flst: Record, prob_flst: Record,
         log.debug(f"  Added {vanilla_edid} to SOS lists")
 
     # Write all three lists from the parallel entries
-    def _get_or_copy(flst_rec):
-        norm_fid = flst_rec.normalize_form_id(flst_rec.form_id)
-        patch_fid = patch.denormalize_form_id(norm_fid)
-        existing = patch.get_record_by_form_id(patch_fid)
-        if existing is not None:
-            return existing
-        return patch.copy_record(flst_rec)
-
-    compat_patched = _get_or_copy(compat_flst)
-    prob_patched = _get_or_copy(prob_flst)
-    size_patched = _get_or_copy(size_flst)
+    compat_patched = _patch_get_or_copy(patch, compat_flst)
+    prob_patched = _patch_get_or_copy(patch, prob_flst)
+    size_patched = _patch_get_or_copy(patch, size_flst)
 
     # Clear existing LNAMs
     compat_patched.remove_subrecords('LNAM')
