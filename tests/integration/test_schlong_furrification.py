@@ -35,10 +35,16 @@ SCHLONG_PLUGINS = [
     "Schlongs of Skyrim - Core.esm",
     "BDCatRaces.esp",
     "YASCanineRaces.esp",
+    # CellanRace shares object index 000800 with YASKaloRace in
+    # BDCatRaces.esp; CellanHoodieSchlong supplies the sheath ARMAs that
+    # the collision corrupted. Both are needed for
+    # TestObjectIndexCollisions below.
+    "CellanRace.esp",
     "Schlongs of Skyrim.esp",
     "BadDogSchlongCore.esp",
     "BDCatRaceSchlongs.esp",
     "YASCanineSchlongs.esp",
+    "CellanHoodieSchlong.esp",
 ]
 
 from conftest import plugins_available
@@ -325,3 +331,96 @@ class TestSubraceSheathARMAs:
             plugin_set, patch, races, 'YASVaalsarkSheathMale00BP')
         assert 'YASSkaalRaceVampire' in edids, \
             f"YASSkaalRaceVampire missing from YASVaalsarkSheathMale00BP races: {edids}"
+
+
+@pytest.fixture(scope="module")
+def armor_and_schlong_result(plugin_set, ctx, data_dir):
+    """Run races -> armor -> schlongs on ONE patch, as main.py does.
+
+    Both the armor pass and the schlong pass touch sheath ARMAs. Running
+    only one of them hides two real defects: races colliding on object
+    index, and each pass copying the same ARMA into the patch separately.
+    """
+    patch = Plugin.new_plugin(data_dir / 'ArmorSchlongTEST.esp')
+    patch.plugin_set = plugin_set
+
+    races_by_edid_info = load_races(plugin_set, ctx)
+    races = {edid: info.record for edid, info in races_by_edid_info.items()}
+    headparts = load_headparts(plugin_set, ctx)
+    race_headparts = build_race_headparts(list(plugin_set), headparts)
+    race_tints = build_race_tints(list(plugin_set))
+
+    furry = FurryContext(
+        patch=patch, ctx=ctx, races=races,
+        all_headparts=headparts, race_headparts=race_headparts,
+        race_tints=race_tints, plugin_set=plugin_set)
+    furry.furrify_all_races()
+
+    # Same order as main.py: armor first, then schlongs.
+    furry.merge_armor_overrides(plugin_set)
+    furry.furrify_all_armor(plugin_set)
+
+    race_assignments = {a.vanilla_id: a.furry_id
+                        for a in ctx.assignments.values()}
+    furry_to_vanilla: dict[str, list[str]] = {}
+    for a in ctx.assignments.values():
+        furry_to_vanilla.setdefault(a.furry_id, []).append(a.vanilla_id)
+    for sub in ctx.subraces.values():
+        race_assignments[sub.name] = sub.furry_id
+        furry_to_vanilla.setdefault(sub.furry_id, []).append(sub.name)
+
+    furrify_all_schlongs(list(plugin_set), patch, race_assignments,
+                         furry_to_vanilla, furry.races)
+    return patch, furry.races
+
+
+class TestArmorAndSchlongTogether:
+    """Both passes on one patch -- the combination that shipped broken.
+
+    NOTE on DarkElfRace: the Cellan sheath ARMA legitimately carries most
+    furrified vanilla races, DarkElfRace among them. Its RNAM is
+    KhajiitRace, which _build_armor_fallbacks treats as the armor race
+    for many furry races, so any ARMA carrying KhajiitRace claims their
+    vanilla races (156 of 229 KhajiitRace ARMAs carry DarkElfRace). That
+    is the fallback working as designed, not a FormID defect -- do not
+    add a test asserting DarkElfRace is absent here.
+    """
+
+    def test_cellan_sheath_keeps_its_own_subrace(self,
+                                                 armor_and_schlong_result,
+                                                 plugin_set):
+        """The schlong pass must add CellanRace's own vanilla mapping.
+
+        YASSailorRace is added by the schlong pass; the armor pass adds
+        the rest. If the two passes fight over the record (as they did
+        when each copied it separately) this is what goes missing.
+        """
+        patch, races = armor_and_schlong_result
+        edids = _arma_race_edids(
+            plugin_set, patch, races, 'SOS_Addon_BDCellan_P0AA')
+        assert edids, "SOS_Addon_BDCellan_P0AA not found"
+        assert 'YASSailorRace' in edids, (
+            "YASSailorRace is CellanRace's only vanilla mapping and should "
+            f"be on the Cellan sheath ARMA. Races on the ARMA: {sorted(edids)}")
+
+    def test_no_duplicate_arma_form_ids(self, armor_and_schlong_result):
+        """Each ARMA may appear in the patch only once.
+
+        The armor pass and the schlong pass both copy sheath ARMAs; when
+        each copied unconditionally the patch ended up with two records
+        per FormID (100 of 195 ARMAs in one shipped build) and the engine
+        read whichever it reached first.
+        """
+        patch, _ = armor_and_schlong_result
+        seen: dict[int, str] = {}
+        dupes: list[str] = []
+        for rec in patch.get_records_by_signature('ARMA'):
+            fid = rec.form_id.value
+            if fid in seen:
+                dupes.append(f"{fid:08X} {rec.editor_id!r} "
+                             f"(also {seen[fid]!r})")
+            else:
+                seen[fid] = rec.editor_id or '?'
+        assert not dupes, (
+            f"{len(dupes)} duplicate ARMA FormID(s) in the patch:\n  "
+            + "\n  ".join(dupes[:20]))

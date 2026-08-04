@@ -37,6 +37,11 @@ PLUGIN_NAMES = [
     "Dragonborn.esm",
     "BDCatRaces.esp",
     "YASCanineRaces.esp",
+    # CellanRace shares object index 000800 with YASKaloRace in
+    # BDCatRaces.esp. Loading both is what makes that collision
+    # reproducible in tests -- see TestObjectIndexCollisions in
+    # test_armor_furrification.py.
+    "CellanRace.esp",
 ]
 
 
