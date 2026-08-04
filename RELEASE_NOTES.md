@@ -1,5 +1,52 @@
 # Release notes
 
+## v1.6.1 — 2026-08-04
+
+Four fixes to additive runs — a second pass layered over an earlier
+furrifier patch (`--preserve-existing`) was minting duplicates of
+records the first patch already owned, which split race identity and
+quietly broke SOS. Plus the reason SOS never gave subrace NPCs a
+schlong on its own.
+
+### Fixed
+
+- **Duplicate subrace RACE records.** An additive pass created its own
+  copy of every subrace (Sailor, Reachman, Skaal, ...) instead of
+  reusing the ones already in the load order. Two RACE records ended up
+  sharing an EditorID while holding different FormIDs, so everything the
+  second patch wrote — SOS compatible-race lists, sheath ARMA race lists
+  — pointed at the duplicate while the NPCs still pointed at the
+  original. SOS then read the schlong as invalid for the actor's race.
+  In xEdit both sides read `YASSailorRace`, which is what made it hard
+  to see. Real run: 12 duplicate races, gone.
+
+- **No schlongs auto-assigned to subrace NPCs.** SOS spreads itself with
+  a cloak whose magic effect gates on "playable race, or one of six
+  named non-playable ones." Subraces are deliberately non-playable so
+  they stay out of the chargen menu, so the cloak never fired on them,
+  they never received `SOS_ActorSpell`, and SOS never considered them.
+  The symptom was specific: the MCM listed the race as compatible and
+  enabled at 100%, manual assignment worked, automatic distribution
+  silently never happened. Subraces are now added to that condition
+  list the same way SOS handles its own non-playable races. Affected
+  every subrace, not just the one it was noticed on — 185 Forsworn
+  included.
+
+- **Leveled lists and race presets duplicated on additive runs.** Both
+  passes mint brand-new NPC records, and re-running them over a patch
+  that already has them stacked a second set. A real NSFW pass was
+  creating ~900 leveled-list NPCs on top of the ~906 the first patch
+  contributed, none with FaceGen. Both passes are now skipped under
+  `--preserve-existing`. They still run under `--no-facegen`: baking
+  heads in the Creation Kit instead is a legitimate workflow.
+
+- **Bad FormID in headpart FormLists.** The headpart pass read a
+  subrace's FormID raw, which is only correct for a record the patch
+  minted itself; an adopted one is in its own plugin's master space and
+  wrote a reference to an unrelated record. The same pass could also
+  append a race the list already contained, when the existing entry sat
+  later in the list than the furry race that triggers the add.
+
 ## v1.6.0 — 2026-08-01
 
 Three silent facegen failures fixed — each one produced NPCs with no
