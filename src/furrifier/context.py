@@ -1813,6 +1813,80 @@ class FurryContext:
         return keys
 
 
+    @staticmethod
+    def _merge_addon_order(overrides, tie_break):
+        """Merge several overrides' ARMA orderings into one.
+
+        `overrides` is [(load_index, [normalized addon key, ...])] and
+        `tie_break` maps an addon key to a sort key (in production, the
+        pre-existing mods-first-then-base ordering).
+
+        Each override states a total order over the addons it lists.
+        Every ordered pair is a constraint owned by that plugin; a
+        later-loading override wins a pair an earlier one ordered
+        differently. Pairs no override mentions -- and cycles, when three
+        overrides disagree in a rock-paper-scissors -- fall back to
+        `tie_break`, so the result is always total and always
+        deterministic.
+
+        Base plugins participate like any other; they simply load first
+        and so lose every contested pair. That is the point: USSEP is
+        authoritative about WHICH addons exist, not about their order,
+        and conflating the two is what discarded the race mods'
+        deliberate reorderings. See PLAN_FURRIFIER_ARMOR_ORDER.md.
+
+        Addon lists run 3-6 entries, so all-pairs costs nothing.
+        """
+        # Unordered pair -> (deciding load index, (first, second))
+        constraint: dict[frozenset, tuple] = {}
+        members: list[int] = []
+        seen: set[int] = set()
+        for load_index, keys in overrides:
+            unique = [k for k in dict.fromkeys(keys)]
+            for k in unique:
+                if k not in seen:
+                    seen.add(k)
+                    members.append(k)
+            for i, a in enumerate(unique):
+                for b in unique[i + 1:]:
+                    pair = frozenset((a, b))
+                    prev = constraint.get(pair)
+                    if prev is None or prev[0] <= load_index:
+                        constraint[pair] = (load_index, (a, b))
+
+        # Deterministic tie-break, also the fallback ordering inside a
+        # cycle. Ties in tie_break itself resolve by first-seen.
+        position = {k: i for i, k in enumerate(members)}
+        members.sort(key=lambda k: (tie_break(k), position[k]))
+        rank = {k: i for i, k in enumerate(members)}
+
+        edges = {pair_order: load_index
+                 for load_index, pair_order in constraint.values()}
+
+        out: list[int] = []
+        remaining = set(members)
+        while remaining:
+            indegree = {k: 0 for k in remaining}
+            for a, b in edges:
+                if a in remaining and b in remaining:
+                    indegree[b] += 1
+            ready = [k for k in remaining if indegree[k] == 0]
+            if not ready:
+                # Contradictory constraints. Drop the lowest-precedence
+                # edge still in play -- the earliest-loading claim is the
+                # one to give up -- and try again.
+                live = {e: w for e, w in edges.items()
+                        if e[0] in remaining and e[1] in remaining}
+                weakest = min(live, key=lambda e: (live[e], rank[e[0]],
+                                                   rank[e[1]]))
+                del edges[weakest]
+                continue
+            pick = min(ready, key=lambda k: rank[k])
+            out.append(pick)
+            remaining.discard(pick)
+        return out
+
+
     def _find_base_override(self, overrides: list[Record]) -> Record:
         """Find the most authoritative override for base keywords/addons.
 
@@ -1840,7 +1914,8 @@ class FurryContext:
         return False
 
 
-    def merge_armor_overrides(self, plugins) -> int:
+    def merge_armor_overrides(self, plugins,
+                              preserve_existing: bool = False) -> int:
         """Merge ARMA references and keywords across ARMO overrides.
 
         When multiple mods override the same ARMO to add their ARMA
@@ -1848,13 +1923,40 @@ class FurryContext:
         This method merges MODL (ARMA refs) and KWDA (keywords) using:
 
         1. Find the best base override (USSEP > DLCs > Update > Skyrim)
-        2. Start with the base's MODL/KWDA as the authoritative set
+        2. Start with the base's MODL/KWDA as the authoritative set --
+           MEMBERSHIP only; that is what USSEP's removals are about
         3. Add any MODL/KWDA introduced by non-base mod overrides
-        4. Sort MODL by plugin order (mod ARMAs first, base last) so
-           furrify_all_armor's priority-by-order works correctly
+        4. Merge the MODL ORDER as pairwise constraints across every
+           override, later load order winning (_merge_addon_order), so
+           furrify_all_armor's priority-by-order sees what the race mods
+           actually asked for
+
+        Step 4 used to sort by "mod plugins first, base last", which
+        attributed every vanilla addon to the base plugin and so always
+        reproduced VANILLA order within that block. A mod that reorders
+        vanilla entries -- which both YASCanineRaces and BDUngulates do,
+        demoting the human/mer catch-all below the Khajiit addon -- had
+        its intent structurally discarded, on 31 ARMOs of a real load
+        order. Membership and ordering are now separate concerns.
+
+        `preserve_existing` mirrors the NPC pass. The current run's
+        target patch is the one plugin that gets special treatment: when
+        preserving we are keeping its choices, so its addon order counts;
+        otherwise we are re-deriving and it must not pin this run's
+        order, or a bad order outlives the run that produced it. Older,
+        differently-named furrifier patches keep their vote either way.
 
         Returns count of ARMO records merged.
         """
+        patch_name = (self.patch.file_path.name.lower()
+                      if self.patch.file_path else None)
+
+        def _votes_on_order(rec: Record) -> bool:
+            if preserve_existing or patch_name is None:
+                return True
+            return not (rec.plugin and rec.plugin.file_path
+                        and rec.plugin.file_path.name.lower() == patch_name)
+
         # Build plugin name -> load index for sorting
         plugin_index: dict[str, int] = {}
         for i, plugin in enumerate(plugins):
@@ -1862,8 +1964,19 @@ class FurryContext:
                 plugin_index[plugin.file_path.name.lower()] = i
         base_names = set(self._ARMOR_BASE_PRIORITY)
 
+        def _plugin_load_index(src_rec: Record) -> int:
+            """Plain load-order position -- the precedence a plugin's
+            ordering claims carry. Later loading wins, exactly as it
+            does for every other kind of conflict."""
+            if src_rec.plugin and src_rec.plugin.file_path:
+                return plugin_index.get(
+                    src_rec.plugin.file_path.name.lower(), 0)
+            return 0
+
         def _plugin_sort_key(src_rec: Record) -> int:
-            """Sort key: mod plugins by load order, base plugins last."""
+            """Tie-break for addon pairs no override ever ordered: mod
+            plugins by load order, base plugins last. This was the whole
+            ordering rule before; it is now only the fallback."""
             if src_rec.plugin and src_rec.plugin.file_path:
                 name = src_rec.plugin.file_path.name.lower()
                 idx = plugin_index.get(name, 0)
@@ -1935,11 +2048,39 @@ class FurryContext:
                 if sr.size >= 4]
             winner_kwda = self._packed_ref_keys(winner, 'KWDA')
 
-            # Sort MODL: mod-added ARMAs first (by load order), base last
-            sorted_modl = sorted(
-                merged_modl.items(),
-                key=lambda item: _plugin_sort_key(item[1][1]))
-            sorted_modl_keys = [key for key, _ in sorted_modl]
+            # Order MODL by merging every override's stated order, later
+            # load order winning. Restricted to the merged membership --
+            # a base-priority override that lost the membership contest
+            # (e.g. Dawnguard when USSEP is the base) still gets a vote on
+            # the order of the entries that DID survive, but must not
+            # reintroduce ones USSEP removed.
+            order_sources = []
+            for rec in overrides:
+                if not _votes_on_order(rec):
+                    continue
+                keys = [k for k in (
+                    rec.normalize_form_id(sr.get_form_id()).value
+                    for sr in rec.get_subrecords('MODL') if sr.size >= 4)
+                    if k in merged_modl]
+                if keys:
+                    order_sources.append(
+                        (_plugin_load_index(rec), keys))
+
+            def _tie_break(k):
+                return _plugin_sort_key(merged_modl[k][1])
+
+            sorted_modl_keys = self._merge_addon_order(
+                order_sources, _tie_break)
+            # Membership is decided above, ordering here -- so anything
+            # the ordering pass didn't see still has to come along. That
+            # happens when the only override listing an addon is one that
+            # doesn't vote (the run's own target patch under re-derive).
+            # Dropping it here would silently REMOVE the addon.
+            unordered = [k for k in merged_modl if k not in sorted_modl_keys]
+            if unordered:
+                sorted_modl_keys = sorted_modl_keys + sorted(
+                    unordered, key=_tie_break)
+            sorted_modl = [(k, merged_modl[k]) for k in sorted_modl_keys]
 
             need_modl = (sorted_modl_keys != winner_modl_list)
             need_kwda = set(merged_kwda.keys()) != winner_kwda

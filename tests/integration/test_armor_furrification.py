@@ -214,6 +214,92 @@ class TestArmorAddonMerge:
         furrify_and_check(write, verify)
 
 
+    def test_orcish_helmet_honours_the_race_mods_order(
+            self, furrify_and_check, plugin_set):
+        """The reported bug, pinned.
+
+        Vanilla ArmorOrcishHelmet lists the human/mer catch-all
+        OrcishHelmetAA BEFORE OrcishHelmetKhajiitAA. Both YASCanineRaces
+        and BDUngulates override it to demote the catch-all below the
+        Khajiit addon; the old sort reproduced vanilla order regardless,
+        because it attributed every vanilla entry to the base plugin and
+        sorted that whole block last. Hugh hand-fixed exactly this one
+        record and confirmed it fixed the in-game symptom.
+        """
+        catch_all = plugin_set.get_record_by_edid('ARMA', 'OrcishHelmetAA')
+        khajiit = plugin_set.get_record_by_edid(
+            'ARMA', 'OrcishHelmetKhajiitAA')
+        assert catch_all is not None and khajiit is not None
+        catch_all_obj = catch_all.form_id.object_index
+        khajiit_obj = khajiit.form_id.object_index
+        source_winner = plugin_set.get_record_by_edid(
+            'ARMO', 'ArmorOrcishHelmet')
+        assert source_winner is not None
+
+
+        def write(furry_ctx):
+            furry_ctx.merge_armor_overrides(plugin_set)
+
+
+        def verify(reloaded):
+            # What matters is the EFFECTIVE order. When the winning
+            # override already carries the merged result the pass
+            # correctly writes nothing, so fall back to it. A broken
+            # ordering would differ from the winner and therefore DO
+            # write a record -- with the catch-all in front, which is
+            # what this asserts against.
+            rec = find_by_edid(reloaded, 'ArmorOrcishHelmet') or source_winner
+            order = [sr.get_form_id().object_index
+                     for sr in rec.get_subrecords('MODL')
+                     if sr.size >= 4]
+            assert khajiit_obj in order and catch_all_obj in order, \
+                f"expected both addons in {[hex(o) for o in order]}"
+            assert order.index(khajiit_obj) < order.index(catch_all_obj), (
+                f"OrcishHelmetKhajiitAA must come before the catch-all "
+                f"OrcishHelmetAA; got {[hex(o) for o in order]}")
+
+        furrify_and_check(write, verify)
+
+
+    def test_the_catch_all_is_last_among_vanilla_addons(
+            self, furrify_and_check, plugin_set):
+        """Generalises the case above: the vanilla catch-all addon (the
+        one carrying every human/mer race) must not sit in front of the
+        race-specific vanilla addons, which is what a first-match lookup
+        walks past."""
+        names = ('OrcishHelmetAA', 'OrcishHelmetKhajiitAA',
+                 'OrcishHelmetArgonianAA')
+        objs = {}
+        for n in names:
+            rec = plugin_set.get_record_by_edid('ARMA', n)
+            assert rec is not None, f"{n} not found"
+            objs[n] = rec.form_id.object_index
+        source_winner = plugin_set.get_record_by_edid(
+            'ARMO', 'ArmorOrcishHelmet')
+        assert source_winner is not None
+
+
+        def write(_furry_ctx):
+            pass  # merged by the test above
+
+
+        def verify(reloaded):
+            rec = find_by_edid(reloaded, 'ArmorOrcishHelmet') or source_winner
+            order = [sr.get_form_id().object_index
+                     for sr in rec.get_subrecords('MODL')
+                     if sr.size >= 4]
+            pos = {n: order.index(o) for n, o in objs.items() if o in order}
+            assert 'OrcishHelmetAA' in pos
+            for specific in ('OrcishHelmetKhajiitAA',
+                             'OrcishHelmetArgonianAA'):
+                if specific in pos:
+                    assert pos[specific] < pos['OrcishHelmetAA'], (
+                        f"{specific} should precede the catch-all; "
+                        f"got {[hex(o) for o in order]}")
+
+        furrify_and_check(write, verify)
+
+
 class TestNonHeadArmor:
     """Body-only armor should not be modified by furrification."""
 

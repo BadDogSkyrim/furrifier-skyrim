@@ -159,7 +159,8 @@ def _run_furrification_body(
     if config.furrify_armor and config.only_npc is None:
         emit("Merging armor overrides")
         log.info("Merging armor overrides...")
-        merge_count = furry.merge_armor_overrides(plugin_set)
+        merge_count = furry.merge_armor_overrides(
+            plugin_set, preserve_existing=config.preserve_existing)
         log.info(f"Merged {merge_count} ARMO records")
 
         emit("Furrifying armor")
