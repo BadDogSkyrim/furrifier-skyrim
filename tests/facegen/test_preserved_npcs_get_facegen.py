@@ -31,6 +31,12 @@ class _Rec:
     def get_subrecord(self, sig):
         return None
 
+    def normalize_form_id(self, fid):
+        """Record identity goes through this (furrifier.util.record_key).
+        One synthetic plugin, so load-order space is the stub's own."""
+        from esplib.utils import AbsoluteFormID
+        return AbsoluteFormID(int(fid))
+
 
 class _Patch:
     def __init__(self, records):

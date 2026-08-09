@@ -23,7 +23,9 @@ from .headparts import (
     load_npc_labels, find_similar_headpart, _should_assign,
     _PROBABILITY_GATED_TYPES, _ci_lookup, _is_excluded,
 )
-from .util import get_bodypart_flags, hash_string, short_race_name
+from .util import (
+    get_bodypart_flags, hash_string, short_race_name, record_key, ref_key,
+)
 from .tints import choose_breed_tints, choose_furry_tints
 
 log = logging.getLogger(__name__)
@@ -36,6 +38,10 @@ FURRIFIABLE_BODYPARTS = (
 
 # Race EditorID variant suffixes, longest-match first.
 _RACE_VARIANT_SUFFIXES = ('ChildVampire', 'Vampire', 'Child')
+
+# High byte of a plugin-local FormID: a reference to one of the plugin's
+# OWN records, stamped with the real self index at save time.
+_LOCAL_SENTINEL_HIGH = 0xFF000000
 
 # RACE DATA layout: skill boosts (14) + padding (2) + male/female height
 # and weight (4 floats) puts the flags uint32 at offset 32. Bit 0 is
@@ -164,6 +170,7 @@ class FurryContext:
         self.plugin_set = plugin_set
         self.max_tint_layers = max_tint_layers
         self._furrifier_patch_names_cache: Optional[set[str]] = None
+        self._headpart_by_key_cache: Optional[dict[int, HeadpartInfo]] = None
         # NPCs left alone under --preserve-existing: already furrified
         # by an earlier patch, so we keep that patch's per-NPC choices
         # rather than re-deriving. They get no record in our patch, but
@@ -179,6 +186,22 @@ class FurryContext:
     def _copy_record(self, record, source_plugin=None):
         """Copy a record into the patch, with string fallback resolution."""
         return self.patch.copy_record(record, source_plugin)
+
+
+    def headpart_by_key(self) -> dict[int, HeadpartInfo]:
+        """Cached record-key -> HeadpartInfo index.
+
+        `all_headparts` is keyed by EditorID; resolving a PNAM reference
+        needs the other direction. Built once because the callers sit in
+        per-NPC loops -- the linear scan this replaces walked all ~2500
+        headparts per PNAM per NPC.
+        """
+        if self._headpart_by_key_cache is None:
+            self._headpart_by_key_cache = {
+                record_key(hp.record): hp
+                for hp in self.all_headparts.values() if hp.record
+            }
+        return self._headpart_by_key_cache
 
 
     def furrifier_patch_names(self) -> set[str]:
@@ -422,13 +445,8 @@ class FurryContext:
 
         assigned_types: set[HeadpartType] = set()
         for old_sr in old_headpart_srs:
-            old_fid = old_sr.get_uint32()
-            old_obj_id = old_fid & 0x00FFFFFF
-            old_hp = None
-            for hp in self.all_headparts.values():
-                if hp.record and (hp.record.form_id.value & 0x00FFFFFF) == old_obj_id:
-                    old_hp = hp
-                    break
+            old_hp = self.headpart_by_key().get(
+                ref_key(npc, old_sr.get_form_id()))
             if old_hp is None:
                 continue
 
@@ -565,16 +583,12 @@ class FurryContext:
         self.stats_race_counts[furry_race_id] = \
             self.stats_race_counts.get(furry_race_id, 0) + 1
         for sr in patched.get_subrecords('PNAM'):
-            hp_obj = sr.get_uint32() & 0x00FFFFFF
-            for hp in self.all_headparts.values():
-                if hp.record and (hp.record.form_id.value & 0x00FFFFFF) == hp_obj:
-                    if hp.hp_type == HeadpartType.HAIR:
-                        is_female = npc_sex in (Sex.FEMALE_ADULT, Sex.FEMALE_CHILD)
-                        hair_dict = self.stats_hair_female if is_female \
-                            else self.stats_hair_male
-                        hair_dict[hp.editor_id] = \
-                            hair_dict.get(hp.editor_id, 0) + 1
-                    break
+            hp = self.headpart_by_key().get(ref_key(patched, sr.get_form_id()))
+            if hp is not None and hp.hp_type == HeadpartType.HAIR:
+                is_female = npc_sex in (Sex.FEMALE_ADULT, Sex.FEMALE_CHILD)
+                hair_dict = self.stats_hair_female if is_female \
+                    else self.stats_hair_male
+                hair_dict[hp.editor_id] = hair_dict.get(hp.editor_id, 0) + 1
 
         return patched
 
@@ -751,11 +765,10 @@ class FurryContext:
         winning: dict[int, Record] = {}
         for plugin in plugins:
             for npc in plugin.get_records_by_signature('NPC_'):
-                obj_id = npc.form_id.value & 0x00FFFFFF
-                winning[obj_id] = npc
+                winning[record_key(npc)] = npc
 
         if only_npc is not None:
-            winning = {oid: npc for oid, npc in winning.items()
+            winning = {key: npc for key, npc in winning.items()
                        if _matches_only_npc(npc, only_npc)}
             if not winning:
                 log.warning(f"--only={only_npc!r} matched no NPC")
@@ -766,7 +779,7 @@ class FurryContext:
         preserved = 0
         processed = 0
         total = len(winning)
-        for obj_id, npc in winning.items():
+        for npc in winning.values():
             _check_cancel(cancel_event)
             processed += 1
             if (processed % 500) == 0:
@@ -856,21 +869,21 @@ class FurryContext:
         if not any(active_by_group):
             return (0, 0)
 
-        # Cache of created duplicates: (src_obj_id, furry_race) -> Record
+        # Cache of created duplicates: (source NPC key, furry_race) -> Record
         duplicates: dict[tuple[int, str], Record] = {}
         lists_extended = 0
 
-        # Build NPC obj_id -> winning record lookup once
-        npc_by_obj: dict[int, Record] = {}
+        # Build NPC key -> winning record lookup once
+        npc_by_key: dict[int, Record] = {}
         for plugin in plugins:
             for npc in plugin.get_records_by_signature('NPC_'):
-                npc_by_obj[npc.form_id.value & 0x00FFFFFF] = npc
+                npc_by_key[record_key(npc)] = npc
 
         # Walk LVLN winning overrides
         winning_lvln: dict[int, Record] = {}
         for plugin in plugins:
             for lvln in plugin.get_records_by_signature('LVLN'):
-                winning_lvln[lvln.form_id.value & 0x00FFFFFF] = lvln
+                winning_lvln[record_key(lvln)] = lvln
 
         exclusions = tuple(self.ctx.leveled_npc_exclusions)
 
@@ -900,12 +913,10 @@ class FurryContext:
                     continue
                 level = struct.unpack_from('<H', sr.data, 0)[0]
                 count = struct.unpack_from('<H', sr.data, 8)[0]
-                ref_norm = lvln.normalize_form_id(
-                    sr.get_form_id(4)).value
-                ref_obj = ref_norm & 0x00FFFFFF
-                src_npc = npc_by_obj.get(ref_obj)
+                src_npc = npc_by_key.get(ref_key(lvln, sr.get_form_id(4)))
                 if src_npc is None:
                     continue
+                src_key = record_key(src_npc)
                 src_race = self.determine_npc_race(src_npc)
                 if src_race is None:
                     continue
@@ -929,7 +940,7 @@ class FurryContext:
                         if target_race not in self.races:
                             continue  # variant not defined for this family
 
-                    if (ref_obj, target_race) in added_in_this_list:
+                    if (src_key, target_race) in added_in_this_list:
                         continue
 
                     decision_key = (
@@ -938,7 +949,7 @@ class FurryContext:
                     if hash_string(decision_key, 7831, 1000) >= threshold:
                         continue
 
-                    cache_key = (ref_obj, target_race)
+                    cache_key = (src_key, target_race)
                     dup = duplicates.get(cache_key)
                     if dup is None:
                         dup = self._create_leveled_duplicate(
@@ -949,7 +960,7 @@ class FurryContext:
 
                     dup_norm = dup.normalize_form_id(dup.form_id)
                     new_entries.append((level, count, dup_norm))
-                    added_in_this_list.add((ref_obj, target_race))
+                    added_in_this_list.add((src_key, target_race))
 
             if not new_entries:
                 continue
@@ -1227,12 +1238,11 @@ class FurryContext:
         """
         from esplib.record import SubRecord
 
-        # Build NPC obj_id -> Record lookup for preset resolution
-        npc_by_obj: dict[int, Record] = {}
+        # Build NPC key -> Record lookup for preset resolution
+        npc_by_key: dict[int, Record] = {}
         for plugin in plugins:
             for rec in plugin.get_records_by_signature('NPC_'):
-                obj_id = rec.form_id.value & 0x00FFFFFF
-                npc_by_obj[obj_id] = rec  # last wins
+                npc_by_key[record_key(rec)] = rec  # last wins
 
         count = 0
 
@@ -1259,8 +1269,8 @@ class FurryContext:
 
                 new_preset_fids = []
                 for sr in old_srs:
-                    preset_obj = sr.get_form_id().object_index
-                    preset_npc = npc_by_obj.get(preset_obj)
+                    preset_npc = npc_by_key.get(
+                        ref_key(furrified_rec, sr.get_form_id()))
                     if preset_npc is None:
                         continue
 
@@ -1399,7 +1409,7 @@ class FurryContext:
         winning_hdpts: dict[int, Record] = {}
         for plugin in plugins:
             for rec in plugin.get_records_by_signature('HDPT'):
-                winning_hdpts[rec.form_id.object_index] = rec
+                winning_hdpts[record_key(rec)] = rec
 
         for hdpt in winning_hdpts.values():
             rnam = hdpt.get_subrecord('RNAM')
@@ -1602,6 +1612,36 @@ class FurryContext:
                         arma_rec.normalize_form_id(sr.get_form_id()).value)
             return fids
 
+        # Race key -> lowercased EditorID, across every plugin plus the
+        # patch. Backs the EditorID dedup below; see the comment there for
+        # why FormID equality is not enough. Lowercased because
+        # scheme-supplied EDIDs have bitten us on case before.
+        race_edid_by_key: dict[int, str] = {}
+        for plugin in plugins:
+            for rec in plugin.get_records_by_signature('RACE'):
+                if rec.editor_id:
+                    race_edid_by_key[record_key(rec)] = rec.editor_id.lower()
+        for rec in self.patch.get_records_by_signature('RACE'):
+            if not rec.editor_id:
+                continue
+            race_edid_by_key[record_key(rec)] = rec.editor_id.lower()
+            # Also under the local sentinel. A reference from inside the
+            # patch to one of the patch's own records is written as
+            # 0xFF|objidx, and normalizes back to that whenever the patch
+            # isn't in the load order -- which is the normal state during
+            # this pass. Registering only record_key() would leave those
+            # references unresolvable here, and the EditorID dedup would
+            # silently fall back to comparing FormIDs.
+            race_edid_by_key[
+                _LOCAL_SENTINEL_HIGH | (rec.form_id.value & 0x00FFFFFF)
+            ] = rec.editor_id.lower()
+
+        def arma_race_edids(arma_rec):
+            """EditorIDs of the races an ARMA already carries."""
+            return {race_edid_by_key[k]
+                    for k in arma_race_fids(arma_rec)
+                    if k in race_edid_by_key}
+
         # Walk all ARMO records; for each, resolve the ARMA priority
         # arma normalized FormID -> set of normalized vanilla FormIDs to add
         arma_adds: dict[int, set] = {}
@@ -1662,12 +1702,29 @@ class FurryContext:
                 if claimable:
                     owns = arma_owns.setdefault(arma_fid, set())
                     adds = arma_adds.setdefault(arma_fid, set())
+                    # Dedup by EditorID, not FormID. The races added here
+                    # include patch-CREATED subraces, and a previous
+                    # generation of the patch normally sits in the load
+                    # order carrying its own copy of each: same EditorID,
+                    # different patch-local FormID. A raw-FormID "already
+                    # present?" test misses that and adds the race a
+                    # second time -- YASReachmanRace, YASSkaalRace,
+                    # YASWinterholdRace and friends all landed twice on
+                    # the Daedric helmet ARMAs. Same fix briarheart.py
+                    # already carries.
+                    race_edids = arma_race_edids(arma_rec)
+                    pending: set[str] = set()
                     for v_val, v_fid in claimable:
                         claimed.add(v_val)
                         owns.add(v_val)
-                        # Only add if not already on this ARMA
-                        if v_val not in race_fids:
-                            adds.add(v_fid)
+                        edid = race_edid_by_key.get(v_val)
+                        if edid is not None:
+                            if edid in race_edids or edid in pending:
+                                continue
+                            pending.add(edid)
+                        elif v_val in race_fids:
+                            continue
+                        adds.add(v_fid)
 
             # Remove furrified vanilla races from ARMAs that don't
             # own them. Races already present but owned stay; races
@@ -1737,11 +1794,23 @@ class FurryContext:
     ]
 
 
-    def _get_record_objs(self, record: Record, sig: str) -> set[int]:
-        """Get obj_ids from a record's subrecords of a given signature."""
-        return {sr.get_uint32() & 0x00FFFFFF
-                for sr in record.get_subrecords(sig)
-                if sr.size >= 4}
+    @staticmethod
+    def _packed_ref_keys(record: Record, sig: str) -> set[int]:
+        """Record keys of every FormID in a PACKED-array subrecord (KWDA).
+
+        The old helper read one uint32 per subrecord, so a KWDA holding
+        eight keywords reported only the first -- which made the
+        "does the winner already have this set?" check permanently
+        disagree and rewrite KWDA on every merge.
+        """
+        keys = set()
+        for sr in record.get_subrecords(sig):
+            for off in range(0, sr.size - 3, 4):
+                fid = FormID(struct.unpack_from('<I', sr.data, off)[0])
+                key = ref_key(record, fid)
+                if key is not None:
+                    keys.add(key)
+        return keys
 
 
     def _find_base_override(self, overrides: list[Record]) -> Record:
@@ -1804,36 +1873,43 @@ class FurryContext:
                 return idx
             return 0
 
-        # Collect all overrides of each ARMO by obj_id
+        # Collect all overrides of each ARMO. Keyed on the record key --
+        # NOT the object index. Two mods routinely place unrelated ARMOs at
+        # the same object index, and grouping on it made them overrides of
+        # each other: 97 records in a shipped patch carried a different
+        # armor's addons. Same fix furrify_all_armor already carries.
         armo_overrides: dict[int, list[Record]] = {}
         for plugin in plugins:
             for rec in plugin.get_records_by_signature('ARMO'):
-                obj_id = rec.form_id.value & 0x00FFFFFF
-                armo_overrides.setdefault(obj_id, []).append(rec)
+                armo_overrides.setdefault(record_key(rec), []).append(rec)
 
         count = 0
-        for obj_id, overrides in armo_overrides.items():
+        for overrides in armo_overrides.values():
             if len(overrides) < 2:
                 continue
 
             winner = overrides[-1]
             base = self._find_base_override(overrides)
 
-            # Start with the base's sets as authoritative
-            # Store normalized FormIDs keyed by obj_id
+            # Start with the base's sets as authoritative.
+            # Keyed by record key, for the same reason as above.
             merged_modl: dict[int, tuple[FormID, Record]] = {}
             merged_kwda: dict[int, FormID] = {}
 
             for sr in base.get_subrecords('MODL'):
                 if sr.size >= 4:
                     nfid = base.normalize_form_id(sr.get_form_id())
-                    merged_modl[nfid.object_index] = (nfid, base)
+                    merged_modl.setdefault(nfid.value, (nfid, base))
             for sr in base.get_subrecords('KWDA'):
-                # KWDA is a packed array — iterate 4 bytes at a time
-                for off in range(0, sr.size, 4):
-                    fid = base.normalize_form_id(
+                # KWDA is a packed array — iterate 4 bytes at a time.
+                # Null slots are skipped, matching _packed_ref_keys; if
+                # only one side dropped them, need_kwda would never agree
+                # and every merge would rewrite the keyword list.
+                for off in range(0, sr.size - 3, 4):
+                    nfid = base.normalize_form_id(
                         FormID(struct.unpack_from('<I', sr.data, off)[0]))
-                    merged_kwda[fid.object_index] = fid
+                    if nfid.value:
+                        merged_kwda.setdefault(nfid.value, nfid)
 
             # Add entries from non-base overrides (mods)
             for rec in overrides:
@@ -1844,29 +1920,28 @@ class FurryContext:
                 for sr in rec.get_subrecords('MODL'):
                     if sr.size >= 4:
                         nfid = rec.normalize_form_id(sr.get_form_id())
-                        if nfid.object_index not in merged_modl:
-                            merged_modl[nfid.object_index] = (nfid, rec)
+                        merged_modl.setdefault(nfid.value, (nfid, rec))
                 for sr in rec.get_subrecords('KWDA'):
-                    for off in range(0, sr.size, 4):
-                        fid = rec.normalize_form_id(
+                    for off in range(0, sr.size - 3, 4):
+                        nfid = rec.normalize_form_id(
                             FormID(struct.unpack_from('<I', sr.data, off)[0]))
-                        if fid.object_index not in merged_kwda:
-                            merged_kwda[fid.object_index] = fid
+                        if nfid.value:
+                            merged_kwda.setdefault(nfid.value, nfid)
 
             # Check if the winner already has the merged set
             winner_modl_list = [
-                sr.get_form_id().object_index
+                winner.normalize_form_id(sr.get_form_id()).value
                 for sr in winner.get_subrecords('MODL')
                 if sr.size >= 4]
-            winner_kwda = self._get_record_objs(winner, 'KWDA')
+            winner_kwda = self._packed_ref_keys(winner, 'KWDA')
 
             # Sort MODL: mod-added ARMAs first (by load order), base last
             sorted_modl = sorted(
                 merged_modl.items(),
                 key=lambda item: _plugin_sort_key(item[1][1]))
-            sorted_modl_objs = [obj for obj, _ in sorted_modl]
+            sorted_modl_keys = [key for key, _ in sorted_modl]
 
-            need_modl = (sorted_modl_objs != winner_modl_list)
+            need_modl = (sorted_modl_keys != winner_modl_list)
             need_kwda = set(merged_kwda.keys()) != winner_kwda
 
             if not need_modl and not need_kwda:
@@ -1880,7 +1955,7 @@ class FurryContext:
             # Replace MODL list with sorted merged set
             if need_modl:
                 patched.remove_subrecords('MODL')
-                for m_obj, (nfid, src_rec) in sorted_modl:
+                for _key, (nfid, src_rec) in sorted_modl:
                     sr = patched.add_subrecord('MODL', b'\x00\x00\x00\x00')
                     self.patch.write_form_id(sr, 0, nfid)
 
@@ -1889,7 +1964,7 @@ class FurryContext:
                 patched.remove_subrecords('KWDA')
                 kwda_data = bytearray(4 * len(merged_kwda))
                 sr = patched.add_subrecord('KWDA', bytes(kwda_data))
-                for i, (k_obj, nfid) in enumerate(merged_kwda.items()):
+                for i, nfid in enumerate(merged_kwda.values()):
                     self.patch.write_form_id(sr, i * 4, nfid)
                 ksiz = patched.get_subrecord('KSIZ')
                 if ksiz:

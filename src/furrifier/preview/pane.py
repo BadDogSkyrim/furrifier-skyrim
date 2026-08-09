@@ -481,7 +481,9 @@ class PreviewPane(QWidget):
         Filters to NPCs whose race is in the scheme (via
         `context.determine_npc_race` returning non-None) — previewing
         a character the furrifier can't touch isn't useful. Dedupe by
-        object_index so override chains don't show the same NPC twice.
+        the full normalized FormID so override chains don't show the
+        same NPC twice — NOT by object_index, which collapses unrelated
+        NPCs from different plugins and hid 138 of them from the picker.
 
         Stores AbsoluteFormIDs (load-order-relative) rather than the
         raw `npc.form_id` which is LocalFormID (indexed into the
@@ -500,10 +502,9 @@ class PreviewPane(QWidget):
         for plugin in session.plugin_set:
             for npc in plugin.get_records_by_signature("NPC_"):
                 abs_fid = plugin.normalize_form_id(npc.form_id)
-                obj_id = int(abs_fid) & 0x00FFFFFF
-                if obj_id in seen_ids:
+                if int(abs_fid) in seen_ids:
                     continue
-                seen_ids.add(obj_id)
+                seen_ids.add(int(abs_fid))
                 # Trait-templated NPCs render using their TPLT
                 # target's facegen at runtime — the shell has no
                 # appearance data of its own, so there's nothing
@@ -522,7 +523,7 @@ class PreviewPane(QWidget):
                 if race_result is None:
                     continue
                 breed = race_result[3]
-                edid = npc.editor_id or f"NPC_{obj_id:06X}"
+                edid = npc.editor_id or f"NPC_{int(abs_fid):08X}"
                 entries.append(NpcEntry(
                     form_id=int(abs_fid), editor_id=edid,
                     breed_name=breed.name if breed is not None else None))

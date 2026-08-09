@@ -26,6 +26,7 @@ import struct
 from esplib import PluginSet
 
 from ..npc import inherits_traits
+from ..util import record_key
 from .assets import AssetResolver
 from .assemble import build_facegen_nif
 from .composite import build_facetint_dds, build_facetint_png
@@ -128,19 +129,27 @@ def _inject_patch_into_plugin_set(plugin_set: PluginSet, patch) -> None:
 def _matches_only_npc(npc, only_npc: str) -> bool:
     """True if `npc` is the one targeted by --only.
 
-    Match against EDID (case-insensitive) first; if `only_npc` parses
-    as hex, also match against the form-id object index (low 24 bits).
-    Accepts plain hex, `0x`-prefixed, full 8-digit or 6-digit forms.
+    Match against EDID (case-insensitive) first. Otherwise, if `only_npc`
+    parses as hex: an 8-digit value is a full load-order FormID (what
+    xEdit displays) and is matched exactly against the normalized FormID;
+    a shorter one is an object index and matches loosely, which may hit
+    more than one NPC. Accepts a `0x` prefix either way.
+
+    This is a human-typed filter, so the loose form stays -- but the
+    precise form now actually works, which it didn't when both sides
+    were masked to 24 bits.
     """
     edid = (npc.editor_id or "").lower()
     if edid and edid == only_npc.lower():
         return True
     cleaned = only_npc.lower().removeprefix("0x")
     try:
-        target_obj_id = int(cleaned, 16) & 0xFFFFFF
+        target = int(cleaned, 16)
     except ValueError:
         return False
-    return (int(npc.form_id) & 0xFFFFFF) == target_obj_id
+    if len(cleaned) > 6:
+        return record_key(npc) == target
+    return (record_key(npc) & 0xFFFFFF) == (target & 0xFFFFFF)
 
 
 def build_facegen_for_patch(
@@ -200,9 +209,8 @@ def build_facegen_for_patch(
     raw = list(patch.get_records_by_signature("NPC_"))
     if extra_npcs:
         # Don't double-bake: the patch wins for anything it overrides.
-        in_patch = {int(n.form_id) & 0xFFFFFF for n in raw}
-        added = [n for n in extra_npcs
-                 if (int(n.form_id) & 0xFFFFFF) not in in_patch]
+        in_patch = {record_key(n) for n in raw}
+        added = [n for n in extra_npcs if record_key(n) not in in_patch]
         if added:
             log.info("FaceGen: including %d preserved NPC(s) not in the "
                      "patch", len(added))

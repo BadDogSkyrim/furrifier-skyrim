@@ -223,9 +223,12 @@ def choose_breed_tints(
                 continue
             if hash_string(npc_alias, salt, 1000) >= int(rule.probability * 1000):
                 continue
-        # Resolve each (edid, intensity) entry to its load-order-low24
-        # form-id. Entries whose EDID can't be resolved are dropped.
-        resolved: list[tuple[str, float, int]] = []  # (edid, intensity, fid_low24)
+        # Resolve each (edid, intensity) entry to its load-order-normalized
+        # form-id. Entries whose EDID can't be resolved are dropped. Both
+        # sides of the intersection below are normalized (TintAsset.presets
+        # normalizes at extraction time), so compare them whole -- masking
+        # to the low 24 bits would let two unrelated CLFMs match.
+        resolved: list[tuple[str, float, int]] = []  # (edid, intensity, fid)
         for edid, intensity in rule.color_choices:
             fid = form_id_for_edid(edid)
             if fid is None:
@@ -233,7 +236,7 @@ def choose_breed_tints(
                     f"breed tint color {edid!r} not found in any plugin's "
                     f"CLFM records; dropping")
                 continue
-            resolved.append((edid, intensity, fid & 0x00FFFFFF))
+            resolved.append((edid, intensity, fid))
         if not resolved:
             log.warning(
                 f"breed tint rule for mask {rule.mask_substring!r} has no "
@@ -242,10 +245,10 @@ def choose_breed_tints(
         # For each matched parent TINI, intersect resolved entries with
         # the TINI's allowed presets, uniform-pick one, emit.
         for asset in matches:
-            preset_low24 = {p[0] & 0x00FFFFFF: p for p in asset.presets}
-            allowed = [(edid, intensity, fid_low)
-                       for edid, intensity, fid_low in resolved
-                       if fid_low in preset_low24]
+            preset_by_fid = {p[0]: p for p in asset.presets}
+            allowed = [(edid, intensity, fid)
+                       for edid, intensity, fid in resolved
+                       if fid in preset_by_fid]
             if not allowed:
                 log.warning(
                     f"breed colors for mask {rule.mask_substring!r} not "
@@ -256,8 +259,8 @@ def choose_breed_tints(
             # rule pick independently.
             color_salt = 7411 + asset.index
             idx = hash_string(npc_alias, color_salt, len(allowed))
-            edid, intensity, fid_low = allowed[idx]
-            preset = preset_low24[fid_low]
+            edid, intensity, fid = allowed[idx]
+            preset = preset_by_fid[fid]
             color_fid, _parent_intensity, tirs = preset
             choices.append(TintChoice(
                 tini=asset.index,

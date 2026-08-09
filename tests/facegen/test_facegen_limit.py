@@ -44,10 +44,17 @@ def _stub_npc(form_id: int, editor_id: str = "Stub", *, traits: bool = False):
     set so we can exercise the trait-templated skip path.
     """
     from unittest.mock import MagicMock
-    from esplib.utils import LocalFormID
+    from esplib.utils import AbsoluteFormID, LocalFormID
     npc = MagicMock()
     npc.form_id = LocalFormID(form_id)
     npc.editor_id = editor_id
+    # Record identity goes through normalize_form_id (see
+    # furrifier.util.record_key). A bare MagicMock returns a MagicMock
+    # from it, so every stub would compare equal-ish and the filters
+    # under test would be measuring nothing. One synthetic plugin, so
+    # load-order space == the stub's own space.
+    npc.normalize_form_id.side_effect = lambda fid: AbsoluteFormID(
+        fid if isinstance(fid, int) else fid.value)
     if traits:
         # ACBS.template_flags.Traits=True, ACBS.flags.IsCharGenFacePreset=False.
         # Distinguish the two sub-keys so the chargen filter doesn't

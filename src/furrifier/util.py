@@ -1,15 +1,59 @@
 """Utility functions ported from BDScriptTools.pas.
 
-Hash functions, color helpers, and bodypart flag operations.
+Hash functions, color helpers, bodypart flag operations, and the
+canonical cross-plugin record key.
 """
 
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
 from esplib import Record
 
 log = logging.getLogger(__name__)
+
+
+def record_key(rec: Record) -> int:
+    """Canonical cross-plugin identity for a record: its load-order
+    normalized FormID.
+
+    Use this for every dict keyed by "which record is this" and every
+    set membership test that spans plugins.
+
+    NOT ``form_id.value & 0xFFFFFF``. That masks off the master-list
+    index, and since every plugin numbers its own records from 0x000800
+    the remainder collides constantly -- 240 NPC_, 159 ARMA, 127 ARMO
+    records silently vanished from a normal load order before this
+    existed. For a light (ESL/ESPFE) plugin the low 24 bits are not even
+    the object index: on the raw in-file FormID they are 0x000800-0x000FFF
+    for EVERY light plugin, and on the absolute form they are the light
+    ordinal packed above a 12-bit index. See PLAN_FURRIFIER_FORMID_KEYS.md.
+
+    ``esplib``'s ``BaseFormID.object_index`` is literally
+    ``value & 0x00FFFFFF``, so it has the same problem and is not a
+    substitute -- it is only an identity once you also know the plugin.
+    """
+    return rec.normalize_form_id(rec.form_id).value
+
+
+def ref_key(owner: Record, form_id) -> Optional[int]:
+    """Canonical key for a FormID *referenced by* `owner`.
+
+    Normalizes through the record that owns the reference -- a FormID
+    only means anything relative to its holder's master list. Returns
+    None for a null reference so callers never look up 0, which would
+    otherwise match whatever record happens to sit at key 0.
+
+    Producer and consumer must agree: a map built with `record_key` can
+    only be read with `ref_key`, never with a raw or masked FormID.
+    """
+    if form_id is None:
+        return None
+    value = form_id if isinstance(form_id, int) else form_id.value
+    if value == 0:
+        return None
+    return owner.normalize_form_id(form_id).value
 
 
 def get_bodypart_flags(arma: Record) -> int:
