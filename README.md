@@ -16,6 +16,32 @@ The kit ships two executables:
   pick options in the form and hit Run.
 - **`furrify_skyrim.exe`** — the CLI. Same code, same options, useful for scripted runs.
 
+## The patches that ship with the mod
+
+The FOMOD installs pre-built patches, so the mod works without you running this tool at
+all:
+
+- **`YASNPCPatch.esp`** (SFW package) — NPC and armor overrides across the load order it
+  was built against, plus pre-baked FaceGen for every furrified NPC. No schlong records.
+- **`YASNSFWPatch.esp`** (NSFW package) — armor overrides for the NSFW-only plugins
+  (hoodie schlongs, sheaths), plus the SOS compatible-race lists, probabilities and sizes.
+
+That split exists for *delivery* reasons, not because the two do different kinds of work:
+the baked FaceGen runs to several gigabytes, and adult content has to stay out of the SFW
+download.
+
+**Running the tool yourself replaces both with a single patch.** One run does NPCs, armor
+and schlongs together — there is no two-pass workflow on your end. If SOS isn't in your
+load order the schlong pass finds nothing and skips itself, so the same command works
+either way.
+
+**Keep the default patch name.** `--patch` defaults to `YASNPCPatch.esp` precisely so your
+run supersedes the delivered patch instead of sitting alongside it. Rename it and the
+delivered patch stays active in your load order, where it still gets a vote in how armor
+addon lists are ordered — which is one way to end up with the wrong headgear mesh on a
+furry race. To write the output somewhere other than your `Data` folder, use `-o`, not a
+different `--patch` name.
+
 ## Command-line usage
 
 ```
