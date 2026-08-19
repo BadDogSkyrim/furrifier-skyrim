@@ -60,15 +60,102 @@ _PYNIFLY_BINARIES = [
 ]
 
 
+# --- PyNifly DLL/binding version check -----------------------------------
+#
+# NIFLY_DLL above is a build artifact of a separate Visual Studio project,
+# and nothing rebuilds it when niflydll.py gains a new binding. Worse, the
+# mismatch is invisible in dev: with PYNIFLY_DEV_ROOT set, niflydll.py
+# loads the *Debug* DLL, so Hugh's runs pick up a fresh binary while the
+# kit ships whatever Release build happens to be lying around.
+#
+# That shipped on 2026-08-09. PyNifly commit da4b63d (2026-08-07) added
+# getNiIntegersExtraDataValues on both the C++ and Python sides, but the
+# Release DLL was last compiled 2026-07-17, so the kit paired new bindings
+# with an old binary. niflydll.py binds every signature at import time, so
+# it wasn't a latent bug in some rare code path -- the GUI died on launch
+# for every user, on `import pyn.pynifly`, before drawing a window.
+#
+# So: read the DLL's export table and confirm it satisfies every mandatory
+# binding, and fail the build if it doesn't. Only column-0 `nifly.NAME.`
+# bindings are mandatory; the indented ones live inside `try/except
+# AttributeError` blocks in niflydll.py and are optional by construction.
+import re as _re
+import struct as _struct
+from pathlib import Path as _Path
+
+
+def _dll_exports(path):
+    """Return the set of names in a PE file's export table."""
+    d = open(path, 'rb').read()
+    pe = _struct.unpack_from('<I', d, 0x3c)[0]
+    if d[pe:pe + 4] != b'PE\0\0':
+        raise SystemExit(f'not a PE file: {path}')
+    nsec = _struct.unpack_from('<H', d, pe + 6)[0]
+    optsz = _struct.unpack_from('<H', d, pe + 20)[0]
+    opt = pe + 24
+    # Data directory sits after the optional header, whose size depends on
+    # PE32 (0x10b) vs PE32+ (0x20b); export table is directory entry 0.
+    dirs = opt + (112 if _struct.unpack_from('<H', d, opt)[0] == 0x20b else 96)
+    export_rva = _struct.unpack_from('<I', d, dirs)[0]
+
+    sections = []
+    for i in range(nsec):
+        base = opt + optsz + i * 40
+        vsize, vaddr, rawsize, rawptr = _struct.unpack_from('<IIII', d, base + 8)
+        sections.append((vaddr, max(vsize, rawsize), rawptr))
+
+    def offset_of(rva):
+        for vaddr, size, rawptr in sections:
+            if vaddr <= rva < vaddr + size:
+                return rawptr + (rva - vaddr)
+        raise SystemExit(f'RVA {rva:#x} outside every section in {path}')
+
+    table = offset_of(export_rva)
+    count = _struct.unpack_from('<I', d, table + 24)[0]
+    names = offset_of(_struct.unpack_from('<I', d, table + 32)[0])
+    out = set()
+    for i in range(count):
+        o = offset_of(_struct.unpack_from('<I', d, names + 4 * i)[0])
+        out.add(d[o:d.index(b'\0', o)].decode('ascii', 'replace'))
+    return out
+
+
+def _check_nifly_dll(dll_path, binding_path):
+    required = set(_re.findall(r'^nifly\.([A-Za-z_]\w*)\.',
+                               _Path(binding_path).read_text(encoding='utf-8'),
+                               _re.M))
+    if not required:
+        raise SystemExit(f'parsed no nifly bindings from {binding_path} -- '
+                         'the binding style changed; fix this check')
+    missing = sorted(required - _dll_exports(dll_path))
+    if missing:
+        raise SystemExit(
+            f'\nNiflyDLL.dll is stale -- it is missing {len(missing)} of the '
+            f'{len(required)} functions {_Path(binding_path).name} binds at '
+            f'import time:\n'
+            + ''.join(f'    {name}\n' for name in missing)
+            + f'\n  DLL:      {dll_path}\n'
+              f'  Bindings: {binding_path}\n\n'
+              'Shipping this pairing crashes the kit on launch. Rebuild the '
+              'DLL in Release x64:\n'
+              '    msbuild NiflyDLL.vcxproj -p:Configuration=Release '
+              '-p:Platform=x64\n'
+              '(Debug builds do not count -- the kit ships Release.)\n')
+    print(f'NiflyDLL.dll satisfies all {len(required)} required bindings.')
+
+
+# Run it before Analysis, so a stale DLL fails in a second rather than
+# after a couple of minutes of packing.
+_check_nifly_dll(NIFLY_DLL, PYNIFLY_ROOT + r'\pyn\niflydll.py')
+
+
 # --- Build number --------------------------------------------------------
 #
 # A plain integer, bumped on every build, reset to 0 when the version
 # changes. Enough to pin down which kit someone is running, and nothing
 # more. The counter is checked in (build_number.json); the generated
 # stamp module it feeds is not.
-import json as _json
-import re as _re
-from pathlib import Path as _Path
+import json as _json  # _re and _Path come from the DLL check above
 
 _spec_root = _Path(SPECPATH)
 _counter_path = _spec_root / 'build_number.json'
