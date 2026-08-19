@@ -19,6 +19,7 @@ from .build_info import version_string
 from .config import (
     FurrifierConfig, build_parser, command_line, normalize_argv, setup_logging,
 )
+from .context import armor_bodypart_mask
 from .session import setup_session
 
 log = logging.getLogger(__name__)
@@ -156,22 +157,40 @@ def _run_furrification_body(
 
     # Furrify armor (skipped under --only — armor is a load-order-wide
     # transform unrelated to a single NPC's facegen).
-    if config.furrify_armor and config.only_npc is None:
+    #
+    # --armor and --schlongs partition the armor space on biped slot 52,
+    # so this block runs whenever EITHER is set and the mask decides what
+    # it sees: --armor alone skips sheaths, --schlongs alone sees nothing
+    # else. A zero mask means neither flag was given, and the pass is
+    # skipped rather than run against a mask that matches no addon.
+    armor_mask = armor_bodypart_mask(config.furrify_armor,
+                                     config.furrify_schlongs)
+    if armor_mask and config.only_npc is None:
+        log.info("Armor bodypart mask: 0x%X (--%s, --%s)", armor_mask,
+                 'armor' if config.furrify_armor else 'no-armor',
+                 'schlongs' if config.furrify_schlongs else 'no-schlongs')
+
         emit("Merging armor overrides")
         log.info("Merging armor overrides...")
         merge_count = furry.merge_armor_overrides(
-            plugin_set, preserve_existing=config.preserve_existing)
+            plugin_set, preserve_existing=config.preserve_existing,
+            bodypart_mask=armor_mask)
         log.info(f"Merged {merge_count} ARMO records")
 
         emit("Furrifying armor")
         log.info("Furrifying armor...")
-        armor_count = furry.furrify_all_armor(plugin_set)
+        armor_count = furry.furrify_all_armor(plugin_set,
+                                              bodypart_mask=armor_mask)
         log.info(f"Modified {armor_count} armor records")
 
-        from .briarheart import patch_briarheart_armor
-        briarheart_count = patch_briarheart_armor(plugin_set, patch)
-        if briarheart_count:
-            log.info(f"Briarheart patch: {briarheart_count} record(s)")
+        # Briarheart is body armor, nowhere near slot 52, so it belongs
+        # to the --armor half of the split. A schlongs-only run must not
+        # fire it or the NSFW patch picks up body-armor records again.
+        if config.furrify_armor:
+            from .briarheart import patch_briarheart_armor
+            briarheart_count = patch_briarheart_armor(plugin_set, patch)
+            if briarheart_count:
+                log.info(f"Briarheart patch: {briarheart_count} record(s)")
 
     # Furrify schlongs (skipped under --only).
     if config.furrify_schlongs and config.only_npc is None:

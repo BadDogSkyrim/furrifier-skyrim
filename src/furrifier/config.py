@@ -170,12 +170,19 @@ def build_parser() -> argparse.ArgumentParser:
     # state what it chose rather than leaving it to be inferred from an
     # absent flag. The `--no-*` forms are the originals; the positive
     # ones are new, so old batch files keep working.
+    # --armor and --schlongs partition the armor space on biped slot 52
+    # rather than overlapping on it, so a run can ask for one half
+    # without the other. Both together is the historical behaviour.
     _add_toggle(parser, 'armor', default=True,
-                on_help='Furrify armor (default)',
-                off_help='Skip armor furrification')
+                on_help='Furrify armor, except slot 52 / schlongs '
+                        '(default)',
+                off_help='Skip armor furrification (slot 52 still '
+                         'furrified if --schlongs)')
     _add_toggle(parser, 'schlongs', default=True,
-                on_help='Enable SOS (schlong) compatibility (default)',
-                off_help='Disable SOS (schlong) compatibility')
+                on_help='Enable SOS (schlong) compatibility and furrify '
+                        'slot 52 armor (default)',
+                off_help='Disable SOS (schlong) compatibility and leave '
+                         'slot 52 armor alone')
     _add_toggle(parser, 'facegen', default=True,
                 on_help='Build per-NPC FaceGen nif + DDS (default)',
                 off_help='Skip building per-NPC FaceGen nif + DDS '

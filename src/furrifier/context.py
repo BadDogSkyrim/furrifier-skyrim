@@ -30,11 +30,66 @@ from .tints import choose_breed_tints, choose_furry_tints
 
 log = logging.getLogger(__name__)
 
-# Bodypart flags that indicate armor needing furry race support
-FURRIFIABLE_BODYPARTS = (
-    Bodypart.HEAD | Bodypart.HAIR |
-    Bodypart.LONGHAIR | Bodypart.CIRCLET | Bodypart.SCHLONG
+# Bodypart flags that indicate armor needing furry race support, split
+# on biped slot 52 (Bodypart.SCHLONG) -- SOS's schlong slot.
+#
+# --armor and --schlongs partition this set rather than overlapping on
+# it: --armor alone means "every furrifiable slot EXCEPT 52", --schlongs
+# alone means "slot 52 and nothing else", both together mean all of it.
+# Before the split, --armor furrified sheath ARMAs too, so a run that
+# wanted only the non-schlong armor could not ask for it -- the SFW
+# build had to exclude the SOS plugins from --plugins to get that
+# effect, and the NSFW patch carried 68 generic armor ARMAs it had no
+# use for. See armor_bodypart_mask().
+ARMOR_ONLY_BODYPARTS = (
+    Bodypart.HEAD | Bodypart.HAIR | Bodypart.LONGHAIR | Bodypart.CIRCLET
 )
+SCHLONG_BODYPARTS = Bodypart.SCHLONG
+FURRIFIABLE_BODYPARTS = ARMOR_ONLY_BODYPARTS | SCHLONG_BODYPARTS
+
+
+def armor_bodypart_mask(furrify_armor: bool, furrify_schlongs: bool) -> int:
+    """Bodypart flags the armor pass may touch, for one flag pair.
+
+    Returns 0 when neither flag is set, which callers read as "skip the
+    armor pass entirely" -- a zero mask matches no ARMA, so running it
+    anyway would be a no-op, just a slower one.
+
+    Passing both flags reproduces FURRIFIABLE_BODYPARTS exactly, so the
+    default behaviour of every existing caller is unchanged.
+    """
+    mask = 0
+    if furrify_armor:
+        mask |= ARMOR_ONLY_BODYPARTS
+    if furrify_schlongs:
+        mask |= SCHLONG_BODYPARTS
+    return int(mask)
+
+
+def armo_in_bodypart_scope(modl_keys, armas_by_key, bodypart_mask) -> bool:
+    """Is this ARMO's addon set in scope for a run using `bodypart_mask`?
+
+    True unless EVERY furrifiable addon it carries sits outside the mask.
+
+    An ARMO with no furrifiable addons at all stays in scope. Merging
+    those is plain load-order conflict resolution -- unrelated to which
+    bodypart slots this run was asked to furrify -- and dropping them
+    would resurrect armor conflicts the furrifier has always fixed.
+
+    With the full mask this is always True, so the unfiltered path is
+    exactly what it was before the slot-52 split existed.
+    """
+    saw_furrifiable = False
+    for key in modl_keys:
+        arma = armas_by_key.get(key)
+        if arma is None:
+            continue
+        bp = get_bodypart_flags(arma)
+        if bp & bodypart_mask:
+            return True
+        if bp & FURRIFIABLE_BODYPARTS:
+            saw_furrifiable = True
+    return not saw_furrifiable
 
 # Race EditorID variant suffixes, longest-match first.
 _RACE_VARIANT_SUFFIXES = ('ChildVampire', 'Vampire', 'Child')
@@ -1520,8 +1575,14 @@ class FurryContext:
         return fallbacks
 
 
-    def furrify_all_armor(self, plugins) -> int:
+    def furrify_all_armor(self, plugins,
+                          bodypart_mask: int = FURRIFIABLE_BODYPARTS) -> int:
         """Adjust armor addon race lists driven by ARMO addon order.
+
+        `bodypart_mask` selects which biped slots take part; addons
+        outside it are invisible to the whole pass, so they neither
+        receive races nor lose them. Defaults to every furrifiable slot.
+        See armor_bodypart_mask() for how --armor/--schlongs map onto it.
 
         After race furrification, vanilla races like NordRace have furry
         head meshes. This method walks each ARMO's ARMA list (MODL refs)
@@ -1666,7 +1727,7 @@ class FurryContext:
                     arma_rec = winning_armas.get(arma_fid)
                     if arma_rec:
                         bp = get_bodypart_flags(arma_rec)
-                        if bp & FURRIFIABLE_BODYPARTS:
+                        if bp & bodypart_mask:
                             arma_refs.append((arma_fid, arma_rec))
 
             if not arma_refs:
@@ -1914,9 +1975,19 @@ class FurryContext:
         return False
 
 
-    def merge_armor_overrides(self, plugins,
-                              preserve_existing: bool = False) -> int:
+    def merge_armor_overrides(
+            self, plugins,
+            preserve_existing: bool = False,
+            bodypart_mask: int = FURRIFIABLE_BODYPARTS) -> int:
         """Merge ARMA references and keywords across ARMO overrides.
+
+        `bodypart_mask` scopes which ARMOs are merged at all: one whose
+        furrifiable addons all sit outside the mask is skipped, because
+        furrify_all_armor would ignore it anyway and the merged copy
+        would be a patch record that changes nothing this run cares
+        about. ARMOs carrying no furrifiable addon are always merged --
+        that part is load-order conflict resolution, not furrification.
+        See armo_in_bodypart_scope().
 
         When multiple mods override the same ARMO to add their ARMA
         (armor addon) or keywords, only the winning override survives.
@@ -1996,7 +2067,21 @@ class FurryContext:
             for rec in plugin.get_records_by_signature('ARMO'):
                 armo_overrides.setdefault(record_key(rec), []).append(rec)
 
+        # ARMA lookup backing the bodypart scope check below. Built only
+        # when the mask actually filters -- with the full mask every ARMO
+        # is in scope by definition, so resolving addons would be pure
+        # cost on the common path.
+        scoped = int(bodypart_mask) != int(FURRIFIABLE_BODYPARTS)
+        armas_by_key: dict[int, Record] = {}
+        if scoped:
+            for plugin in plugins:
+                for arma in plugin.get_records_by_signature('ARMA'):
+                    armas_by_key[record_key(arma)] = arma
+            for arma in self.patch.get_records_by_signature('ARMA'):
+                armas_by_key[record_key(arma)] = arma
+
         count = 0
+        skipped_out_of_scope = 0
         for overrides in armo_overrides.values():
             if len(overrides) < 2:
                 continue
@@ -2040,6 +2125,16 @@ class FurryContext:
                             FormID(struct.unpack_from('<I', sr.data, off)[0]))
                         if nfid.value:
                             merged_kwda.setdefault(nfid.value, nfid)
+
+            # Drop ARMOs this run's bodypart mask puts out of scope.
+            # Checked against the MERGED addon set, not the winner's:
+            # merging is exactly what pulls a sheath addon onto an ARMO
+            # that didn't list one, and that is the case a schlongs-only
+            # run most needs to catch.
+            if scoped and not armo_in_bodypart_scope(
+                    merged_modl, armas_by_key, bodypart_mask):
+                skipped_out_of_scope += 1
+                continue
 
             # Check if the winner already has the merged set
             winner_modl_list = [
@@ -2118,6 +2213,9 @@ class FurryContext:
             count += 1
 
         log.debug(f"Merged overrides in {count} ARMO records")
+        if skipped_out_of_scope:
+            log.debug("Skipped %d ARMO records outside bodypart mask 0x%X",
+                      skipped_out_of_scope, int(bodypart_mask))
         return count
 
     # -- Statistics --

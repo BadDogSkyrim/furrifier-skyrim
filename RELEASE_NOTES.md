@@ -1,5 +1,48 @@
 # Release notes
 
+## v1.7.0 — 2026-08-18
+
+`--armor` and `--schlongs` now partition the armor space instead of
+overlapping on it, so a run can ask for one half without dragging in the
+other.
+
+### Changed
+
+- **`--armor` and `--schlongs` split on biped slot 52.** `--armor` alone
+  furrifies every furrifiable slot *except* 52; `--schlongs` alone
+  furrifies slot 52 and nothing else; both together behave exactly as
+  before. The armor pass now runs whenever either flag is set — it used
+  to be gated on `--armor` alone, so `--no-armor --schlongs` silently did
+  no armor work at all and hoodie sheaths kept their vanilla race lists.
+
+  Both halves are needed by the YAS Reborn package split. The SFW patch
+  must carry no sheath records — it ships without the schlong plugins, so
+  a sheath override in it is a missing master waiting to happen — and
+  previously got that only by leaving the SOS plugins out of `--plugins`,
+  which is a load-order trick rather than a stated intent. The NSFW patch
+  wanted the opposite half and was shipping 68 generic armor ARMAs that
+  duplicated the SFW patch's own work.
+
+- **The ARMO merge is scoped by the same mask.** An ARMO whose
+  furrifiable addons all sit outside the active mask is no longer copied
+  into the patch, since `furrify_all_armor` would ignore it anyway. ARMOs
+  carrying no furrifiable addon at all are still merged — that part is
+  load-order conflict resolution, unrelated to furrification, and
+  dropping it would resurrect armor conflicts.
+
+- **The briarheart fixup follows `--armor`.** It is body armor, nowhere
+  near slot 52, so a schlongs-only run no longer fires it.
+
+- The run log now states the resolved bodypart mask and the flag pair
+  that produced it.
+
+### Notes
+
+Nothing changes for a run that passes both flags, which is every
+historical invocation of the shipping build scripts. `FURRIFIABLE_BODYPARTS`
+is still `0x401803`, and `merge_armor_overrides`/`furrify_all_armor`
+default to it, so existing callers are unaffected.
+
 ## v1.6.1 — 2026-08-04
 
 Four fixes to additive runs — a second pass layered over an earlier
