@@ -1,5 +1,80 @@
 # Release notes
 
+## v1.8.0 — 2026-08-25
+
+The furrifier now works under Mod Organizer 2. It didn't before — not
+partially, not slowly, it produced an empty patch and told you it had
+succeeded. If you use MO2, including any Wabbajack modlist, this is the
+release that makes the tool usable at all.
+
+Vortex users are unaffected by the bug and unaffected by the fix.
+
+### Fixed
+
+- **Mod Organizer 2 support.** MO2 shows programs a merged view of
+  vanilla plus your mods, but that view is only visible to some of the
+  ways Windows can ask about a file. The furrifier was using one of the
+  ways it *isn't* visible to, so every plugin, mesh, texture and archive
+  that came from a mod rather than from the base game read as "missing"
+  even though it was right there and perfectly readable.
+
+  On a 366-plugin modlist that meant 10 plugins loaded, 0 races
+  furrified, and an empty patch written without a single error. The same
+  blind spot then broke asset lookup (every BSA "not found", no headpart
+  meshes resolved), directory creation during FaceGen, and even the
+  plugin picker's own "is this a real folder?" check.
+
+  A full Wildlander run now completes: 362 of 366 plugins, 32,264 NPCs
+  furrified, 4,685 FaceGen bakes, zero failures.
+
+- **FaceGen no longer discards work it has already done.** Under MO2 a
+  diagnostic line that measured each finished mesh was failing, and
+  taking the finished mesh down with it — a run reported "0 succeeded,
+  4685 failed" when in fact all 4,685 had been built correctly.
+
+- **A single broken mod no longer stops the whole run.** One
+  malformed script record — `OBodyNGWeight.esp` is the known case —
+  used to abort furrification for the entire load order. Now it's
+  skipped with a warning and everything else proceeds.
+
+- **The plugin list shows what's actually loadable.** "Edit plugins"
+  used to list everything named in plugins.txt whether the file could be
+  read or not, so plugins you'd ticked came back "missing" mid-run. It
+  now lists what's really there, and says plainly when active plugins
+  are absent from the data folder you chose.
+
+- **Failures are visible.** A run that can't load your plugins now says
+  so, names the directory it looked in, and lists what it couldn't find.
+  Previously that information was only in the debug log, and the run
+  looked like a success.
+
+### New
+
+- **`--data-dir` on the GUI**, so a Mod Organizer executable entry can
+  launch the furrifier already pointed at the right Data folder. For a
+  Wabbajack list that's `<modlist>\Stock Game\Data` (some lists call it
+  `Game Root`) — *not* your Steam install, which MO2 doesn't touch and
+  which auto-detection would otherwise find.
+
+- **Changing the data directory reloads the plugin list** and reports
+  how much of your load order is present there, immediately rather than
+  after a long load.
+
+### Notes for MO2 users
+
+Point "Data dir" at the folder MO2 manages, not at Steam. If you're not
+sure which that is, `gamePath=` in your instance's `ModOrganizer.ini`
+names it; add `\Data`.
+
+Output can be left to accumulate in MO2's Overwrite and turned into a
+mod afterwards, which is the normal workflow and is what these fixes
+were tested against.
+
+FaceGen writes a face tint per NPC at whatever resolution the source
+artwork uses — on a large modlist that can be many gigabytes. "Tint
+size" in the GUI (`--facetint-size`) lowers it if you'd rather trade
+some detail for disk space and build time.
+
 ## v1.7.0 — 2026-08-18
 
 `--armor` and `--schlongs` now partition the armor space instead of
