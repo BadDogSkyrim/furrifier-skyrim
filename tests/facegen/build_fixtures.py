@@ -25,7 +25,7 @@ from esplib import LoadOrder, PluginSet
 from pyn.pynifly import NifFile
 
 GAME_DATA = Path(r"C:\Steam\steamapps\common\Skyrim Special Edition\Data")
-VANILLA_ASSETS = Path(r"C:\Modding\SkyrimSEAssets\00 Vanilla Assets")
+VANILLA_ASSETS = Path(r"C:\Modding\SkyrimSE\00 Vanilla Assets")
 
 TESTS_ROOT = Path(__file__).parent
 DATA_VANILLA = TESTS_ROOT / "Data_vanilla"

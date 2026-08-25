@@ -20,7 +20,7 @@ from esplib import LoadOrder, PluginSet
 
 
 GAME_DATA = Path(r"C:\Steam\steamapps\common\Skyrim Special Edition\Data")
-VANILLA_ASSETS = Path(r"C:\Modding\SkyrimSEAssets\00 Vanilla Assets")
+VANILLA_ASSETS = Path(r"C:\Modding\SkyrimSE\00 Vanilla Assets")
 
 DERVENIN = 0x0001327C
 
