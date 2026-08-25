@@ -8,7 +8,10 @@ has no new features — the preview pane arrives in Phase 3.
 """
 from __future__ import annotations
 
+import argparse
+import io
 import logging
+import os
 import sys
 import threading
 from pathlib import Path
@@ -41,6 +44,7 @@ from PySide6.QtWidgets import (
 )
 
 from esplib import LoadOrder, find_game_data
+from esplib.utils import is_readable_file, is_listable_dir, ensure_dir
 
 from .build_info import version_string
 from .config import FurrifierConfig
@@ -51,6 +55,28 @@ from .session_cache import SessionCache
 
 
 PLUGIN_EXTS = {".esp", ".esm", ".esl"}
+
+
+# Warnings raised before the log pane exists (command-line parsing).
+# Drained into the log by FurrifierWindow once the bridge is up —
+# otherwise a windowed build has nowhere to put them.
+_startup_notes: list[str] = []
+
+
+def _same_dir(a: str, b: str) -> bool:
+    """Compare two directory strings the way Windows would.
+
+    Case-insensitive and indifferent to trailing separators, so
+    re-focusing the field or a Browse that lands on the same folder
+    doesn't count as a change and blow away the user's selection.
+    """
+    def norm(s: str) -> str:
+        s = (s or "").strip().rstrip("\\/")
+        try:
+            return str(Path(s)).lower() if s else ""
+        except Exception:
+            return s.lower()
+    return norm(a) == norm(b)
 
 
 def _asset_path(name: str) -> Path:
@@ -136,11 +162,18 @@ class _Worker(QThread):
 
 
 class FurrifierWindow(QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self, data_dir: Optional[str] = None) -> None:
         super().__init__()
         self.setWindowTitle(f"Skyrim Furrifier {version_string()}")
         self.resize(820, 820)
         self.setMinimumSize(720, 620)
+
+        # Overrides the auto-detected Data dir. Set from --data-dir so a
+        # Mod Organizer executable definition can launch us pointed at
+        # the Data folder MO2 actually virtualizes — auto-detection
+        # finds the Steam install, which for a Wabbajack stock-game
+        # modlist is the one folder guaranteed NOT to hold the mods.
+        self._data_dir_override = data_dir
 
         self._worker: Optional[_Worker] = None
         self._file_handler: Optional[logging.FileHandler] = None
@@ -159,6 +192,10 @@ class FurrifierWindow(QMainWindow):
         # paths flows into the log pane. Run's _install_log_handler
         # layers additional bits on top (file handler, debug level).
         self._install_persistent_log_bridge()
+        # Anything the command-line parse wanted to say had nowhere to
+        # go until now.
+        while _startup_notes:
+            logging.getLogger(__name__).warning("%s", _startup_notes.pop(0))
 
     # --- layout ------------------------------------------------------------
 
@@ -199,7 +236,14 @@ class FurrifierWindow(QMainWindow):
             config_provider=self._config_from_fields,
             cache=self._session_cache,
             load_order_provider=self._build_preview_load_order,
-            parent=splitter)
+            parent=splitter,
+            # Mirror the Run path's log setup on Preview's Load click —
+            # without this, Preview output never hits the user's log
+            # file and debug toggles don't apply. Passed as a hook so
+            # it runs *before* the worker dispatches; see the note on
+            # PreviewPane._on_load_requested.
+            on_load_requested=lambda: self._install_log_handler(
+                self._config_from_fields()))
         splitter.addWidget(self.preview_pane)
 
         # Scheme change invalidates the session (different race
@@ -207,12 +251,6 @@ class FurrifierWindow(QMainWindow):
         # pane to rebuild + re-bake the currently-visible NPC.
         self.scheme_combo.currentIndexChanged.connect(
             lambda _i: self.preview_pane.refresh_on_scheme_change())
-
-        # Mirror the Run path's log setup on Preview's Load button —
-        # without this, Preview output never hits the user's log file
-        # and debug toggles don't apply.
-        self.preview_pane.load_button.clicked.connect(
-            lambda: self._install_log_handler(self._config_from_fields()))
 
         # Left pane opens at the banner's natural width (plus the
         # pane's own 12px content margin on each side). The preview
@@ -259,9 +297,20 @@ class FurrifierWindow(QMainWindow):
 
         # Data dir
         grid.addWidget(QLabel("Data dir:"), row, 0)
-        detected = find_game_data('tes5')
-        self.data_dir_edit = QLineEdit(str(detected) if detected else "", frame)
+        if self._data_dir_override:
+            initial_data_dir = self._data_dir_override
+        else:
+            detected = find_game_data('tes5')
+            initial_data_dir = str(detected) if detected else ""
+        self.data_dir_edit = QLineEdit(initial_data_dir, frame)
         self.data_dir_edit.setPlaceholderText("(not auto-detected)")
+        # Editing the data dir invalidates any plugin selection made
+        # against the old one — see _on_data_dir_changed. editingFinished
+        # (Enter / focus-out) rather than textChanged so we don't churn
+        # on every keystroke of a typed path; the Browse handler calls it
+        # directly because setText doesn't emit editingFinished.
+        self._last_data_dir = initial_data_dir
+        self.data_dir_edit.editingFinished.connect(self._on_data_dir_changed)
         grid.addWidget(self.data_dir_edit, row, 1)
         browse_data = QPushButton("Browse...", frame)
         browse_data.clicked.connect(self._browse_data_dir)
@@ -399,6 +448,80 @@ class FurrifierWindow(QMainWindow):
             self.data_dir_edit.text() or "")
         if path:
             self.data_dir_edit.setText(path)
+            # setText emits textChanged, not editingFinished.
+            self._on_data_dir_changed()
+
+    def _on_data_dir_changed(self) -> None:
+        """A new data dir invalidates everything keyed to the old one.
+
+        A plugin selection is a list of filenames that were present in
+        one directory; carried into another it is at best misleading and
+        at worst a run that loads a fraction of what the label claims.
+        The picker rebuilds its list from the field each time it opens,
+        so the stale piece is the *selection* (and the label reporting
+        it), not the list itself.
+
+        Drop back to "active load order", which re-reads plugins.txt
+        against the new directory on the next run or preview.
+        """
+        new_dir = self.data_dir_edit.text().strip()
+        if _same_dir(new_dir, self._last_data_dir):
+            return
+        self._last_data_dir = new_dir
+
+        had_selection = self._plugin_override is not None
+        self._plugin_override = None
+        self.plugins_label.setText("(using active load order)")
+        log = logging.getLogger(__name__)
+        if had_selection:
+            log.info("Data dir changed to %s - plugin selection cleared, "
+                     "back to the active load order", new_dir or "(unset)")
+        else:
+            log.info("Data dir changed to %s", new_dir or "(unset)")
+
+        # Report immediately how much of the active load order actually
+        # lives there. This is the whole ballgame for a Mod Organizer
+        # user: pointing at the Steam install instead of the folder MO2
+        # virtualizes silently costs you every mod, and the old symptom
+        # was an empty patch twenty minutes later.
+        self._warn_if_load_order_absent(new_dir)
+
+        # The preview holds a session built over the old directory.
+        if hasattr(self, "preview_pane"):
+            self.preview_pane.refresh_on_plugins_change()
+
+    def _warn_if_load_order_absent(self, data_dir_str: str) -> None:
+        """Warn when few/none of the active plugins are in `data_dir_str`."""
+        if not data_dir_str:
+            return
+        data_dir = Path(data_dir_str)
+        # is_listable_dir, not is_dir(): stat can't see a directory that
+        # exists only inside an MO2 mod, and telling the user their data
+        # dir "does not exist" when it plainly does would be the most
+        # misleading message in the app.
+        if not is_listable_dir(data_dir):
+            logging.getLogger(__name__).warning(
+                "Data dir does not exist: %s", data_dir)
+            return
+        try:
+            active = list(LoadOrder.from_game("tes5", active_only=True).plugins)
+        except Exception:
+            return
+        if not active:
+            return
+        # is_readable_file, not is_file(): stat can't see MO2's
+        # virtual files, and a false alarm here would send the user
+        # chasing a data dir that was right all along.
+        missing = [n for n in active
+                   if not is_readable_file(data_dir / n)]
+        if not missing:
+            return
+        logging.getLogger(__name__).warning(
+            "%d of %d active plugins are not in %s. If you are running "
+            "under Mod Organizer, set the data dir to the Data folder "
+            "inside the game directory MO2 manages (for a Wabbajack list "
+            "that is usually <modlist>\\Stock Game\\Data), not the Steam "
+            "install.", len(missing), len(active), data_dir)
 
     def _browse_output_dir(self) -> None:
         path = QFileDialog.getExistingDirectory(
@@ -426,7 +549,9 @@ class FurrifierWindow(QMainWindow):
                 "Set a data directory before picking plugins.")
             return
         data_dir = Path(data_dir_str)
-        if not data_dir.is_dir():
+        # See _warn_if_load_order_absent: is_dir() would slam this modal
+        # in the face of an MO2 user whose data dir is perfectly fine.
+        if not is_listable_dir(data_dir):
             QMessageBox.critical(
                 self, "Plugins", f"Data directory not found: {data_dir}")
             return
@@ -607,7 +732,7 @@ class FurrifierWindow(QMainWindow):
         if self._file_handler is None and config.log_file:
             try:
                 log_path = Path(config.log_file).resolve()
-                log_path.parent.mkdir(parents=True, exist_ok=True)
+                ensure_dir(log_path.parent)
                 fh = logging.FileHandler(log_path, mode="w", encoding="utf-8")
                 fh.setLevel(level)
                 fh.setFormatter(logging.Formatter(
@@ -666,6 +791,11 @@ class PluginPickerDialog(QDialog):
     Plugins currently marked active in plugins.txt are pre-checked;
     others are unchecked. Checking a plugin automatically pulls in its
     transitive masters (parsed from each plugin's TES4 header).
+
+    Only plugins actually present in the data dir are listed — the
+    list is the load order intersected with the directory, not their
+    union. Active plugins.txt entries that got dropped are warned
+    about in the log and in a banner on the dialog.
     """
 
     def __init__(self, parent: QWidget, data_dir: Path,
@@ -684,17 +814,46 @@ class PluginPickerDialog(QDialog):
         # typically the patch output file, which shouldn't be
         # re-ingested as input.
         self._exclude: set[str] = {exclude.lower()} if exclude else set()
+        # Load-order entries with no matching file in data_dir. Filled
+        # by _collect_plugins; the active ones get surfaced below.
+        self._absent: list[str] = []
 
         plugins_in_order = self._collect_plugins(data_dir)
+        active = self._active_plugins()
         if initial_selection is not None:
             checked = {p.lower() for p in initial_selection}
         else:
-            checked = self._active_plugins()
+            checked = active
+
+        # An *inactive* plugins.txt entry that isn't on disk is just a
+        # stale line and nobody cares. An *active* one is a plugin the
+        # game intends to load and we can't see — either the data dir
+        # is wrong or the files aren't reachable from this process.
+        # Either way the run is going to come up short, so say so now
+        # rather than letting the user discover it as "0 NPCs patched".
+        self._missing_active = [n for n in self._absent
+                                if n.lower() in active]
+        if self._missing_active:
+            shown = ", ".join(self._missing_active[:8])
+            if len(self._missing_active) > 8:
+                shown += f", and {len(self._missing_active) - 8} more"
+            logging.getLogger(__name__).warning(
+                "%d active plugin(s) from plugins.txt are not present in "
+                "%s and were left out of the list: %s",
+                len(self._missing_active), data_dir, shown)
 
         self._build_widgets(plugins_in_order, checked)
 
     def _collect_plugins(self, data_dir: Path) -> list[str]:
-        """Full ordered plugin list: load-order first, then any extras on disk."""
+        """Ordered plugin list: load-order order, then any extras on disk.
+
+        Intersected with what's actually in `data_dir`. A plugins.txt
+        entry we can't see on disk cannot be loaded, so listing it only
+        invites a run that reports it missing — which is exactly the
+        confusion this list is supposed to prevent. The dropped names
+        are kept in `_absent` so the caller can say so out loud
+        instead of letting them vanish.
+        """
         load_order_names: list[str] = []
         try:
             lo = LoadOrder.from_game("tes5", active_only=False)
@@ -702,15 +861,32 @@ class PluginPickerDialog(QDialog):
         except Exception:
             pass
 
+        # os.scandir, not Path.iterdir: a DirEntry answers is_file()
+        # from the data the directory enumeration already returned,
+        # with no separate stat call. That matters under Mod Organizer,
+        # where enumeration sees the merged view of vanilla + mods but
+        # stat does not — iterdir().is_file() filtered every modded
+        # plugin straight back out of the list it had just found.
         on_disk: list[str] = []
-        if data_dir.is_dir():
-            for entry in sorted(data_dir.iterdir(), key=lambda p: p.name.lower()):
-                if entry.is_file() and entry.suffix.lower() in PLUGIN_EXTS:
-                    on_disk.append(entry.name)
+        try:
+            with os.scandir(data_dir) as entries:
+                for entry in entries:
+                    if (Path(entry.name).suffix.lower() in PLUGIN_EXTS
+                            and entry.is_file()):
+                        on_disk.append(entry.name)
+        except OSError:
+            pass
+        on_disk.sort(key=str.lower)
+        on_disk_lower = {name.lower() for name in on_disk}
 
-        seen_lower = {name.lower() for name in load_order_names}
+        present = [n for n in load_order_names if n.lower() in on_disk_lower]
+        self._absent = [n for n in load_order_names
+                        if n.lower() not in on_disk_lower
+                        and n.lower() not in self._exclude]
+
+        seen_lower = {name.lower() for name in present}
         extras = [name for name in on_disk if name.lower() not in seen_lower]
-        combined = load_order_names + extras
+        combined = present + extras
         if self._exclude:
             combined = [n for n in combined if n.lower() not in self._exclude]
         return combined
@@ -738,6 +914,25 @@ class PluginPickerDialog(QDialog):
 
         self.summary_label = QLabel("", self)
         layout.addWidget(self.summary_label)
+
+        # Absent-but-active plugins get a standing banner rather than a
+        # modal — the user needs it while looking at the list, not as
+        # something to click past before seeing it.
+        if self._missing_active:
+            warn = QLabel(
+                f"⚠ {len(self._missing_active)} active plugin(s) in "
+                f"plugins.txt are not in this data directory and can't "
+                f"be loaded. Hover for the list.", self)
+            warn.setWordWrap(True)
+            # Cap the tooltip — when the data dir is wrong this list is
+            # the entire load order, and a 250-line tooltip is a wall,
+            # not information. The count above is the real signal.
+            names = self._missing_active[:40]
+            if len(self._missing_active) > 40:
+                names.append(f"... and {len(self._missing_active) - 40} more")
+            warn.setToolTip("\n".join(names))
+            warn.setObjectName("pluginWarning")
+            layout.addWidget(warn)
 
         # The list itself. Each item stores its plugin name in UserRole.
         self.list_widget = QListWidget(self)
@@ -830,7 +1025,11 @@ class PluginPickerDialog(QDialog):
         if cached is not None:
             return cached
         path = self._data_dir / name
-        masters = read_plugin_masters(path) if path.is_file() else []
+        # No is_file() guard - read_plugin_masters already returns []
+        # on any read failure, and the guard could not see MO2's
+        # virtual plugins, so master pull-in silently did nothing for
+        # every modded plugin in an MO2 load order.
+        masters = read_plugin_masters(path)
         self._master_cache[key] = masters
         return masters
 
@@ -922,7 +1121,72 @@ class PluginPickerDialog(QDialog):
 # --- entry point ------------------------------------------------------------
 
 
+def _parse_gui_args(argv: list[str]) -> tuple[Optional[str], list[str]]:
+    """Pull the GUI's own switches out of argv; hand the rest to Qt.
+
+    `--data-dir` exists so a Mod Organizer executable definition can
+    launch the GUI already pointed at the Data folder MO2 virtualizes.
+    Auto-detection can't find that folder — it goes through the registry
+    to the Steam install, which on a Wabbajack stock-game modlist is the
+    one Data folder guaranteed not to contain the mods.
+
+    parse_known_args, not parse_args: Qt has its own command-line
+    switches (-style, -platform, ...) and swallowing them here would
+    break them.
+    """
+    parser = argparse.ArgumentParser(
+        prog="furrify_skyrim_gui",
+        description="Skyrim Furrifier (GUI). Most settings live in the "
+                    "window; the switches here just set its starting state.")
+    parser.add_argument(
+        "--data-dir", metavar="DIR",
+        help="Skyrim Data directory to start with, instead of the "
+             "auto-detected one. Under Mod Organizer this should be the "
+             "Data folder inside the game directory MO2 manages.")
+
+    # A windowed PyInstaller build has no stdout/stderr, and argparse
+    # writes both --help and its error messages there. Writing to None
+    # raises inside argparse, so a single typo in an MO2 executable
+    # definition would kill the GUI before it drew a window, with
+    # nothing on screen to say why. Capture instead, and start anyway.
+    saved = sys.stdout, sys.stderr
+    buf = io.StringIO()
+    if sys.stdout is None:
+        sys.stdout = buf
+    if sys.stderr is None:
+        sys.stderr = buf
+    try:
+        args, rest = parser.parse_known_args(argv[1:])
+    except SystemExit:
+        # --help, or a switch of ours given badly (e.g. --data-dir with
+        # no value). Nothing to show in a windowed build, so start with
+        # defaults and keep the reason.
+        _startup_notes.append(
+            "Command line ignored: "
+            + (buf.getvalue().strip().replace("\n", " ") or "unparseable"))
+        return None, [argv[0]]
+    finally:
+        sys.stdout, sys.stderr = saved
+
+    # parse_known_args doesn't complain about switches it doesn't know —
+    # it hands them to Qt. That silence is a trap here: `--datadir` for
+    # `--data-dir` would start with the auto-detected Steam folder and
+    # look completely normal, which is the exact failure this switch
+    # exists to prevent. Qt's own switches are legitimate leftovers, so
+    # note rather than reject.
+    leftovers = [a for a in rest if a.startswith("-")]
+    if leftovers:
+        _startup_notes.append(
+            "Command-line switches not recognized by the furrifier, "
+            f"passed to Qt: {' '.join(leftovers)}"
+            + ("" if args.data_dir else
+               " (note --data-dir was not set; check the spelling)"))
+    return args.data_dir, [argv[0]] + rest
+
+
 def main() -> int:
+    data_dir, qt_argv = _parse_gui_args(sys.argv)
+
     # Windows groups all Python GUI apps under the interpreter's
     # taskbar icon unless the process declares its own
     # AppUserModelID. The packaged exe gets its icon from the .exe
@@ -936,14 +1200,14 @@ def main() -> int:
         except Exception:
             pass
 
-    app = QApplication(sys.argv)
+    app = QApplication(qt_argv)
     # QSS needs an absolute URL for the check-tick image. Simple
     # substitution (not str.format — QSS has lots of unrelated
     # curly braces that would trip .format()).
     check_url = _asset_path("check.svg").resolve().as_posix()
     app.setStyleSheet(
         _APP_STYLESHEET.replace("{check_icon}", check_url))
-    window = FurrifierWindow()
+    window = FurrifierWindow(data_dir=data_dir)
     window.show()
     return app.exec()
 
@@ -1087,6 +1351,16 @@ QListWidget, QTreeWidget {
     border: 1px solid #3A342D;
     selection-background-color: #4D3C20;
     selection-color: #EFD49A;
+}
+
+/* Standing warning banner in the plugin picker — active plugins.txt
+   entries that aren't present in the data directory. */
+QLabel#pluginWarning {
+    color: #E8B45C;
+    background-color: #332B1C;
+    border: 1px solid #5C4A26;
+    border-radius: 3px;
+    padding: 5px 7px;
 }
 """
 

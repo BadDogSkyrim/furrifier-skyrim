@@ -79,10 +79,20 @@ class PreviewPane(QWidget):
     def __init__(self, config_provider: ConfigProvider,
                  cache: SessionCache,
                  load_order_provider: Optional[LoadOrderProvider] = None,
-                 parent: Optional[QWidget] = None) -> None:
+                 parent: Optional[QWidget] = None,
+                 on_load_requested: Optional[Callable[[], None]] = None) -> None:
         super().__init__(parent)
         self._config_provider = config_provider
         self._cache = cache
+        # Runs at the top of _on_load_clicked, before the worker is
+        # dispatched. The main window uses it to attach the log file
+        # handler. It has to be a hook rather than a second connection
+        # to load_button.clicked: Qt fires slots in connection order,
+        # ours is connected here first, and the worker thread starts
+        # logging within microseconds — so the handler would attach
+        # after the opening lines (data dir, load-order source) had
+        # already been emitted and dropped.
+        self._on_load_requested = on_load_requested
         # Optional — when None, the worker's setup_session falls back
         # to LoadOrder.from_game(active_only=True).
         self._load_order_provider = load_order_provider
@@ -213,6 +223,8 @@ class PreviewPane(QWidget):
     def _on_load_clicked(self) -> None:
         """Kick off session setup in the worker. This also populates
         the NPC picker once the session is ready."""
+        if self._on_load_requested is not None:
+            self._on_load_requested()
         self.load_button.setEnabled(False)
         lo = (self._load_order_provider()
               if self._load_order_provider is not None else None)
