@@ -23,6 +23,7 @@ import logging
 import shutil
 import sys
 from pathlib import Path
+from esplib.utils import ensure_dir
 from typing import Set
 
 # PyNifly package __init__ imports bpy; pyn/ has no such taint.
@@ -121,7 +122,7 @@ def stage_nif_textures(nif_path: Path, resolver: AssetResolver,
             if src is None:
                 log.debug("texture missing, skipping: %s", key)
                 continue
-            target.parent.mkdir(parents=True, exist_ok=True)
+            ensure_dir(target.parent)
             try:
                 shutil.copyfile(src, target)
                 staged += 1

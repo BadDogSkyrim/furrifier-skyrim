@@ -187,3 +187,70 @@ def test_for_data_dir_factory_opens_bsas(tmp_path):
         got = resolver.resolve("meshes\\ok.nif")
         assert got is not None
         assert got.read_bytes() == b"loose"
+
+
+class TestResolvesWhenStatIsBlind:
+    """Loose-file lookup must not depend on stat.
+
+    Under Mod Organizer's virtual filesystem, directory enumeration
+    shows the merged view of vanilla + mods while stat does not. The
+    old walk used is_dir()/exists()/is_file() at every step, so a
+    mod-supplied nif was rejected three different ways: the walk bailed
+    on the first virtual directory, the fast path missed, and the final
+    is_file() denied the entry the scan had just matched by name.
+
+    usvfs can't run in a test, so blind stat directly and assert the
+    file is still found via enumeration + open.
+    """
+
+    @staticmethod
+    def _blind_stat(monkeypatch, needle):
+        """Make os.stat raise FileNotFoundError for paths containing
+        `needle`, leaving open() and scandir working."""
+        import os
+        real = os.stat
+
+        def fake(path, *a, **k):
+            if needle.lower() in str(path).lower():
+                raise FileNotFoundError(2, "No such file or directory")
+            return real(path, *a, **k)
+
+        monkeypatch.setattr(os, "stat", fake)
+
+    def test_finds_a_nested_loose_file_stat_denies(self, tmp_path,
+                                                   monkeypatch):
+        from furrifier.facegen.assets import AssetResolver
+
+        nif = tmp_path / "meshes" / "YAS" / "Dog" / "Head" / "DogFemHead.nif"
+        nif.parent.mkdir(parents=True)
+        nif.write_bytes(b"nif")
+
+        self._blind_stat(monkeypatch, "YAS")
+        assert not nif.exists(), "precondition: stat must be blind"
+
+        resolver = AssetResolver(tmp_path, bsa_readers=[])
+        found = resolver.resolve("meshes/YAS/Dog/Head/DogFemHead.nif")
+        assert found is not None, \
+            "enumeration sees the file; only stat doesn't"
+        assert found.read_bytes() == b"nif"
+
+    def test_case_insensitive_walk_still_works_stat_denies(self, tmp_path,
+                                                           monkeypatch):
+        """The reason the walk enumerates at all: on-disk case may not
+        match the path recorded in the plugin."""
+        from furrifier.facegen.assets import AssetResolver
+
+        nif = tmp_path / "Meshes" / "Yas" / "LykMaleHead.nif"
+        nif.parent.mkdir(parents=True)
+        nif.write_bytes(b"nif")
+
+        self._blind_stat(monkeypatch, "yas")
+        resolver = AssetResolver(tmp_path, bsa_readers=[])
+        found = resolver.resolve(r"meshes\YAS\lykmalehead.nif")
+        assert found is not None
+        assert found.read_bytes() == b"nif"
+
+    def test_missing_file_still_returns_none(self, tmp_path):
+        from furrifier.facegen.assets import AssetResolver
+        resolver = AssetResolver(tmp_path, bsa_readers=[])
+        assert resolver.resolve("meshes/nope/absent.nif") is None

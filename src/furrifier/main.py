@@ -11,9 +11,10 @@ import sys
 import threading
 import time
 from pathlib import Path
+from esplib.utils import ensure_dir
 from typing import Callable, Optional
 
-from esplib import LoadOrder
+from esplib import LoadOrder, find_game_data
 
 from .build_info import version_string
 from .config import (
@@ -255,9 +256,16 @@ def main() -> int:
     setup_logging(config)
     load_order = None
     if config.plugin_selection:
+        # Resolve the data dir here rather than passing
+        # config.game_data_dir straight through: it's None whenever
+        # --data-dir was omitted, and a LoadOrder with data_dir=None
+        # resolves *nothing* — every plugin, Skyrim.esm included,
+        # comes back missing. load_plugins does the same auto-detect,
+        # but not until after this list is already built.
+        data_dir = config.game_data_dir or find_game_data('tes5')
         load_order = LoadOrder.from_list(
             config.plugin_selection,
-            data_dir=config.game_data_dir,
+            data_dir=data_dir,
             game_id='tes5')
     return run_furrification(config, load_order=load_order)
 
@@ -315,7 +323,7 @@ def _run_facegen(config, patch, plugin_set, data_dir, output_dir, progress,
     finally:
         profiler.disable()
         out_path = Path(config.profile_file).resolve()
-        out_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_dir(out_path.parent)
         profiler.dump_stats(out_path)
         log.info("cProfile stats written to: %s", out_path)
         # Also surface the top 30 cumulative-time calls in the run log

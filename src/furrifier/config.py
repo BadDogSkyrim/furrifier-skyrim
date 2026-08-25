@@ -11,6 +11,7 @@ import os
 import sys
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from esplib.utils import ensure_dir
 
 from .race_defs import list_available_schemes
 
@@ -403,7 +404,7 @@ def setup_logging(config: FurrifierConfig) -> None:
         # here, on a FileHandler open, with a raw traceback and nothing
         # done. Falling back to console-only beats refusing to run.
         try:
-            Path(config.log_file).parent.mkdir(parents=True, exist_ok=True)
+            ensure_dir(Path(config.log_file).parent)
             handlers.append(logging.FileHandler(config.log_file))
         except OSError as exc:
             print(f"warning: cannot write log to {config.log_file}: {exc}",

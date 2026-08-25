@@ -34,6 +34,8 @@ from typing import Optional
 
 import numpy as np
 
+from esplib.utils import is_readable_file
+
 
 log = logging.getLogger("furrifier.facegen.morph")
 
@@ -129,7 +131,7 @@ def apply_morphs(
 
     # Race morph — pick the morph whose name matches the NPC's RNAM edid.
     if race_tri_path is not None and race_edid is not None:
-        if not race_tri_path.is_file():
+        if not is_readable_file(race_tri_path):
             log.warning("[%s] race tri missing: %s", shape_name, race_tri_path)
         else:
             try:
@@ -156,7 +158,7 @@ def apply_morphs(
 
     # Chargen morphs — NAM9-driven.
     if chargen_tri_path is not None and nam9 is not None:
-        if not chargen_tri_path.is_file():
+        if not is_readable_file(chargen_tri_path):
             log.warning("[%s] chargen tri missing: %s",
                         shape_name, chargen_tri_path)
         else:
@@ -179,7 +181,7 @@ def apply_morphs(
     # behavior tri carries this morph — eye/mouth/hair behavior tris
     # don't have it, so the missing-morph path just silently no-ops.
     if (behavior_tri_path is not None and weight is not None
-            and behavior_tri_path.is_file()):
+            and is_readable_file(behavior_tri_path)):
         try:
             tri = _load_trifile(behavior_tri_path)
         except Exception as e:

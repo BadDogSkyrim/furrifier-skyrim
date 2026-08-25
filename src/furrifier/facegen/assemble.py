@@ -20,6 +20,7 @@ Two entry points:
 """
 import json
 import logging
+from esplib.utils import ensure_dir
 import os
 import sys
 from pathlib import Path
@@ -242,7 +243,7 @@ def build_facegen_nif(npc_info: dict, resolver: AssetResolver,
     log.debug("[npc] 0x%s (%s)", form_id, npc_info.get('npc_edid'))
     log.debug("[npc] %d headparts", len(npc_info['headparts']))
 
-    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_dir(dst_path.parent)
     if dst_path.exists():
         dst_path.unlink()
 

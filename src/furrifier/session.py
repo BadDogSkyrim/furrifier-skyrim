@@ -34,7 +34,7 @@ from esplib import (
     find_strings_dir,
 )
 from esplib.record import Record
-from esplib.utils import BinaryReader
+from esplib.utils import BinaryReader, is_readable_file, ensure_dir
 
 from . import __version__
 from .config import FurrifierConfig
@@ -130,7 +130,10 @@ def expand_load_order_with_masters(load_order: LoadOrder,
             continue
         processed.add(key)
         path = data_dir / name
-        if not path.is_file():
+        # is_readable_file, not is_file(): under MO2 stat can't see a
+        # mod-supplied plugin, so this skipped master expansion for
+        # exactly the plugins that needed it most.
+        if not is_readable_file(path):
             i += 1
             continue
         existing_lower = {p.lower() for p in load_order.plugins}
@@ -173,7 +176,7 @@ def load_plugins(
 
     if config.output_dir:
         output_dir = Path(config.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        ensure_dir(output_dir)
     else:
         output_dir = data_dir
 
@@ -189,6 +192,14 @@ def load_plugins(
     else:
         log.debug("Load order source: caller-supplied, %d entries",
                   len(load_order.plugins))
+    # The configured data dir is authoritative for *reading* plugins,
+    # not just assets. LoadOrder.from_game pins data_dir to whatever
+    # game_discovery found in the registry, so without this a user
+    # who points us at a non-Steam Data folder (a Wabbajack stock-game
+    # root, a mod manager's staging dir) silently gets their plugins
+    # read from the Steam install while every asset comes from the
+    # folder they chose.
+    load_order.data_dir = data_dir
     load_order.plugins = [p for p in load_order.plugins
                           if p.lower() != patch_name]
     # Pre-pass: pull in any master plugins the caller didn't include.
@@ -210,9 +221,23 @@ def load_plugins(
     plugin_set.load_all()
     log.info("Loaded %d of %d plugins from load order",
              len(plugin_set), len(load_order.plugins))
+    loaded_names = {(p.file_path.name.lower() if p.file_path else "")
+                    for p in plugin_set}
+    unloaded = [name for name in load_order.plugins
+                if name.lower() not in loaded_names]
+    if unloaded:
+        # Warn, don't just count. This used to be an INFO tally plus a
+        # DEBUG list, which meant a run that loaded 1 of 259 plugins
+        # and produced an empty patch looked, at default log level,
+        # exactly like a run that worked. Name the data dir too — when
+        # the plugins aren't where we looked, that's the thing the
+        # user needs to check.
+        shown = ", ".join(unloaded[:8])
+        if len(unloaded) > 8:
+            shown += f", and {len(unloaded) - 8} more"
+        log.warning("%d plugin(s) in the load order could not be loaded "
+                    "from %s: %s", len(unloaded), data_dir, shown)
     if log.isEnabledFor(logging.DEBUG):
-        loaded_names = {(p.file_path.name.lower() if p.file_path else "")
-                        for p in plugin_set}
         for name in load_order.plugins:
             tag = "OK" if name.lower() in loaded_names else "MISSING"
             log.debug("  [%s] %s", tag, name)

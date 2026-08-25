@@ -26,6 +26,7 @@ Two entry points:
 """
 import json
 import logging
+from esplib.utils import ensure_dir
 import sys
 from pathlib import Path
 from typing import Optional
@@ -268,7 +269,7 @@ def build_facetint_png(npc_info: dict, resolver: AssetResolver,
     PNG (single-NPC CLI, debugging). Production runs use
     ``build_facetint_dds`` to skip the PNG round-trip entirely."""
     as_u8 = _composite_to_uint8(npc_info, resolver, output_size)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(out_dir)
     png_path = out_dir / f"{npc_info['form_id']}.png"
     Image.fromarray(as_u8, "RGBA").save(png_path)
     return png_path
@@ -284,7 +285,7 @@ def build_facetint_dds(npc_info: dict, resolver: AssetResolver,
     from .dds import write_bc7_dds
 
     as_u8 = _composite_to_uint8(npc_info, resolver, output_size)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(out_dir)
     dds_path = out_dir / f"{npc_info['form_id']}.dds"
     write_bc7_dds(dds_path, as_u8)
     return dds_path
