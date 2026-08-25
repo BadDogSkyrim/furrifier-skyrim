@@ -113,3 +113,54 @@ class TestFurrifyAllSchlongs:
             [plugin], patch, {}, {}, {'NordRace': nord},
         )
         assert count == 0
+
+
+class TestMalformedVmadIsSurvivable:
+    """One broken script blob must not take down the whole run.
+
+    furrify_all_schlongs parses the VMAD of every QUST in every plugin.
+    Unguarded, a single mod with a corrupt VMAD aborts furrification
+    for the entire load order — reported in the wild against
+    OBodyNGWeight.esp, whose OBW_QuestRecord and OBW_MCMQuest raise a
+    buffer-size mismatch on unpack.
+    """
+
+    def test_bad_vmad_is_skipped_not_raised(self, caplog):
+        import logging
+
+        nord = _make_record('RACE', 0x00013746, 'NordRace')
+        # A VMAD header claiming far more data than the blob carries —
+        # the shape of the real-world breakage.
+        broken = _make_record('QUST', 0x00000801, 'OBW_QuestRecord')
+        broken.add_subrecord('VMAD', struct.pack('<hhh', 5, 2, 99) + b'\x00\x02')
+
+        plugin = _make_plugin('OBodyNGWeight.esp', [nord, broken])
+        patch = Plugin.new_plugin('TestPatch.esp',
+                                  masters=['OBodyNGWeight.esp'])
+
+        with caplog.at_level(logging.WARNING):
+            count = furrify_all_schlongs(
+                [plugin], patch, {}, {}, {'NordRace': nord},
+            )
+
+        assert count == 0
+        assert "unreadable VMAD" in caplog.text
+        assert "OBW_QuestRecord" in caplog.text
+
+    def test_a_good_quest_after_a_bad_one_still_processes(self):
+        """The skip must be per-record: a broken QUST early in a plugin
+        can't be allowed to hide the SOS quest that comes after it."""
+        nord = _make_record('RACE', 0x00013746, 'NordRace')
+        broken = _make_record('QUST', 0x00000801, 'OBW_QuestRecord')
+        broken.add_subrecord('VMAD', struct.pack('<hhh', 5, 2, 99) + b'\x00\x02')
+        # A well-formed QUST with no SOS script — reached only if the
+        # loop survived the broken one.
+        fine = _make_record('QUST', 0x00000802, 'HarmlessQuest')
+
+        plugin = _make_plugin('Mod.esp', [nord, broken, fine])
+        patch = Plugin.new_plugin('TestPatch.esp', masters=['Mod.esp'])
+
+        count = furrify_all_schlongs(
+            [plugin], patch, {}, {}, {'NordRace': nord},
+        )
+        assert count == 0

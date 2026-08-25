@@ -113,7 +113,23 @@ def furrify_all_schlongs(plugins,
 
     for plugin in plugins:
         for quest in plugin.get_records_by_signature('QUST'):
-            vmad = VmadData.from_record(quest, 'QUST')
+            try:
+                vmad = VmadData.from_record(quest, 'QUST')
+            except Exception as exc:
+                # A malformed VMAD is one bad record, not a reason to
+                # abandon the run. This loop visits every QUST in every
+                # plugin, so an unguarded parse means any single mod
+                # with a broken script blob takes down the whole
+                # furrification — reported in the wild against
+                # OBodyNGWeight.esp, whose OBW_QuestRecord and
+                # OBW_MCMQuest fail with a buffer-size mismatch.
+                # esplib's own _remap_vmad already takes this line:
+                # warn, preserve, carry on.
+                log.warning(
+                    "%s: unreadable VMAD on QUST %s (%s); skipping it",
+                    plugin.file_path.name if plugin.file_path else "?",
+                    quest.editor_id or hex(quest.form_id.value), exc)
+                continue
             if vmad is None:
                 continue
 
