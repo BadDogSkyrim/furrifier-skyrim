@@ -23,7 +23,7 @@ import logging
 import shutil
 import sys
 from pathlib import Path
-from esplib.utils import ensure_dir
+from esplib.utils import ensure_dir, file_size
 from typing import Set
 
 # PyNifly package __init__ imports bpy; pyn/ has no such taint.
@@ -115,7 +115,10 @@ def stage_nif_textures(nif_path: Path, resolver: AssetResolver,
                 key = "textures/" + key
 
             target = temp_root / key
-            if target.exists() and target.stat().st_size > 0:
+            # Not exists()+stat(): under MO2 both deny a file that is
+            # really there. Worst case we re-stage a file we already
+            # had, which is cheap; raising here would not be.
+            if (file_size(target) or 0) > 0:
                 continue  # already staged (e.g. FaceTint from bake)
 
             src = resolver.resolve(key)

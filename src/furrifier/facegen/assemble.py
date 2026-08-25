@@ -20,7 +20,7 @@ Two entry points:
 """
 import json
 import logging
-from esplib.utils import ensure_dir
+from esplib.utils import ensure_dir, file_size
 import os
 import sys
 from pathlib import Path
@@ -381,7 +381,12 @@ def build_facegen_nif(npc_info: dict, resolver: AssetResolver,
 
     dst.save()
 
-    log.debug("[save] %s (%d bytes)", dst_path, os.path.getsize(dst_path))
+    # file_size, not os.path.getsize: the arguments to log.debug are
+    # evaluated whether or not debug is enabled, and getsize is a stat
+    # call. Under MO2 that stat fails for the nif PyNifly just wrote
+    # successfully, so a disabled debug line raised WinError 3 and
+    # threw away every completed bake.
+    log.debug("[save] %s (%s bytes)", dst_path, file_size(dst_path))
     return dst
 
 

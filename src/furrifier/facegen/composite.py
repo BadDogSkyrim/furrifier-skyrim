@@ -26,7 +26,7 @@ Two entry points:
 """
 import json
 import logging
-from esplib.utils import ensure_dir
+from esplib.utils import ensure_dir, file_size
 import sys
 from pathlib import Path
 from typing import Optional
@@ -317,8 +317,8 @@ def composite_to_png_and_dds(data_root: Path, form_id: str,
             entry, resolver, out_dir, output_size=output_size)
         dds_path = build_facetint_dds(
             entry, resolver, out_dir, output_size=output_size)
-    log.debug("[png]  %s (%d bytes)", png_path, png_path.stat().st_size)
-    log.debug("[dds]  %s (%d bytes)", dds_path, dds_path.stat().st_size)
+    log.debug("[png]  %s (%s bytes)", png_path, file_size(png_path))
+    log.debug("[dds]  %s (%s bytes)", dds_path, file_size(dds_path))
     return png_path, dds_path
 
 
