@@ -12,35 +12,37 @@ Furrification is deterministic: you get the same furry appearance every run, as 
 
 The kit ships two executables:
 
-- **`furrify_skyrim_gui.exe`** — a GUI with a live 3D preview pane. Double-click to launch;
-  pick options in the form and hit Run.
+- **`furrify_skyrim_gui.exe`** — a GUI with a live 3D preview pane. Double-click to
+  launch; pick options in the form and hit Run.
 - **`furrify_skyrim.exe`** — the CLI. Same code, same options, useful for scripted runs.
 
 ## The patches that ship with the mod
 
-The FOMOD installs pre-built patches, so the mod works without you running this tool at
-all:
+*If you selected "Full Furrification" on install* to get the pre-built furry NPCs, you'll
+have two extra plugins:
 
-- **`YASNPCPatch.esp`** (SFW package) — NPC and armor overrides across the load order it
-  was built against, plus pre-baked FaceGen for every furrified NPC. No schlong records.
+- **`YASNPCPatch.esp`** (SFW package) — NPC and armor overrides covering vanilla and DLCs, plus pre-baked FaceGen for every furrified NPC. No schlong records.
 - **`YASNSFWPatch.esp`** (NSFW package) — armor overrides for the NSFW-only plugins
   (hoodie schlongs, sheaths), plus the SOS compatible-race lists, probabilities and sizes.
 
-That split exists for *delivery* reasons, not because the two do different kinds of work:
-the baked FaceGen runs to several gigabytes, and adult content has to stay out of the SFW
-download.
+With these, you don't need to run the furrifier. If you didn't select the option you'll
+just create a single plugin that does the work of both. 
+
+There are two patches just so the schlong work can be cleanly separated from the SFW
+patch.
 
 **Running the tool yourself replaces both with a single patch.** One run does NPCs, armor
-and schlongs together — there is no two-pass workflow on your end. If SOS isn't in your
-load order the schlong pass finds nothing and skips itself, so the same command works
-either way.
+and schlongs (if any) together.
 
-**Keep the default patch name.** `--patch` defaults to `YASNPCPatch.esp` precisely so your
-run supersedes the delivered patch instead of sitting alongside it. Rename it and the
-delivered patch stays active in your load order, where it still gets a vote in how armor
-addon lists are ordered — which is one way to end up with the wrong headgear mesh on a
-furry race. To write the output somewhere other than your `Data` folder, use `-o`, not a
-different `--patch` name.
+**Disable** `YASNPCPatch.esp` and `YASNSFWPatch.esp` before running the furrifier, if you have them. 
+
+**Keep the default patch name** if your original install included them, to avoid
+confusion. `--patch` defaults to `YASNPCPatch.esp` so your run supersedes the delivered
+patch instead of sitting alongside it. Rename it and the delivered patch stays active in
+your load order, where it still gets a vote in how armor addon lists are ordered — which
+is one way to end up with the wrong headgear mesh on a furry race. To write the output
+somewhere other than your `Data` folder, use `-o`, not a different `--patch` name.
+
 
 ## Command-line usage
 
